@@ -1,0 +1,6 @@
+**/*.csv
+**/*.xlsx
+**/*.py
+node_modules/
+csv_files/
+merge_students.py

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CMCAT Student Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;600&display=swap" rel="stylesheet">
+    <style> body { font-family: 'Prompt', sans-serif; } </style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+    <div id="login-page" class="flex items-center justify-center min-h-screen">
+        <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-100">
+            <h2 class="text-3xl font-bold text-emerald-700 mb-6 text-center">เข้าสู่ระบบนักเรียน</h2>
+            <input type="text" id="login-id" placeholder="รหัสนักเรียน" class="w-full p-4 mb-4 border rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none">
+            <input type="password" id="login-pass" placeholder="รหัสผ่าน" class="w-full p-4 mb-6 border rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none">
+            <button onclick="handleLogin()" id="btn-login" class="w-full bg-emerald-600 text-white p-4 rounded-xl font-bold hover:bg-emerald-700 transition-all">เข้าใช้งาน</button>
+            <p class="mt-4 text-center text-slate-500">ยังไม่มีบัญชี? <a href="javascript:void(0)" onclick="showPage('reg-page')" class="text-emerald-600 font-bold">สมัครสมาชิก</a></p>
+        </div>
+    </div>
+
+    <div id="reg-page" class="hidden flex items-center justify-center min-h-screen py-10">
+        <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-100">
+            <h2 class="text-2xl font-bold text-emerald-700 mb-6 text-center">สมัครสมาชิกใหม่</h2>
+            <input type="text" id="reg-id" placeholder="รหัสนักเรียน" class="w-full p-4 mb-4 border rounded-xl outline-none">
+            <input type="text" id="reg-name" placeholder="ชื่อ-นามสกุล" class="w-full p-4 mb-4 border rounded-xl outline-none">
+            <input type="text" id="reg-level" placeholder="ระดับชั้น (เช่น ปวช.1/1)" class="w-full p-4 mb-4 border rounded-xl outline-none">
+            <input type="password" id="reg-pass" placeholder="ตั้งรหัสผ่าน" class="w-full p-4 mb-6 border rounded-xl outline-none">
+            <button onclick="handleRegister()" id="btn-reg" class="w-full bg-slate-800 text-white p-4 rounded-xl font-bold hover:bg-black transition-all">ลงทะเบียน</button>
+            <button onclick="showPage('login-page')" class="w-full mt-2 text-slate-500 p-2 text-sm">ย้อนกลับ</button>
+        </div>
+    </div>
+
+    <div id="dash-page" class="hidden">
+        <nav class="bg-emerald-700 text-white p-4 shadow-lg flex justify-between items-center">
+            <span class="font-bold">ระบบนักเรียน CMCAT</span>
+            <button onclick="location.reload()" class="text-xs bg-emerald-800 px-3 py-1 rounded">ออกจากระบบ</button>
+        </nav>
+        <div class="container mx-auto p-4">
+            <div class="bg-white p-6 rounded-2xl shadow-sm mb-6 border-l-8 border-emerald-500">
+                <h3 id="user-display" class="text-xl font-bold text-slate-800">ยินดีต้อนรับ</h3>
+                <p id="level-display" class="text-slate-500">ข้อมูลกำลังโหลด...</p>
+            </div>
+            
+            <h4 class="font-bold text-slate-700 mb-4">ประวัติการเช็คชื่อ</h4>
+            <div id="history-list" class="space-y-3">
+                </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        const API_URL = "URL_เว็บแอป_GAS_ของคุณ"; // วาง URL ที่ก๊อปมาตรงนี้
+
+        function showPage(pageId) {
+            ['login-page', 'reg-page', 'dash-page'].forEach(p => document.getElementById(p).classList.add('hidden'));
+            document.getElementById(pageId).classList.remove('hidden');
+        }
+
+        async function handleLogin() {
+            const studentId = document.getElementById('login-id').value;
+            const password = document.getElementById('login-pass').value;
+            
+            toggleBtn('btn-login', true);
+            const res = await fetch(API_URL, {
+                method: 'POST',
+                body: JSON.stringify({ action: 'login', studentId, password })
+            });
+            const data = await res.json();
+            toggleBtn('btn-login', false);
+
+            if(data.success) {
+                document.getElementById('user-display').innerText = `สวัสดี, ${data.user.name}`;
+                document.getElementById('level-display').innerText = `ระดับชั้น: ${data.user.level}`;
+                showPage('dash-page');
+                loadHistory(studentId);
+            } else {
+                Swal.fire('ผิดพลาด', data.message, 'error');
+            }
+        }
+
+        async function handleRegister() {
+            const payload = {
+                action: 'register',
+                studentId: document.getElementById('reg-id').value,
+                name: document.getElementById('reg-name').value,
+                level: document.getElementById('reg-level').value,
+                password: document.getElementById('reg-pass').value
+            };
+            
+            toggleBtn('btn-reg', true);
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+            const data = await res.json();
+            toggleBtn('btn-reg', false);
+            
+            if(data.success) {
+                Swal.fire('สำเร็จ', data.message, 'success').then(() => showPage('login-page'));
+            }
+        }
+
+        async function loadHistory(studentId) {
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getHistory', studentId }) });
+            const result = await res.json();
+            const list = document.getElementById('history-list');
+            if(result.data.length === 0) list.innerHTML = '<p class="text-slate-400">ยังไม่มีประวัติการเช็คชื่อ</p>';
+            else {
+                list.innerHTML = result.data.map(row => `
+                    <div class="bg-white p-4 rounded-xl shadow-sm border flex justify-between items-center">
+                        <div>
+                            <p class="font-bold text-slate-700">${row[0]}</p>
+                            <p class="text-xs text-slate-400">ครูผู้เช็ค: ${row[2]}</p>
+                        </div>
+                        <span class="px-3 py-1 rounded-full text-xs font-bold ${row[5] === 'มา' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}">${row[5]}</span>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function toggleBtn(id, loading) {
+            const btn = document.getElementById(id);
+            btn.disabled = loading;
+            btn.innerText = loading ? 'กำลังประมวลผล...' : (id === 'btn-login' ? 'เข้าใช้งาน' : 'ลงทะเบียน');
+        }
+    </script>
+</body>
+</html>

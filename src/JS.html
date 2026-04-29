@@ -1,0 +1,256 @@
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+  function showLoader(status) {
+    document.getElementById('loader').style.display = status ? 'flex' : 'none';
+  }
+
+  function backToMenu() {
+    document.getElementById('menu-page').style.display = 'block';
+    document.getElementById('module-container').style.display = 'none';
+  }
+
+  function loadModule(name) {
+    document.getElementById('menu-page').style.display = 'none';
+    document.getElementById('module-container').style.display = 'block';
+    const content = document.getElementById('module-content');
+    
+    if(name === 'sdq') {
+      showLoader(true);
+      google.script.run.withSuccessHandler(rooms => {
+        let options = rooms.map(r => `<option value="${r}">${r}</option>`).join('');
+        content.innerHTML = `
+          <div class="card p-4 shadow-sm border-0">
+            <h4 class="text-primary fw-bold mb-3"><i class="fas fa-search me-2"></i>เลือกห้องเรียนเพื่อประเมิน SDQ</h4>
+            <select id="room-select" class="form-select form-select-lg mb-3" onchange="loadStudents(this.value)">
+              <option value="">-- กรุณาเลือกห้องเรียน --</option>
+              ${options}
+            </select>
+            <div id="student-list-container" class="mt-4"></div>
+          </div>
+        `;
+        showLoader(false);
+      }).getRoomData();
+    } else if(name === 'attendance') {
+      showLoader(true);
+      google.script.run.withSuccessHandler(rooms => {
+        let options = rooms.map(r => `<option value="${r}">${r}</option>`).join('');
+        content.innerHTML = `
+          <div class="card p-4 shadow-sm border-0">
+            <h4 class="text-success fw-bold mb-3"><i class="fas fa-user-check me-2"></i>เช็คชื่อหน้าเสาธง</h4>
+            <select id="room-select-att" class="form-select mb-3" onchange="loadAttendanceList(this.value)">
+              <option value="">-- เลือกห้องเรียน --</option>
+              ${options}
+            </select>
+            <div id="attendance-container"></div>
+          </div>`;
+        showLoader(false);
+      }).getRoomData();
+    } else if(name === 'homevisit') {
+      content.innerHTML = '<h4 class="text-info">ระบบบันทึกเยี่ยมบ้าน</h4>';
+    }
+  }
+
+  function loadStudents(roomName) {
+    if(!roomName) return;
+    showLoader(true);
+    
+    google.script.run.withSuccessHandler(students => {
+      let listHtml = `
+        <div class="list-group">
+          <div class="list-group-item bg-light fw-bold">รายชื่อนักเรียนในห้อง ${roomName}</div>
+      `;
+      
+      students.forEach(std => {
+        listHtml += `
+          <button onclick="startSDQ('${std.id}', '${std.name}')" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+            <span>${std.id} - ${std.name}</span>
+            <span class="badge bg-primary rounded-pill">ทำแบบประเมิน <i class="fas fa-chevron-right ms-1"></i></span>
+          </button>
+        `;
+      });
+      
+      listHtml += '</div>';
+      document.getElementById('student-list-container').innerHTML = listHtml;
+      showLoader(false);
+    }).getStudentsInRoom(roomName);
+  }
+
+  const sdqQuestions = [
+    { text: "ห่วงใยความรู้สึกคนอื่น", type: "prosocial", reverse: false },
+    { text: "อยู่ไม่นิ่ง นั่งนานไม่ได้", type: "hyper", reverse: false },
+    { text: "มักจะบ่นว่าปวดหัว ปวดท้อง หรือคลื่นไส้", type: "emotional", reverse: false },
+    { text: "เต็มใจแบ่งปันของให้เพื่อน", type: "prosocial", reverse: false },
+    { text: "มักจะอาละวาด หรือโมโหร้าย", type: "conduct", reverse: false },
+    { text: "ค่อนข้างแยกตัว ชอบเล่นคนเดียว", type: "peer", reverse: false },
+    { text: "เชื่อฟัง มักจะทำตามที่ผู้ใหญ่ต้องการ", type: "conduct", reverse: true },
+    { text: "กังวลใจหลายเรื่อง ดูมีความกังวลเสมอ", type: "emotional", reverse: false },
+    { text: "เป็นที่พึ่งได้เมื่อคนอื่นเสียใจ", type: "prosocial", reverse: false },
+    { text: "อยู่ไม่สุข วุ่นวายอย่างมาก", type: "hyper", reverse: false },
+    { text: "มีเพื่อนสนิท", type: "peer", reverse: true },
+    { text: "มักจะมีเรื่องทะเลาะวิวาทกับเด็กคนอื่น", type: "conduct", reverse: false },
+    { text: "ดูมีความสุขน้อยลง ร้องไห้บ่อย", type: "emotional", reverse: false },
+    { text: "เป็นที่รักของเพื่อนเด็กวัยเดียวกัน", type: "peer", reverse: true },
+    { text: "วอกแวกง่าย สมาธิสั้น", type: "hyper", reverse: false },
+    { text: "เครียดในสถานการณ์ใหม่ๆ เสียความมั่นใจง่าย", type: "emotional", reverse: false },
+    { text: "ใจดีกับเด็กที่เล็กกว่า", type: "prosocial", reverse: false },
+    { text: "มักจะถูกกล่าวหาว่าโกหกหรือขี้โกง", type: "conduct", reverse: false },
+    { text: "ถูกเด็กคนอื่นรังแก หรือแกล้ง", type: "peer", reverse: false },
+    { text: "มักจะอาสาช่วยเหลือคนอื่น", type: "prosocial", reverse: false },
+    { text: "คิดก่อนทำ", type: "hyper", reverse: true },
+    { text: "ขโมยของจากบ้าน โรงเรียน หรือที่อื่น", type: "conduct", reverse: false },
+    { text: "เข้ากับผู้ใหญ่ได้ดีกว่าเด็กวัยเดียวกัน", type: "peer", reverse: false },
+    { text: "มีความกลัวมาก ขี้กลัวง่าย", type: "emotional", reverse: false },
+    { text: "ทำงานได้จนเสร็จ ความตั้งใจดี", type: "hyper", reverse: true }
+  ];
+
+  let currentStudent = {};
+
+  function startSDQ(id, name) {
+    currentStudent = { id: id, name: name };
+    
+    let formHtml = `
+      <div class="card shadow-sm border-0">
+        <div class="card-header bg-warning text-dark fw-bold">
+          <i class="fas fa-edit me-2"></i>แบบประเมิน SDQ : ${name} (${id})
+        </div>
+        <div class="card-body p-2">
+          <form id="sdq-form">
+            <div class="table-responsive">
+              <table class="table table-sm table-hover align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th>ข้อคำถาม</th>
+                  <th class="text-center" style="width: 100px;">ไม่จริง</th>
+                  <th class="text-center" style="width: 100px;">จริงบ้าง</th>
+                  <th class="text-center" style="width: 100px;">จริงแน่นอน</th>
+                </tr>
+              </thead>
+              <tbody>
+    `;
+
+    sdqQuestions.forEach((q, i) => {
+      formHtml += `
+        <tr>
+          <td>${i+1}. ${q.text}</td>
+          <td class="text-center"><input type="radio" name="q${i}" value="0" required class="form-check-input"></td>
+          <td class="text-center"><input type="radio" name="q${i}" value="1" required class="form-check-input"></td>
+          <td class="text-center"><input type="radio" name="q${i}" value="2" required class="form-check-input"></td>
+        </tr>
+      `;
+    });
+
+    formHtml += `
+              </tbody>
+            </table>
+            <div class="text-end mt-4">
+              <button type="button" class="btn btn-secondary me-2" onclick="loadModule('sdq')">ยกเลิก</button>
+              <button type="submit" class="btn btn-primary btn-lg px-5">บันทึกผลการประเมิน</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('module-content').innerHTML = formHtml;
+
+    document.getElementById('sdq-form').onsubmit = function(e) {
+      e.preventDefault();
+      calculateAndSaveSDQ();
+    };
+  }
+
+  function calculateAndSaveSDQ() {
+    const form = document.getElementById('sdq-form');
+    const formData = new FormData(form);
+    
+    let scores = { emotional: 0, conduct: 0, hyper: 0, peer: 0, prosocial: 0 };
+    
+    sdqQuestions.forEach((q, i) => {
+      let val = parseInt(formData.get(`q${i}`) || 0);
+      if (q.reverse) {
+        val = 2 - val;
+      }
+      scores[q.type] += val;
+    });
+
+    const totalScore = scores.emotional + scores.conduct + scores.hyper + scores.peer;
+    
+    let status = "ปกติ";
+    if (totalScore >= 19) status = "มีปัญหา";
+    else if (totalScore >= 16) status = "กลุ่มเสี่ยง";
+
+    showLoader(true);
+    
+    google.script.run.withSuccessHandler(res => {
+      showLoader(false);
+      Swal.fire({
+        title: 'บันทึกสำเร็จ!',
+        html: `นักเรียน: ${currentStudent.name}<br>คะแนนรวม: <b>${totalScore}</b><br>สถานะ: <span class="badge ${status==='ปกติ'?'bg-success':'bg-danger'}">${status}</span>`,
+        icon: 'success'
+      }).then(() => {
+        // เมื่อบันทึกสำเร็จ ให้กลับไปหน้าเลือกรายชื่อเด็กห้องเดิม จะได้ทำคนต่อไปได้เลย
+        loadModule('sdq'); 
+      });
+    }).saveSDQData({
+      studentId: currentStudent.id,
+      studentName: currentStudent.name,
+      scores: scores,
+      totalScore: totalScore,
+      status: status
+    });
+  }
+  // --- ฟังก์ชันเพิ่มเติมสำหรับระบบเช็คชื่อ ---
+  function loadAttendanceList(roomName) {
+    if(!roomName) return;
+    showLoader(true);
+    google.script.run.withSuccessHandler(students => {
+      let html = `
+        <div class="table-responsive mt-3">
+          <table class="table table-sm table-hover align-middle">
+            <thead class="table-dark">
+              <tr><th>ชื่อ-นามสกุล</th><th class="text-center">สถานะ</th></tr>
+            </thead>
+            <tbody>`;
+      students.forEach((std, i) => {
+        html += `
+          <tr>
+            <td class="small">${std.name}</td>
+            <td class="text-center">
+              <div class="btn-group btn-group-sm" role="group">
+                <input type="radio" class="btn-check" name="status${i}" id="p${i}" value="มา" checked>
+                <label class="btn btn-outline-success px-3" for="p${i}">มา</label>
+                <input type="radio" class="btn-check" name="status${i}" id="a${i}" value="ขาด">
+                <label class="btn btn-outline-danger" for="a${i}">ขาด</label>
+              </div>
+              <input type="hidden" id="id${i}" value="${std.id}">
+              <input type="hidden" id="name${i}" value="${std.name}">
+            </td>
+          </tr>`;
+      });
+      html += `</tbody></table></div>
+        <button class="btn btn-success w-100 mt-3 py-2 fw-bold" onclick="submitAttendance(${students.length})">
+          <i class="fas fa-save me-1"></i> บันทึกการเช็คชื่อ
+        </button>`;
+      document.getElementById('attendance-container').innerHTML = html;
+      showLoader(false);
+    }).getStudentsInRoom(roomName);
+  }
+
+  function submitAttendance(count) {
+    let records = [];
+    for(let i=0; i<count; i++) {
+      records.push({
+        id: document.getElementById(`id${i}`).value,
+        name: document.getElementById(`name${i}`).value,
+        status: document.querySelector(`input[name="status${i}"]:checked`).value
+      });
+    }
+    showLoader(true);
+    google.script.run.withSuccessHandler(res => {
+      showLoader(false);
+      Swal.fire('สำเร็จ!', `เช็คชื่อนักเรียน ${res.count} คน เรียบร้อย`, 'success').then(() => backToMenu());
+    }).saveAttendance(records);
+  }
+</script>

@@ -106,279 +106,275 @@
         </div>
     </div>
 
-    <script>
-        // Config & State
-        const currentUser = JSON.parse(localStorage.getItem('currentUser'));
-        const API_URL = "https://script.google.com/macros/s/AKfycbztsC4Wng1zDAVyNmHka6N00m1os6aHGqcZV2LW1l1NBrlATIWPLzwdORzU4lP_P6_p/exec";
-        let currentStudentsData = [];
-        let currentViewingStudent = null;
-        let timelineChart = null;
+<script>
+    // 1. Config & State
+    // ⚠️ เช็ค API_URL ให้แน่ใจว่าเป็นตัวที่ได้จาก "New Deployment" ล่าสุดเท่านั้น!
+    const API_URL = "https://script.google.com/macros/s/AKfycbztsC4Wng1zDAVyNmHka6N00m1os6aHGqcZV2LW1l1NBrlATIWPLzwdORzU4lP_P6_p/exec";
+    
+    const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+    let currentStudentsData = [];
+    let currentViewingStudent = null;
+    let timelineChart = null;
 
-        const sdqQuestions = [
-            "ห่วงใยความรู้สึกคนอื่น", "อยู่ไม่นิ่ง นั่งเฉยๆ ไม่ได้", "บ่นว่าปวดหัว ปวดท้องบ่อยๆ",
-            "เต็มใจแบ่งปันสิ่งของให้เพื่อน", "มักจะอาละวาด หรือโมโหร้าย", "ชอบอยู่ตามลำพัง",
-            "เชื่อฟังผู้อื่น", "กังวลใจหลายเรื่อง", "เป็นที่พึ่งได้เวลาคนอื่นมีปัญหา",
-            "อยู่ไม่สุข ยุกยิก", "มีเพื่อนสนิท", "มักจะมีเรื่องทะเลาะวิวาท",
-            "ดูเศร้าหมอง ท้อแท้", "เป็นที่ชื่นชอบของเพื่อน", "วอกแวกง่าย",
-            "เครียดในสถานการณ์ที่ไม่คุ้นเคย", "ใจดีกับเด็กที่เล็กกว่า", "มักจะโกหกหรือขี้โกง",
-            "ถูกเด็กคนอื่นแกล้ง", "ชอบอาสาช่วยเหลือผู้อื่น", "คิดก่อนทำ",
-            "แอบหยิบของคนอื่น", "เข้ากับผู้ใหญ่ได้ดีกว่าเด็กวัยเดียวกัน", "ขี้กลัว", "ทำงานได้จนเสร็จ"
-        ];
+    const sdqQuestions = [
+        "ห่วงใยความรู้สึกคนอื่น", "อยู่ไม่นิ่ง นั่งเฉยๆ ไม่ได้", "บ่นว่าปวดหัว ปวดท้องบ่อยๆ",
+        "เต็มใจแบ่งปันสิ่งของให้เพื่อน", "มักจะอาละวาด หรือโมโหร้าย", "ชอบอยู่ตามลำพัง",
+        "เชื่อฟังผู้อื่น", "กังวลใจหลายเรื่อง", "เป็นที่พึ่งได้เวลาคนอื่นมีปัญหา",
+        "อยู่ไม่สุข ยุกยิก", "มีเพื่อนสนิท", "มักจะมีเรื่องทะเลาะวิวาท",
+        "ดูเศร้าหมอง ท้อแท้", "เป็นที่ชื่นชอบของเพื่อน", "วอกแวกง่าย",
+        "เครียดในสถานการณ์ที่ไม่คุ้นเคย", "ใจดีกับเด็กที่เล็กกว่า", "มักจะโกหกหรือขี้โกง",
+        "ถูกเด็กคนอื่นแกล้ง", "ชอบอาสาช่วยเหลือผู้อื่น", "คิดก่อนทำ",
+        "แอบหยิบของคนอื่น", "เข้ากับผู้ใหญ่ได้ดีกว่าเด็กวัยเดียวกัน", "ขี้กลัว", "ทำงานได้จนเสร็จ"
+    ];
 
-        window.onload = () => {
-            if(!currentUser || localStorage.getItem('currentRole') !== 'teacher') window.location.href = "index.html";
-            document.getElementById('teacher-name-display').innerText = `${currentUser.name} | ${currentUser.position}`;
-            fetchRooms();
-        };
-
-        function fetchRooms() {
-            const select = document.getElementById('room-select');
-            const myRooms = currentUser.rooms || [];
-            if(myRooms.length === 0) {
-                select.innerHTML = '<option value="">ไม่มีห้องที่ปรึกษา</option>';
-                return;
-            }
-            select.innerHTML = '<option value="">-- เลือกห้องเรียน --</option>' + myRooms.map(r => `<option value="${r}">${r}</option>`).join('');
-            if(myRooms.length === 1) { select.value = myRooms[0]; loadStudents(); }
-        }
-
-        async function loadStudents() {
-            const roomString = document.getElementById('room-select').value;
-            const container = document.getElementById('students-container');
-            if(!roomString) return;
-
-            container.innerHTML = `<div class="flex flex-col items-center py-20"><div class="animate-spin rounded-full h-12 w-12 border-4 border-emerald-100 border-t-emerald-700"></div><p class="mt-4 text-emerald-800 font-medium">กำลังรวบรวมข้อมูลนักเรียนและผล SDQ...</p></div>`;
-
-            try {
-                const [resS, resSDQ] = await Promise.all([
-                    fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getStudentsInRoom', payload: { roomString } }) }),
-                    fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getSDQDashboard', payload: { roomString } }) })
-                ]);
-                const dataS = await resS.json();
-                const dataSDQ = await resSDQ.json();
-
-                if(dataS.success) {
-                    currentStudentsData = dataS.data.map(s => ({ ...s, status: 'มา' }));
-                    const latestSDQ = {};
-                    if(dataSDQ.success) dataSDQ.data.forEach(item => latestSDQ[item.id] = item);
-                    renderTable(currentStudentsData, latestSDQ);
-                }
-            } catch (e) {
-                container.innerHTML = `<div class="p-8 text-center text-red-500 bg-red-50 rounded-3xl">เกิดข้อผิดพลาดในการโหลดข้อมูล กรุณาลองใหม่อีกครั้ง</div>`;
-            }
-        }
-
-        function renderTable(students, sdqMap) {
-            let html = `
-            <div class="bg-white rounded-[2rem] shadow-xl overflow-hidden border border-slate-100">
-                <table class="w-full text-left border-collapse">
-                    <thead>
-                        <tr class="bg-slate-50 text-slate-500 text-[11px] uppercase tracking-widest border-b border-slate-100">
-                            <th class="p-5 font-bold w-16 text-center text-slate-400">#</th>
-                            <th class="p-5 font-bold">ข้อมูลนักเรียน</th>
-                            <th class="p-5 font-bold text-center">บันทึกการเช็คชื่อ</th>
-                            <th class="p-5 font-bold text-center">การประเมิน (SDQ)</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-50">`;
-
-            students.forEach((s, i) => {
-                const sdq = sdqMap[s.id];
-                const statusColor = sdq ? (sdq.status === 'มีปัญหา' ? 'text-red-600 bg-red-50 border-red-100' : (sdq.status === 'เสี่ยง' ? 'text-orange-600 bg-orange-50 border-orange-100' : 'text-emerald-600 bg-emerald-50 border-emerald-100')) : 'text-slate-400 bg-slate-50 border-slate-100';
-                
-                html += `
-                <tr class="hover:bg-slate-50/50 transition-colors group">
-                    <td class="p-5 text-center font-bold text-slate-300 text-sm">${i+1}</td>
-                    <td class="p-5">
-                        <div class="flex flex-col">
-                            <span class="font-bold text-slate-800 text-base">${s.name}</span>
-                            <span class="text-xs text-slate-400 font-mono tracking-tighter">ID: ${s.id}</span>
-                        </div>
-                    </td>
-                    <td class="p-5">
-                        <div class="flex justify-center gap-1 bg-slate-100 p-1.5 rounded-2xl w-fit mx-auto shadow-inner">
-                            ${['มา', 'สาย', 'ลา', 'ขาด'].map(st => `
-                                <label class="cursor-pointer group/btn">
-                                    <input type="radio" name="att_${s.id}" value="${st}" ${st === 'มา' ? 'checked' : ''} onchange="updateAttendance(${i}, '${st}')" class="hidden peer">
-                                    <div class="px-4 py-1.5 rounded-xl text-xs font-bold text-slate-400 peer-checked:bg-white peer-checked:text-emerald-700 peer-checked:shadow-sm transition-all hover:text-slate-600">${st}</div>
-                                </label>
-                            `).join('')}
-                        </div>
-                    </td>
-                    <td class="p-5">
-                        <div class="flex flex-col items-center gap-2">
-                            <span class="px-3 py-1 rounded-full text-[10px] font-bold border ${statusColor}">${sdq ? `${sdq.status} (${sdq.totalScore})` : 'ยังไม่มีผล'}</span>
-                            <button onclick="openDeepData('${s.id}', '${s.name}')" class="bg-white border border-slate-200 text-slate-600 hover:bg-emerald-700 hover:text-white hover:border-emerald-700 text-[10px] px-4 py-2 rounded-xl font-bold w-full max-w-[140px] transition-all shadow-sm">
-                                เจาะลึกข้อมูล & ประเมิน
-                            </button>
-                        </div>
-                    </td>
-                </tr>`;
+    window.onload = () => {
+        if(!currentUser || localStorage.getItem('currentRole') !== 'teacher') {
+            Swal.fire('กรุณาล็อกอิน', 'เซสชั่นหมดอายุ กรุณาล็อกอินใหม่', 'warning').then(() => {
+                window.location.href = "index.html";
             });
+            return;
+        }
+        document.getElementById('teacher-name-display').innerText = `${currentUser.name} | ${currentUser.position}`;
+        fetchRooms();
+    };
 
-            html += `</tbody></table></div>
-            <div class="mt-8 flex justify-center">
-                <button onclick="submitAttendance()" id="btn-save-att" class="bg-emerald-800 hover:bg-emerald-900 text-white font-bold py-5 px-14 rounded-[2rem] shadow-2xl hover:scale-105 transition-all flex items-center gap-4 text-xl">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
-                    ยืนยันเช็คชื่อเช้าวันนี้
-                </button>
-            </div>`;
-            container.innerHTML = html;
+    // 🟢 ดึงห้องจากข้อมูลที่ติดมากับ User (ไม่ต้องยิง API)
+    function fetchRooms() {
+        const select = document.getElementById('room-select');
+        const myRooms = currentUser.rooms || [];
+        
+        if(myRooms.length === 0) {
+            select.innerHTML = '<option value="">ไม่มีห้องที่ปรึกษาในฐานข้อมูล</option>';
+            Swal.fire('ไม่พบข้อมูลห้อง', 'คุณยังไม่มีชื่อเป็นครูที่ปรึกษาในห้องใดๆ กรุณาแจ้งแอดมิน', 'info');
+            return;
         }
 
-        function updateAttendance(i, st) { currentStudentsData[i].status = st; }
-
-        async function submitAttendance() {
-            const btn = document.getElementById('btn-save-att');
-            btn.disabled = true; btn.innerHTML = "กำลังบันทึกข้อมูล...";
-            try {
-                const res = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'saveAttendance', payload: { records: currentStudentsData, teacherName: currentUser.name } }) });
-                const result = await res.json();
-                if(result.success) Swal.fire({ icon: 'success', title: 'เช็คชื่อสำเร็จ', text: `บันทึกข้อมูลนักเรียน ${result.count} รายเรียบร้อย`, confirmButtonColor: '#065f46' });
-            } catch (e) {
-                Swal.fire('ผิดพลาด', 'ไม่สามารถบันทึกได้', 'error');
-            } finally {
-                btn.disabled = false; btn.innerHTML = "ยืนยันเช็คชื่อเช้าวันนี้";
-            }
+        select.innerHTML = '<option value="">-- เลือกห้องเรียน --</option>' + 
+                           myRooms.map(r => `<option value="${r}">${r}</option>`).join('');
+        
+        // ถ้ามีห้องเดียว ให้เลือกและโหลดทันที
+        if(myRooms.length === 1) {
+            select.value = myRooms[0];
+            loadStudents();
         }
+    }
 
-        // ==========================================
-        // 📊 DEEP DATA & CHART LOGIC
-        // ==========================================
-        async function openDeepData(id, name) {
-            currentViewingStudent = { id, name };
-            document.getElementById('modal-student-name').innerText = `${name} (รหัส ${id})`;
-            document.getElementById('deep-data-modal').classList.remove('hidden');
+    // 🟢 โหลดรายชื่อนักเรียนและผล SDQ ล่าสุด
+    async function loadStudents() {
+        const roomString = document.getElementById('room-select').value;
+        const container = document.getElementById('students-container');
+        if(!roomString) return;
+
+        container.innerHTML = `<div class="flex flex-col items-center py-20"><div class="animate-spin rounded-full h-12 w-12 border-4 border-emerald-100 border-t-emerald-700"></div><p class="mt-4 text-emerald-800 font-medium">กำลังโหลดข้อมูลนักเรียน...</p></div>`;
+
+        try {
+            const [resS, resSDQ] = await Promise.all([
+                fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getStudentsInRoom', payload: { roomString } }) }),
+                fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getSDQDashboard', payload: { roomString } }) })
+            ]);
             
-            // Build Assessment Form
-            const form = document.getElementById('teacher-sdq-form');
-            form.innerHTML = sdqQuestions.map((q, i) => `
-                <div class="bg-white p-4 rounded-2xl border border-slate-100">
-                    <p class="text-xs font-bold text-slate-700 mb-3">${i+1}. ${q}</p>
-                    <div class="flex gap-2">
-                        ${['ไม่จริง', 'จริงบางส่วน', 'จริงแน่นอน'].map((v, val) => `
-                            <label class="flex-1 text-center cursor-pointer group">
-                                <input type="radio" name="tq${i}" value="${val}" class="hidden peer" required>
-                                <div class="p-2 rounded-xl border border-slate-100 bg-slate-50 text-[10px] text-slate-400 peer-checked:bg-emerald-100 peer-checked:text-emerald-800 peer-checked:border-emerald-200 transition-all">${v}</div>
+            const dataS = await resS.json();
+            const dataSDQ = await resSDQ.json();
+
+            if(dataS.success) {
+                currentStudentsData = dataS.data.map(s => ({ ...s, status: 'มา' }));
+                const latestSDQMap = {};
+                if(dataSDQ.success) dataSDQ.data.forEach(item => latestSDQMap[item.id] = item);
+                renderTable(currentStudentsData, latestSDQMap);
+            } else {
+                throw new Error(dataS.message);
+            }
+        } catch (e) {
+            console.error(e);
+            container.innerHTML = `<div class="p-8 text-center text-red-500 bg-red-50 rounded-3xl font-bold border border-red-100">❌ เกิดข้อผิดพลาด: ${e.message}<br><small>กรุณาตรวจสอบการตั้งค่า Deployment ใน Apps Script</small></div>`;
+        }
+    }
+
+    function renderTable(students, sdqMap) {
+        let html = `
+        <div class="bg-white rounded-[2rem] shadow-xl overflow-hidden border border-slate-100">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="bg-slate-50 text-slate-500 text-[11px] uppercase tracking-widest border-b border-slate-100">
+                        <th class="p-5 font-bold w-16 text-center">#</th>
+                        <th class="p-5 font-bold">ข้อมูลนักเรียน</th>
+                        <th class="p-5 font-bold text-center">บันทึกการเช็คชื่อ</th>
+                        <th class="p-5 font-bold text-center">ผลการประเมินล่าสุด (SDQ)</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-50">`;
+
+        students.forEach((s, i) => {
+            const sdq = sdqMap[s.id];
+            let statusColor = 'text-slate-400 bg-slate-50 border-slate-100';
+            if(sdq) {
+                if(sdq.status === 'มีปัญหา') statusColor = 'text-red-600 bg-red-50 border-red-100';
+                else if(sdq.status === 'เสี่ยง') statusColor = 'text-orange-600 bg-orange-50 border-orange-100';
+                else statusColor = 'text-emerald-600 bg-emerald-50 border-emerald-100';
+            }
+            
+            html += `
+            <tr class="hover:bg-slate-50/50 transition-colors group">
+                <td class="p-5 text-center font-bold text-slate-300 text-sm">${i+1}</td>
+                <td class="p-5">
+                    <div class="flex flex-col">
+                        <span class="font-bold text-slate-800 text-base">${s.name}</span>
+                        <span class="text-xs text-slate-400 font-mono">ID: ${s.id}</span>
+                    </div>
+                </td>
+                <td class="p-5">
+                    <div class="flex justify-center gap-1 bg-slate-100 p-1.5 rounded-2xl w-fit mx-auto shadow-inner">
+                        ${['มา', 'สาย', 'ลา', 'ขาด'].map(st => `
+                            <label class="cursor-pointer">
+                                <input type="radio" name="att_${s.id}" value="${st}" ${st === 'มา' ? 'checked' : ''} onchange="updateAttendance(${i}, '${st}')" class="hidden peer">
+                                <div class="px-4 py-1.5 rounded-xl text-xs font-bold text-slate-400 peer-checked:bg-white peer-checked:text-emerald-700 peer-checked:shadow-sm transition-all hover:text-slate-600">${st}</div>
                             </label>
                         `).join('')}
                     </div>
-                </div>`).join('');
+                </td>
+                <td class="p-5">
+                    <div class="flex flex-col items-center gap-2">
+                        <span class="px-3 py-1 rounded-full text-[10px] font-bold border ${statusColor}">${sdq ? `${sdq.status} (${sdq.totalScore})` : 'ยังไม่มีผล'}</span>
+                        <button onclick="openDeepData('${s.id}', '${s.name}')" class="bg-white border border-slate-200 text-slate-600 hover:bg-emerald-700 hover:text-white hover:border-emerald-700 text-[10px] px-4 py-2 rounded-xl font-bold w-full max-w-[140px] transition-all shadow-sm">
+                            วิเคราะห์/ประเมิน
+                        </button>
+                    </div>
+                </td>
+            </tr>`;
+        });
 
-            // Fetch History
-            const tableDiv = document.getElementById('deep-history-table');
-            tableDiv.innerHTML = "กำลังดึงข้อมูลประวัติย้อนหลัง...";
+        html += `</tbody></table></div>
+        <div class="mt-8 flex justify-center">
+            <button onclick="submitAttendance()" id="btn-save-att" class="bg-emerald-800 hover:bg-emerald-900 text-white font-bold py-5 px-14 rounded-[2rem] shadow-2xl hover:scale-105 transition-all flex items-center gap-4 text-xl">
+                💾 ยืนยันบันทึกการเช็คชื่อ
+            </button>
+        </div>`;
+        document.getElementById('students-container').innerHTML = html;
+    }
 
-            try {
-                const res = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getStudentDeepData', payload: { studentId: id } }) });
-                const result = await res.json();
-                if(result.success) {
-                    renderHistoryTimeline(result.data);
-                }
-            } catch (e) { tableDiv.innerHTML = "Error loading history"; }
+    function updateAttendance(i, st) { currentStudentsData[i].status = st; }
+
+    async function submitAttendance() {
+        const btn = document.getElementById('btn-save-att');
+        btn.disabled = true; btn.innerHTML = "กำลังบันทึก...";
+        try {
+            const res = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'saveAttendance', payload: { records: currentStudentsData, teacherName: currentUser.name } }) });
+            const result = await res.json();
+            if(result.success) Swal.fire({ icon: 'success', title: 'เช็คชื่อสำเร็จ', text: `บันทึกข้อมูล ${result.count} รายเรียบร้อย`, confirmButtonColor: '#065f46' });
+            else throw new Error(result.message);
+        } catch (e) {
+            Swal.fire('ผิดพลาด', e.message, 'error');
+        } finally {
+            btn.disabled = false; btn.innerHTML = "💾 ยืนยันบันทึกการเช็คชื่อ";
         }
+    }
 
-        function renderHistoryTimeline(data) {
-            if(!data || data.length === 0) {
-                document.getElementById('deep-history-table').innerHTML = "<p class='text-center py-10'>ยังไม่มีประวัติการประเมิน</p>";
-                return;
-            }
+    // 🟢 ระบบเจาะลึก (Deep Data)
+    async function openDeepData(id, name) {
+        currentViewingStudent = { id, name };
+        document.getElementById('modal-student-name').innerText = `${name} (รหัส ${id})`;
+        document.getElementById('deep-data-modal').classList.remove('hidden');
+        
+        const form = document.getElementById('teacher-sdq-form');
+        form.innerHTML = sdqQuestions.map((q, i) => `
+            <div class="bg-white p-4 rounded-2xl border border-slate-100">
+                <p class="text-xs font-bold text-slate-700 mb-3">${i+1}. ${q}</p>
+                <div class="flex gap-2">
+                    ${['ไม่จริง', 'จริงบางส่วน', 'จริงแน่นอน'].map((v, val) => `
+                        <label class="flex-1 text-center cursor-pointer">
+                            <input type="radio" name="tq${i}" value="${val}" class="hidden peer" required>
+                            <div class="p-2 rounded-xl border border-slate-100 bg-slate-50 text-[10px] text-slate-400 peer-checked:bg-emerald-100 peer-checked:text-emerald-800 peer-checked:border-emerald-200 transition-all">${v}</div>
+                        </label>
+                    `).join('')}
+                </div>
+            </div>`).join('');
 
-            // --- Draw Chart ---
-            const chartData = [...data].reverse(); // Sort for chart timeline
-            const labels = chartData.map(d => new Date(d.date).toLocaleDateString('th-TH', {day:'numeric', month:'short', year:'2-digit'}));
-            const studentScores = chartData.map(d => d.evaluator === 'นักเรียนประเมินตนเอง' ? d.total : null);
-            const teacherScores = chartData.map(d => d.evaluator !== 'นักเรียนประเมินตนเอง' ? d.total : null);
+        const tableDiv = document.getElementById('deep-history-table');
+        tableDiv.innerHTML = '<div class="text-center py-10"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-700 mx-auto"></div></div>';
 
+        try {
+            const res = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getStudentDeepData', payload: { studentId: id } }) });
+            const result = await res.json();
+            if(result.success) renderHistoryTimeline(result.data);
+        } catch (e) { tableDiv.innerHTML = "ไม่สามารถโหลดประวัติได้"; }
+    }
+
+    function renderHistoryTimeline(data) {
+        if(!data || data.length === 0) {
+            document.getElementById('deep-history-table').innerHTML = "<p class='text-center py-10 text-slate-400'>ยังไม่มีประวัติการประเมินในเทอมนี้</p>";
             if(timelineChart) timelineChart.destroy();
-            const ctx = document.getElementById('sdqTimelineChart').getContext('2d');
-            timelineChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        { label: 'นักเรียนประเมิน', data: studentScores, borderColor: '#3b82f6', backgroundColor: '#3b82f6', tension: 0.3, pointRadius: 5, spanGaps: true },
-                        { label: 'ครูประเมิน', data: teacherScores, borderColor: '#10b981', backgroundColor: '#10b981', borderDash: [5, 5], tension: 0.3, pointRadius: 5, spanGaps: true }
-                    ]
-                },
-                options: { maintainAspectRatio: false, responsive: true, plugins: { legend: { position: 'bottom' } } }
-            });
-
-            // --- Render History Table ---
-            let html = `
-                <table class="w-full border-collapse">
-                    <thead>
-                        <tr class="bg-slate-50 text-slate-500 uppercase tracking-tighter">
-                            <th class="p-3 border">วันที่</th>
-                            <th class="p-3 border">โดย</th>
-                            <th class="p-3 border text-center">รวม</th>
-                            <th class="p-3 border">อารมณ์</th>
-                            <th class="p-3 border">พฤติกรรม</th>
-                            <th class="p-3 border">ไม่อยู่นิ่ง</th>
-                            <th class="p-3 border">เพื่อน</th>
-                            <th class="p-3 border">สังคม(+)</th>
-                        </tr>
-                    </thead>
-                    <tbody>`;
-            data.forEach(d => {
-                const isStudent = d.evaluator === 'นักเรียนประเมินตนเอง';
-                html += `
-                    <tr class="${isStudent ? 'bg-white' : 'bg-emerald-50'}">
-                        <td class="p-3 border">${new Date(d.date).toLocaleDateString('th-TH')}</td>
-                        <td class="p-3 border font-bold">${isStudent ? '👦 นักเรียน' : '👨‍🏫 ครู'}</td>
-                        <td class="p-3 border text-center font-bold ${d.total > 16 ? 'text-red-500' : 'text-emerald-700'}">${d.total}</td>
-                        <td class="p-3 border text-center">${d.scores.emotional}</td>
-                        <td class="p-3 border text-center">${d.scores.conduct}</td>
-                        <td class="p-3 border text-center">${d.scores.hyper}</td>
-                        <td class="p-3 border text-center">${d.scores.peer}</td>
-                        <td class="p-3 border text-center text-blue-600 font-bold">${d.scores.prosocial}</td>
-                    </tr>`;
-            });
-            html += `</tbody></table>`;
-            document.getElementById('deep-history-table').innerHTML = html;
+            return;
         }
 
-        async function submitTeacherSDQ() {
-            const form = document.getElementById('teacher-sdq-form');
-            const formData = new FormData(form);
-            const answers = Array.from(formData.values()).map(Number);
-            if(answers.length < 25) return Swal.fire('เตือน', 'กรุณาประเมินให้ครบ 25 ข้อ', 'warning');
+        // วาดกราฟ
+        const chartData = [...data].reverse();
+        const labels = chartData.map(d => new Date(d.date).toLocaleDateString('th-TH', {day:'numeric', month:'short'}));
+        const studentScores = chartData.map(d => d.evaluator === 'นักเรียนประเมินตนเอง' ? d.total : null);
+        const teacherScores = chartData.map(d => d.evaluator !== 'นักเรียนประเมินตนเอง' ? d.total : null);
 
-            const btn = document.getElementById('btn-submit-teacher-sdq');
-            btn.disabled = true; btn.innerHTML = "กำลังประมวลผล...";
+        if(timelineChart) timelineChart.destroy();
+        const ctx = document.getElementById('sdqTimelineChart').getContext('2d');
+        timelineChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'นักเรียน', data: studentScores, borderColor: '#3b82f6', tension: 0.3, pointRadius: 5, spanGaps: true },
+                    { label: 'ครู', data: teacherScores, borderColor: '#10b981', borderDash: [5, 5], tension: 0.3, pointRadius: 5, spanGaps: true }
+                ]
+            },
+            options: { maintainAspectRatio: false, responsive: true, plugins: { legend: { position: 'bottom' } } }
+        });
 
-            // SDQ Calculation Logic (Basic group mapping)
-            const getSum = (idx) => idx.reduce((a, i) => a + answers[i], 0);
-            const emotional = getSum([2, 7, 12, 15, 23]);
-            const conduct = getSum([4, 6, 11, 17, 21]);
-            const hyper = getSum([1, 9, 14, 19, 24]);
-            const peer = getSum([5, 10, 13, 18, 22]);
-            const prosocial = getSum([0, 3, 8, 16, 20]);
-            
-            const totalScore = emotional + conduct + hyper + peer;
-            const status = totalScore <= 13 ? "ปกติ" : (totalScore <= 16 ? "เสี่ยง" : "มีปัญหา");
+        // ตารางประวัติ
+        let html = `<table class="w-full border-collapse"><thead><tr class="bg-slate-50 text-slate-500 uppercase tracking-tighter"><th class="p-3 border">วันที่</th><th class="p-3 border">โดย</th><th class="p-3 border text-center">รวม</th><th class="p-3 border">อารมณ์</th><th class="p-3 border">พฤติกรรม</th><th class="p-3 border">สมาธิ</th><th class="p-3 border">เพื่อน</th><th class="p-3 border">สังคม(+)</th></tr></thead><tbody>`;
+        data.forEach(d => {
+            const isStudent = d.evaluator === 'นักเรียนประเมินตนเอง';
+            html += `<tr class="${isStudent ? 'bg-white' : 'bg-emerald-50'}"><td class="p-3 border">${new Date(d.date).toLocaleDateString('th-TH')}</td><td class="p-3 border font-bold">${isStudent ? '👦 นักเรียน' : '👨‍🏫 ครู'}</td><td class="p-3 border text-center font-bold ${d.total > 16 ? 'text-red-500' : 'text-emerald-700'}">${d.total}</td><td class="p-3 border text-center">${d.scores.emotional}</td><td class="p-3 border text-center">${d.scores.conduct}</td><td class="p-3 border text-center">${d.scores.hyper}</td><td class="p-3 border text-center">${d.scores.peer}</td><td class="p-3 border text-center text-blue-600 font-bold">${d.scores.prosocial}</td></tr>`;
+        });
+        html += `</tbody></table>`;
+        document.getElementById('deep-history-table').innerHTML = html;
+    }
 
-            const payload = {
-                studentId: currentViewingStudent.id,
-                studentName: currentViewingStudent.name,
-                totalScore, status,
-                scores: { emotional, conduct, hyper, peer, prosocial }
-            };
+    async function submitTeacherSDQ() {
+        const form = document.getElementById('teacher-sdq-form');
+        const formData = new FormData(form);
+        const answers = Array.from(formData.values()).map(Number);
+        if(answers.length < 25) return Swal.fire('ข้อมูลไม่ครบ', 'กรุณาประเมินให้ครบทั้ง 25 ข้อครับ', 'warning');
 
-            try {
-                const res = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'saveSDQData', payload: { payload, evaluatorName: currentUser.name } }) });
-                const resJson = await res.json();
-                if(resJson.success) {
-                    Swal.fire('สำเร็จ', 'บันทึกการประเมินของครูแล้ว', 'success');
-                    openDeepData(currentViewingStudent.id, currentViewingStudent.name);
-                    loadStudents();
-                }
-            } catch (e) { Swal.fire('Error', 'บันทึกไม่สำเร็จ', 'error'); }
-            finally { btn.disabled = false; btn.innerHTML = "บันทึกผลประเมินครู"; }
-        }
+        const btn = document.getElementById('btn-submit-teacher-sdq');
+        btn.disabled = true; btn.innerHTML = "กำลังบันทึก...";
 
-        function closeDeepData() { document.getElementById('deep-data-modal').classList.add('hidden'); }
-        function logout() { localStorage.clear(); window.location.href = "index.html"; }
-    </script>
+        const getSum = (idx) => idx.reduce((a, i) => a + answers[i], 0);
+        const emotional = getSum([2, 7, 12, 15, 23]);
+        const conduct = getSum([4, 6, 11, 17, 21]);
+        const hyper = getSum([1, 9, 14, 19, 24]);
+        const peer = getSum([5, 10, 13, 18, 22]);
+        const prosocial = getSum([0, 3, 8, 16, 20]);
+        const totalScore = emotional + conduct + hyper + peer;
+        const status = totalScore <= 13 ? "ปกติ" : (totalScore <= 16 ? "เสี่ยง" : "มีปัญหา");
+
+        const payloadData = {
+            studentId: currentViewingStudent.id,
+            studentName: currentViewingStudent.name,
+            totalScore, status,
+            scores: { emotional, conduct, hyper, peer, prosocial }
+        };
+
+        try {
+            const res = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'saveSDQData', payload: { payload: payloadData, evaluatorName: currentUser.name } }) });
+            const resJson = await res.json();
+            if(resJson.success) {
+                Swal.fire('สำเร็จ', 'บันทึกการประเมินของครูแล้ว', 'success');
+                openDeepData(currentViewingStudent.id, currentViewingStudent.name);
+                loadStudents();
+            }
+        } catch (e) { Swal.fire('Error', 'บันทึกไม่สำเร็จ', 'error'); }
+        finally { btn.disabled = false; btn.innerHTML = "บันทึกผลประเมินครู"; }
+    }
+
+    function closeDeepData() { document.getElementById('deep-data-modal').classList.add('hidden'); }
+    function logout() { localStorage.clear(); window.location.href = "index.html"; }
+</script>
 </body>
 </html>

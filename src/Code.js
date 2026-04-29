@@ -1,6 +1,7 @@
 /**
- * CMCAT Information System - High Quality Core Backend
- * Designed for Performance & Deep Data Analytics
+ * CMCAT Information System - Ultra-High Quality Core Backend
+ * Updated: 2026-04-29
+ * Focus: Reliability, Deep Data Analytics, and Type Safety
  */
 
 // ==========================================
@@ -20,7 +21,7 @@ const CONFIG = {
 const ATTENDANCE_SHEET_NAME = `Attendance_Logs_${CONFIG.CURRENT_TERM}`;
 
 // ==========================================
-// 🚀 WEB APP ENTRY POINTS
+// 🚀 WEB APP ENTRY POINTS (CORS Optimized)
 // ==========================================
 function doGet() {
   return HtmlService.createTemplateFromFile('index')
@@ -35,120 +36,150 @@ function include(filename) {
 }
 
 /**
- * ศูนย์กลางการรับส่งข้อมูล (API Gateway)
+ * API Gateway - ศูนย์กลางจัดการ Request จากหน้าเว็บ
  */
 function doPost(e) {
-  const res = (data) => ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
+  const output = (data) => {
+    return ContentService.createTextOutput(JSON.stringify(data))
+      .setMimeType(ContentService.MimeType.JSON);
+  };
   
   try {
+    if (!e.postData || !e.postData.contents) {
+      return output({ success: false, message: "No data received." });
+    }
+
     const request = JSON.parse(e.postData.contents);
     const action = request.action;
-    const payload = request.payload || request; // รองรับทั้งโครงสร้างแบบใหม่และเก่า
+    const payload = request.payload || request; // รองรับ Payload ทั้งแบบ Nested และ Flat
 
-    // --- ROUTING ACTIONS ---
+    // --- ROUTING SYSTEM ---
     switch (action) {
-      case 'login': return res(handleLogin(payload));
-      case 'getRoomData': return res(fetchRoomList());
-      case 'getStudentsInRoom': return res(fetchStudentsByRoom(payload.roomString));
-      case 'saveAttendance': return res(recordAttendance(payload));
-      case 'saveSDQData': return res(recordSDQ(payload));
-      case 'getSDQDashboard': return res(fetchSDQOverview(payload.roomString));
-      case 'getHistory': return res(fetchStudentAttendanceHistory(payload.studentId));
-      case 'getStudentDeepData': return res(fetchIndividualDeepSDQ(payload.studentId));
+      case 'login': return output(handleLogin(payload));
+      case 'getRoomData': return output(fetchRoomList());
+      case 'getStudentsInRoom': return output(fetchStudentsByRoom(payload.roomString));
+      case 'saveAttendance': return output(recordAttendance(payload));
+      case 'saveSDQData': return output(recordSDQ(payload));
+      case 'getSDQDashboard': return output(fetchSDQOverview(payload.roomString));
+      case 'getHistory': return output(fetchStudentAttendanceHistory(payload.studentId));
+      case 'getStudentDeepData': return output(fetchIndividualDeepSDQ(payload.studentId));
       default:
-        return res({ success: false, message: `Action [${action}] not found.` });
+        return output({ success: false, message: `Action [${action}] is not implemented.` });
     }
   } catch (error) {
-    return res({ success: false, message: "System Error: " + error.toString() });
+    return output({ success: false, message: "Critical Server Error: " + error.toString() });
   }
 }
 
 // ==========================================
-// 🛠️ DATA SERVICE FUNCTIONS
+// 🛠️ HELPER & DATA SERVICES
 // ==========================================
 
-function getSheet(name) {
-  const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
+/** เปิด Spreadsheet เพียงครั้งเดียวต่อ 1 Execution เพื่อประหยัด Resource */
+function getActiveSS() {
+  return SpreadsheetApp.openById(CONFIG.SHEET_ID);
+}
+
+function getTargetSheet(name) {
+  const ss = getActiveSS();
   return ss.getSheetByName(name) || ss.insertSheet(name);
 }
 
-/** 1. ระบบดึงรายชื่อห้องทั้งหมด (Unique List) */
-function fetchRoomList() {
-  const data = getSheet(CONFIG.SHEETS.STUDENTS).getDataRange().getValues();
-  data.shift(); // Remove header
-  
-  const rooms = [...new Set(data.map(r => `${r[3]} ${r[4]}/${r[5]}`.trim()))];
-  return { success: true, data: rooms.sort() };
+/** ฟังก์ชันจัดรูปแบบห้องเรียนให้เป็นมาตรฐานเดียวกันเพื่อการค้นหา */
+function normalizeRoom(str) {
+  if (!str) return "";
+  return str.toString().replace(/\s+/g, '').replace(/\./g, '').trim();
 }
 
-/** 2. ระบบดึงรายชื่อเด็กในห้อง (Normalized Search) */
+/** 1. ดึงรายชื่อห้องทั้งหมด (แบบ Unique) */
+function fetchRoomList() {
+  const sheet = getTargetSheet(CONFIG.SHEETS.STUDENTS);
+  const data = sheet.getDataRange().getValues();
+  data.shift(); // ตัดหัวตาราง
+  
+  const rooms = data
+    .filter(r => r[3] && r[4] && r[5])
+    .map(r => `${r[3]} ${r[4]}/${r[5]}`.trim());
+  
+  const uniqueRooms = [...new Set(rooms)].sort();
+  return { success: true, data: uniqueRooms };
+}
+
+/** 2. ดึงรายชื่อเด็กในห้อง (ระบบค้นหาแบบ Normalized) */
 function fetchStudentsByRoom(roomString) {
-  const cleanRoom = roomString.replace(/\s+/g, '');
-  const data = getSheet(CONFIG.SHEETS.STUDENTS).getDataRange().getValues();
+  const searchKey = normalizeRoom(roomString);
+  const data = getTargetSheet(CONFIG.SHEETS.STUDENTS).getDataRange().getValues();
   data.shift();
 
   const students = data
-    .filter(r => `${r[3]}${r[4]}/${r[5]}`.replace(/\s+/g, '') === cleanRoom)
-    .map(r => ({ id: r[0].toString(), name: r[2] }));
+    .filter(r => normalizeRoom(`${r[3]}${r[4]}/${r[5]}`) === searchKey)
+    .map(r => ({ id: r[0].toString(), name: r[2].toString() }));
 
   return { success: true, data: students };
 }
 
-/** 3. ระบบบันทึกการเช็คชื่อหน้าเสาธง */
+/** 3. บันทึกการเช็คชื่อเข้าแถวหน้าเสาธง */
 function recordAttendance(payload) {
   const { records, teacherName } = payload;
-  const sheet = getSheet(ATTENDANCE_SHEET_NAME);
-  
+  if (!records || !Array.isArray(records)) return { success: false, message: "Invalid records." };
+
+  const sheet = getTargetSheet(ATTENDANCE_SHEET_NAME);
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(['Timestamp', 'Date_TH', 'Teacher', 'Student_ID', 'Name', 'Status']);
   }
 
   const now = new Date();
   const dateStr = Utilities.formatDate(now, CONFIG.TIMEZONE, "dd/MM/yyyy");
-  const rows = records.map(r => [now, dateStr, teacherName, r.id, r.name, r.status]);
+  const rows = records.map(r => [now, dateStr, teacherName, r.id.toString(), r.name, r.status]);
   
   sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, 6).setValues(rows);
   return { success: true, count: rows.length };
 }
 
-/** 4. ระบบบันทึก SDQ เจาะลึก 5 ด้าน */
+/** 4. บันทึกผลประเมิน SDQ (ทั้งครูและนักเรียน) */
 function recordSDQ(payload) {
-  const { payload: data, evaluatorName } = payload;
-  const sheet = getSheet(CONFIG.SHEETS.SDQ);
+  // รองรับการส่งข้อมูลแบบ { payload: {...}, evaluatorName: "..." }
+  const data = payload.payload || payload;
+  const evaluator = payload.evaluatorName || "Unknown";
   
+  const sheet = getTargetSheet(CONFIG.SHEETS.SDQ);
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(['Timestamp', 'Evaluator', 'Student_ID', 'Name', 'Total', 'Status', 'Emotional', 'Conduct', 'Hyper', 'Peer', 'Prosocial']);
   }
 
-  const s = data.scores;
+  const s = data.scores || { emotional:0, conduct:0, hyper:0, peer:0, prosocial:0 };
   sheet.appendRow([
-    new Date(), evaluatorName, data.studentId, data.studentName, 
+    new Date(), evaluator, data.studentId.toString(), data.studentName, 
     data.totalScore, data.status, s.emotional, s.conduct, s.hyper, s.peer, s.prosocial
   ]);
   return { success: true };
 }
 
-/** 5. ระบบดึงประวัติเช็คชื่อรายบุคคล */
+/** 5. ดึงประวัติการเข้าแถวรายบุคคล */
 function fetchStudentAttendanceHistory(studentId) {
-  const sheet = getSheet(ATTENDANCE_SHEET_NAME);
+  const sheet = getTargetSheet(ATTENDANCE_SHEET_NAME);
+  if (sheet.getLastRow() <= 1) return { success: true, data: [] };
+
   const data = sheet.getDataRange().getDisplayValues();
-  if (data.length <= 1) return { success: true, data: [] };
+  const idStr = studentId.toString();
 
   const history = data.slice(1)
-    .filter(r => r[3] === studentId.toString())
+    .filter(r => r[3] === idStr)
     .reverse();
 
   return { success: true, data: history };
 }
 
-/** 6. ระบบวิเคราะห์ Deep Data SDQ รายคน (ส่งประวัติทั้งหมด) */
+/** 6. ดึงข้อมูล SDQ ย้อนหลังทั้งหมดของนักเรียนรายคน (Deep Data) */
 function fetchIndividualDeepSDQ(studentId) {
-  const sheet = getSheet(CONFIG.SHEETS.SDQ);
+  const sheet = getTargetSheet(CONFIG.SHEETS.SDQ);
+  if (sheet.getLastRow() <= 1) return { success: true, data: [] };
+
   const data = sheet.getDataRange().getValues();
-  if (data.length <= 1) return { success: true, data: [] };
+  const idStr = studentId.toString();
 
   const results = data.slice(1)
-    .filter(r => r[2].toString() === studentId.toString())
+    .filter(r => r[2].toString() === idStr)
     .map(r => ({
       date: r[0],
       evaluator: r[1],
@@ -156,18 +187,23 @@ function fetchIndividualDeepSDQ(studentId) {
       status: r[5],
       scores: { emotional: r[6], conduct: r[7], hyper: r[8], peer: r[9], prosocial: r[10] }
     }))
-    .sort((a, b) => new Date(b.date) - new Date(a.date)); // ใหม่ไปเก่า
+    .sort((a, b) => new Date(b.date) - new Date(a.date)); // เรียงจากใหม่ไปเก่า
 
   return { success: true, data: results };
 }
 
-/** 7. ระบบสรุป SDQ ทั้งห้อง (สำหรับ Dashboard ครู) */
+/** 7. ดึงภาพรวม SDQ (ค่าล่าสุดของทุกคนในห้อง) สำหรับครู */
 function fetchSDQOverview(roomString) {
-  const students = fetchStudentsByRoom(roomString).data;
-  const studentIds = students.map(s => s.id);
-  const sdqData = getSheet(CONFIG.SHEETS.SDQ).getDataRange().getValues();
+  const studentResult = fetchStudentsByRoom(roomString);
+  if (!studentResult.success) return studentResult;
+
+  const studentIds = studentResult.data.map(s => s.id);
+  const sdqSheet = getTargetSheet(CONFIG.SHEETS.SDQ);
+  if (sdqSheet.getLastRow() <= 1) return { success: true, data: [] };
+
+  const sdqData = sdqSheet.getDataRange().getValues();
   
-  // ใช้ Map เพื่อดึง "ค่าล่าสุด" ของนักเรียนแต่ละคน
+  // ใช้ Map เพื่อเก็บเฉพาะข้อมูล "ล่าสุด" (บรรทัดล่างสุดของแต่ละคน)
   const latestMap = new Map();
   sdqData.slice(1).forEach(r => {
     const id = r[2].toString();
@@ -182,36 +218,58 @@ function fetchSDQOverview(roomString) {
 }
 
 // ==========================================
-// 🔐 AUTHENTICATION SERVICE
+// 🔐 AUTHENTICATION SERVICE (Robust Version)
 // ==========================================
 
 function handleLogin(payload) {
   const { studentId, password } = payload;
-  const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
+  if (!studentId || !password) return { success: false, message: "กรุณากรอกข้อมูลให้ครบถ้วน" };
 
-  // --- 1. Check Students Sheet ---
-  const sData = ss.getSheetByName(CONFIG.SHEETS.STUDENTS).getDataRange().getValues();
-  const student = sData.find(r => r[0].toString() === studentId.toString() && r[1].toString() === password.toString());
-  
-  if (student) {
-    return {
-      success: true,
-      role: 'student',
-      user: { id: student[0], name: student[2], level: `${student[3]} ${student[4]}/${student[5]}` }
-    };
+  const ss = getActiveSS();
+  const inputID = studentId.toString().trim();
+  const inputPass = password.toString().trim();
+
+  // --- 1. ตรวจสอบในฐานข้อมูลนักเรียน (Students) ---
+  const sSheet = ss.getSheetByName(CONFIG.SHEETS.STUDENTS);
+  if (sSheet) {
+    const sData = sSheet.getDataRange().getValues();
+    const student = sData.find(r => r[0].toString().trim() === inputID && r[1].toString().trim() === inputPass);
+    
+    if (student) {
+      return {
+        success: true,
+        role: 'student',
+        user: { 
+          id: student[0].toString(), 
+          name: student[2], 
+          level: `${student[3]} ${student[4]}/${student[5]}` 
+        }
+      };
+    }
   }
 
-  // --- 2. Check Teachers Sheet ---
-  const tData = ss.getSheetByName(CONFIG.SHEETS.TEACHERS).getDataRange().getValues();
-  const teacher = tData.find(r => r[0].toString() === studentId.toString() && r[3].toString() === password.toString());
-  
-  if (teacher) {
-    const rooms = teacher[5] ? teacher[5].toString().split(',').map(r => r.trim()).filter(r => r) : [];
-    return {
-      success: true,
-      role: 'teacher',
-      user: { id: teacher[0], name: teacher[1], position: teacher[2], rooms: rooms }
-    };
+  // --- 2. ตรวจสอบในฐานข้อมูลครู (Teachers) ---
+  const tSheet = ss.getSheetByName(CONFIG.SHEETS.TEACHERS);
+  if (tSheet) {
+    const tData = tSheet.getDataRange().getValues();
+    const teacher = tData.find(r => r[0].toString().trim() === inputID && r[3].toString().trim() === inputPass);
+    
+    if (teacher) {
+      // คอลัมน์ที่ 6 (Index 5) คือรายการห้อง
+      const rawRooms = teacher[5] ? teacher[5].toString() : "";
+      const rooms = rawRooms.split(',').map(r => r.trim()).filter(r => r);
+      
+      return {
+        success: true,
+        role: 'teacher',
+        user: { 
+          id: teacher[0].toString(), 
+          name: teacher[1], 
+          position: teacher[2], 
+          rooms: rooms 
+        }
+      };
+    }
   }
 
   return { success: false, message: "รหัสประจำตัวหรือรหัสผ่านไม่ถูกต้อง" };

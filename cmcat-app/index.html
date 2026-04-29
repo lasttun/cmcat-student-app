@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CMCAT Student Portal</title>
+    <title>ระบบนักเรียน | CMCAT Student Portal</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;600&display=swap" rel="stylesheet">
     <style> body { font-family: 'Prompt', sans-serif; } </style>
@@ -12,65 +12,99 @@
 
     <div id="login-page" class="flex items-center justify-center min-h-screen">
         <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-100">
-            <h2 class="text-3xl font-bold text-emerald-700 mb-6 text-center">เข้าสู่ระบบนักเรียน</h2>
-            <input type="text" id="login-id" placeholder="รหัสนักเรียน" class="w-full p-4 mb-4 border rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none">
-            <input type="password" id="login-pass" placeholder="รหัสผ่าน" class="w-full p-4 mb-6 border rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none">
-            <button onclick="handleLogin()" id="btn-login" class="w-full bg-emerald-600 text-white p-4 rounded-xl font-bold hover:bg-emerald-700 transition-all">เข้าใช้งาน</button>
-            <p class="mt-4 text-center text-slate-500">ยังไม่มีบัญชี? <a href="javascript:void(0)" onclick="showPage('reg-page')" class="text-emerald-600 font-bold">สมัครสมาชิก</a></p>
+            <h2 class="text-3xl font-bold text-emerald-700 mb-2 text-center">ระบบสารสนเทศ</h2>
+            <p class="text-center text-slate-500 mb-6">วิทยาลัยเกษตรและเทคโนโลยีเชียงใหม่</p>
+            
+            <input type="text" id="login-id" placeholder="รหัสนักเรียน (เช่น 6630xxxx)" class="w-full p-4 mb-4 border rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none">
+            <input type="password" id="login-pass" placeholder="เลขบัตรประจำตัวประชาชน" class="w-full p-4 mb-6 border rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none">
+            
+            <button onclick="handleLogin()" id="btn-login" class="w-full bg-emerald-600 text-white p-4 rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1">เข้าสู่ระบบ</button>
+            <p class="mt-6 text-center text-xs text-slate-400">เข้าสู่ระบบด้วยข้อมูลงานทะเบียน</p>
         </div>
     </div>
 
-    <div id="reg-page" class="hidden flex items-center justify-center min-h-screen py-10">
-        <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-100">
-            <h2 class="text-2xl font-bold text-emerald-700 mb-6 text-center">สมัครสมาชิกใหม่</h2>
-            <input type="text" id="reg-id" placeholder="รหัสนักเรียน" class="w-full p-4 mb-4 border rounded-xl outline-none">
-            <input type="text" id="reg-name" placeholder="ชื่อ-นามสกุล" class="w-full p-4 mb-4 border rounded-xl outline-none">
-            <input type="text" id="reg-level" placeholder="ระดับชั้น (เช่น ปวช.1/1)" class="w-full p-4 mb-4 border rounded-xl outline-none">
-            <input type="password" id="reg-pass" placeholder="ตั้งรหัสผ่าน" class="w-full p-4 mb-6 border rounded-xl outline-none">
-            <button onclick="handleRegister()" id="btn-reg" class="w-full bg-slate-800 text-white p-4 rounded-xl font-bold hover:bg-black transition-all">ลงทะเบียน</button>
-            <button onclick="showPage('login-page')" class="w-full mt-2 text-slate-500 p-2 text-sm">ย้อนกลับ</button>
-        </div>
-    </div>
-
-    <div id="dash-page" class="hidden">
-        <nav class="bg-emerald-700 text-white p-4 shadow-lg flex justify-between items-center">
-            <span class="font-bold">ระบบนักเรียน CMCAT</span>
-            <button onclick="location.reload()" class="text-xs bg-emerald-800 px-3 py-1 rounded">ออกจากระบบ</button>
+    <div id="dash-page" class="hidden pb-10">
+        <nav class="bg-emerald-700 text-white p-4 shadow-lg flex justify-between items-center sticky top-0 z-40">
+            <span class="font-bold">🎓 CMCAT Student Portal</span>
+            <button onclick="logout()" class="text-xs bg-red-500 hover:bg-red-600 px-3 py-2 rounded font-bold transition-all">ออกจากระบบ</button>
         </nav>
-        <div class="container mx-auto p-4">
-            <div class="bg-white p-6 rounded-2xl shadow-sm mb-6 border-l-8 border-emerald-500">
-                <h3 id="user-display" class="text-xl font-bold text-slate-800">ยินดีต้อนรับ</h3>
-                <p id="level-display" class="text-slate-500">ข้อมูลกำลังโหลด...</p>
+        
+        <div class="container mx-auto p-4 max-w-3xl mt-4">
+            <div class="bg-white p-6 rounded-2xl shadow-sm mb-6 border-l-8 border-emerald-500 flex justify-between items-center">
+                <div>
+                    <h3 id="user-display" class="text-2xl font-bold text-slate-800">ยินดีต้อนรับ</h3>
+                    <p id="level-display" class="text-slate-500 mt-1">ข้อมูลกำลังโหลด...</p>
+                </div>
+            </div>
+
+            <div class="bg-gradient-to-r from-orange-50 to-orange-100 p-6 rounded-2xl shadow-sm mb-6 border border-orange-200 text-center">
+                <h4 class="font-bold text-orange-800 text-lg mb-2">แบบประเมินจุดแข็งและจุดอ่อน (SDQ)</h4>
+                <p class="text-sm text-orange-600 mb-4">กรุณาทำแบบประเมินเพื่อให้ครูที่ปรึกษาดูแลท่านได้อย่างเหมาะสม</p>
+                <button onclick="openSDQ()" class="bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-full font-bold shadow-md transition-all hover:scale-105">เริ่มทำแบบประเมิน SDQ</button>
             </div>
             
-            <h4 class="font-bold text-slate-700 mb-4">ประวัติการเช็คชื่อ</h4>
+            <h4 class="font-bold text-slate-700 mb-4 text-lg">📅 ประวัติการเช็คชื่อหน้าเสาธง</h4>
             <div id="history-list" class="space-y-3">
                 </div>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <div id="sdq-modal" class="hidden fixed inset-0 bg-slate-900 bg-opacity-70 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
+            <div class="p-6 border-b border-slate-100">
+                <h2 class="text-2xl font-bold text-emerald-700">แบบประเมิน SDQ (25 ข้อ)</h2>
+                <p class="text-sm text-red-500 mt-1 font-medium">* ข้อมูลนี้เป็นความลับ จะถูกส่งให้ครูที่ปรึกษาของท่านเท่านั้น</p>
+            </div>
+            
+            <div class="p-6 overflow-y-auto flex-1 bg-slate-50" id="sdq-form-container">
+                <form id="sdq-form" class="space-y-6">
+                    </form>
+            </div>
+            
+            <div class="p-6 border-t border-slate-100 flex gap-4 bg-white rounded-b-3xl">
+                <button onclick="closeSDQ()" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 p-4 rounded-xl font-bold transition-all">ยกเลิก</button>
+                <button onclick="submitSDQ()" id="btn-submit-sdq" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white p-4 rounded-xl font-bold transition-all shadow-md">ส่งแบบประเมิน</button>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         // ⚠️ API_URL ของคุณ (ถูกต้องแล้ว)
         const API_URL = "https://script.google.com/macros/s/AKfycbztsC4Wng1zDAVyNmHka6N00m1os6aHGqcZV2LW1l1NBrlATIWPLzwdORzU4lP_P6_p/exec"; 
 
+        // คำถาม SDQ 25 ข้อ
+        const sdqQuestions = [
+            "ห่วงใยความรู้สึกคนอื่น", "อยู่ไม่นิ่ง นั่งเฉยๆ ไม่ได้", "บ่นว่าปวดหัว ปวดท้องบ่อยๆ",
+            "เต็มใจแบ่งปันสิ่งของให้เพื่อน", "มักจะอาละวาด หรือโมโหร้าย", "ชอบอยู่ตามลำพัง",
+            "เชื่อฟังผู้อื่น", "กังวลใจหลายเรื่อง", "เป็นที่พึ่งได้เวลาคนอื่นมีปัญหา",
+            "อยู่ไม่สุข ยุกยิก", "มีเพื่อนสนิท", "มักจะมีเรื่องทะเลาะวิวาท",
+            "ดูเศร้าหมอง ท้อแท้", "เป็นที่ชื่นชอบของเพื่อน", "วอกแวกง่าย",
+            "เครียดในสถานการณ์ที่ไม่คุ้นเคย", "ใจดีกับเด็กที่เล็กกว่า", "มักจะโกหกหรือขี้โกง",
+            "ถูกเด็กคนอื่นแกล้ง", "ชอบอาสาช่วยเหลือผู้อื่น", "คิดก่อนทำ",
+            "แอบหยิบของคนอื่น", "เข้ากับผู้ใหญ่ได้ดีกว่าเด็กวัยเดียวกัน", "ขี้กลัว", "ทำงานได้จนเสร็จ"
+        ];
+
         function showPage(pageId) {
-            ['login-page', 'reg-page', 'dash-page'].forEach(p => document.getElementById(p).classList.add('hidden'));
+            ['login-page', 'dash-page'].forEach(p => document.getElementById(p).classList.add('hidden'));
             document.getElementById(pageId).classList.remove('hidden');
         }
 
+        function logout() {
+            localStorage.clear();
+            location.reload();
+        }
+
         // ==========================================
-        // 🔐 ระบบเข้าสู่ระบบ (รองรับทั้งนักเรียนและครู)
+        // 🔐 ระบบเข้าสู่ระบบ 
         // ==========================================
         async function handleLogin() {
             const studentId = document.getElementById('login-id').value;
             const password = document.getElementById('login-pass').value;
             
-            if(!studentId || !password) return Swal.fire('แจ้งเตือน', 'กรุณากรอกข้อมูลให้ครบ', 'warning');
+            if(!studentId || !password) return Swal.fire('แจ้งเตือน', 'กรุณากรอก รหัสนักเรียน และ เลขบัตรประชาชน', 'warning');
 
-            toggleBtn('btn-login', true);
+            toggleBtn('btn-login', true, 'เข้าสู่ระบบ');
             try {
                 const res = await fetch(API_URL, {
                     method: 'POST',
@@ -80,94 +114,35 @@
                 const data = await res.json();
                 
                 if(data.success) {
-                    // 💾 บันทึกข้อมูลผู้ใช้ลงในเบราว์เซอร์ เพื่อเอาไปใช้หน้าอื่นต่อได้
                     localStorage.setItem('currentUser', JSON.stringify(data.user));
                     localStorage.setItem('currentRole', data.role);
 
-                    // 🎓 กรณี: นักเรียนล็อกอิน
                     if (data.role === 'student') {
                         document.getElementById('user-display').innerText = `สวัสดี, ${data.user.name}`;
                         document.getElementById('level-display').innerText = `ระดับชั้น: ${data.user.level}`;
                         showPage('dash-page');
                         loadHistory(studentId);
                     } 
-                    // 👨‍🏫 กรณี: คุณครูล็อกอิน
                     else if (data.role === 'teacher') {
                         Swal.fire({
-                            icon: 'success',
-                            title: 'สวัสดีครับคุณครู',
-                            text: `เข้าสู่ระบบในชื่อ: ${data.user.name}`,
-                            timer: 2000,
-                            showConfirmButton: false
+                            icon: 'success', title: 'สวัสดีครับคุณครู', text: `เข้าสู่ระบบในชื่อ: ${data.user.name}`,
+                            timer: 2000, showConfirmButton: false
                         }).then(() => {
-                            // 🚀 [ทางเลือก] ถ้าคุณมีลิงก์ระบบเช็คชื่อครูอยู่แล้ว (เช่น ats.cmcat.ac.th) 
-                            // ให้เปิดคอมเมนต์บรรทัดข้างล่างแล้วใส่ URL ลงไป ระบบจะเด้งไปหน้าครูอัตโนมัติครับ
-                            window.location.href = "teacher.html";
-                            
-                            // ชั่วคราว: แสดงหน้า Dashboard แบบของครู
-                            document.getElementById('user-display').innerText = `สวัสดีคุณครู, ${data.user.name}`;
-                            document.getElementById('level-display').innerText = `ตำแหน่ง: ${data.user.position}`;
-                            showPage('dash-page');
-                            document.getElementById('history-list').innerHTML = `
-                                <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 p-4 rounded-xl text-center">
-                                    <p class="font-bold">เข้าสู่โหมดครูที่ปรึกษา</p>
-                                    <p class="text-sm mt-2">เมนูการเช็คชื่อนักเรียนกำลังจะถูกนำมารวมที่นี่ในอนาคต</p>
-                                </div>
-                            `;
+                            window.location.href = "teacher.html"; // พาครูไปหน้า teacher.html
                         });
                     }
                 } else {
-                    Swal.fire('ผิดพลาด', data.message, 'error');
+                    Swal.fire('ผิดพลาด', 'รหัสนักเรียน หรือ เลขบัตรประชาชนไม่ถูกต้อง', 'error');
                 }
             } catch (err) {
                 Swal.fire('Error', 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error');
             } finally {
-                toggleBtn('btn-login', false);
+                toggleBtn('btn-login', false, 'เข้าสู่ระบบ');
             }
         }
 
         // ==========================================
-        // 📝 ระบบสมัครสมาชิก (สำหรับนักเรียนเท่านั้น)
-        // ==========================================
-        async function handleRegister() {
-            const payload = {
-                action: 'register',
-                studentId: document.getElementById('reg-id').value,
-                name: document.getElementById('reg-name').value,
-                level: document.getElementById('reg-level').value,
-                password: document.getElementById('reg-pass').value
-            };
-            
-            if(!payload.studentId || !payload.password) return Swal.fire('แจ้งเตือน', 'กรุณากรอกรหัสและรหัสผ่าน', 'warning');
-
-            toggleBtn('btn-reg', true);
-            try {
-                const res = await fetch(API_URL, { 
-                    method: 'POST', 
-                    headers: { "Content-Type": "text/plain;charset=utf-8" },
-                    body: JSON.stringify(payload) 
-                });
-                const data = await res.json();
-                
-                if(data.success) {
-                    Swal.fire('สำเร็จ', data.message, 'success').then(() => showPage('login-page'));
-                    // เคลียร์ค่าในฟอร์มหลังสมัครเสร็จ
-                    document.getElementById('reg-id').value = '';
-                    document.getElementById('reg-name').value = '';
-                    document.getElementById('reg-level').value = '';
-                    document.getElementById('reg-pass').value = '';
-                } else {
-                    Swal.fire('ผิดพลาด', data.message, 'error');
-                }
-            } catch (err) {
-                Swal.fire('Error', 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error');
-            } finally {
-                toggleBtn('btn-reg', false);
-            }
-        }
-
-        // ==========================================
-        // 📊 ระบบดึงประวัติการเช็คชื่อ (สำหรับนักเรียน)
+        // 📊 ระบบดึงประวัติการเช็คชื่อ
         // ==========================================
         async function loadHistory(studentId) {
             try {
@@ -180,15 +155,15 @@
                 const list = document.getElementById('history-list');
                 
                 if(!result.data || result.data.length === 0) {
-                    list.innerHTML = '<p class="text-slate-400">ยังไม่มีประวัติการเช็คชื่อ</p>';
+                    list.innerHTML = '<div class="text-center p-8 bg-white rounded-xl border border-dashed border-slate-300 text-slate-400">ยังไม่มีประวัติการเช็คชื่อ</div>';
                 } else {
                     list.innerHTML = result.data.map(row => `
-                        <div class="bg-white p-4 rounded-xl shadow-sm border flex justify-between items-center">
+                        <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex justify-between items-center hover:border-emerald-200 transition-colors">
                             <div>
-                                <p class="font-bold text-slate-700">${new Date(row[0]).toLocaleDateString('th-TH')}</p>
-                                <p class="text-xs text-slate-400">ครูผู้เช็ค: ${row[2]}</p>
+                                <p class="font-bold text-slate-700">${new Date(row[0]).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                                <p class="text-xs text-slate-400 mt-1"><i class="fas fa-user-check"></i> ครูผู้เช็ค: ${row[2]}</p>
                             </div>
-                            <span class="px-3 py-1 rounded-full text-xs font-bold ${row[5] === 'มา' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}">${row[5]}</span>
+                            <span class="px-4 py-1.5 rounded-full text-sm font-bold ${row[5] === 'มา' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}">${row[5]}</span>
                         </div>
                     `).join('');
                 }
@@ -198,12 +173,94 @@
         }
 
         // ==========================================
+        // 📝 ระบบแบบประเมิน SDQ
+        // ==========================================
+        function openSDQ() {
+            const form = document.getElementById('sdq-form');
+            form.innerHTML = sdqQuestions.map((q, i) => `
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+                    <p class="font-bold text-slate-700 mb-4 text-lg"><span class="text-emerald-500 mr-2">${i+1}.</span>${q}</p>
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <label class="flex-1 text-center border-2 border-slate-100 p-3 rounded-xl cursor-pointer hover:bg-emerald-50 hover:border-emerald-200 transition-all has-[:checked]:bg-emerald-100 has-[:checked]:border-emerald-500 has-[:checked]:text-emerald-800 font-medium">
+                            <input type="radio" name="q${i}" value="0" class="hidden" required> ไม่จริง
+                        </label>
+                        <label class="flex-1 text-center border-2 border-slate-100 p-3 rounded-xl cursor-pointer hover:bg-emerald-50 hover:border-emerald-200 transition-all has-[:checked]:bg-emerald-100 has-[:checked]:border-emerald-500 has-[:checked]:text-emerald-800 font-medium">
+                            <input type="radio" name="q${i}" value="1" class="hidden"> จริงบ้าง
+                        </label>
+                        <label class="flex-1 text-center border-2 border-slate-100 p-3 rounded-xl cursor-pointer hover:bg-emerald-50 hover:border-emerald-200 transition-all has-[:checked]:bg-emerald-100 has-[:checked]:border-emerald-500 has-[:checked]:text-emerald-800 font-medium">
+                            <input type="radio" name="q${i}" value="2" class="hidden"> จริงแน่นอน
+                        </label>
+                    </div>
+                </div>
+            `).join('');
+            document.getElementById('sdq-modal').classList.remove('hidden');
+        }
+
+        function closeSDQ() {
+            document.getElementById('sdq-modal').classList.add('hidden');
+        }
+
+        async function submitSDQ() {
+            const form = document.getElementById('sdq-form');
+            const formData = new FormData(form);
+            const scores = Array.from(formData.values()).map(Number);
+            
+            // เช็คว่าทำครบ 25 ข้อไหม
+            if(scores.length < 25) {
+                return Swal.fire('แจ้งเตือน', `คุณทำแบบประเมินไปแล้ว ${scores.length} ข้อ<br>กรุณาทำโจทย์ให้ครบทั้ง 25 ข้อครับ`, 'warning');
+            }
+
+            const btn = document.getElementById('btn-submit-sdq');
+            btn.disabled = true;
+            btn.innerText = "กำลังบันทึกข้อมูล...";
+
+            try {
+                // คำนวณคะแนนรวม
+                const totalScore = scores.reduce((a, b) => a + b, 0);
+                let status = totalScore <= 13 ? "ปกติ" : (totalScore <= 16 ? "เสี่ยง" : "มีปัญหา");
+
+                const user = JSON.parse(localStorage.getItem('currentUser'));
+                const payload = {
+                    studentId: user.id,
+                    studentName: user.name,
+                    totalScore: totalScore,
+                    status: status,
+                    scores: { emotional: 0, conduct: 0, hyper: 0, peer: 0, prosocial: 0 } // ส่งแบบรวมไปก่อน
+                };
+
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: JSON.stringify({ action: 'saveSDQData', payload, evaluatorName: 'นักเรียนประเมินตนเอง' })
+                });
+                
+                const result = await res.json();
+                if(result.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'ขอบคุณครับ',
+                        text: 'ส่งแบบประเมินให้ครูที่ปรึกษาเรียบร้อยแล้ว',
+                        confirmButtonColor: '#059669'
+                    });
+                    closeSDQ();
+                } else {
+                    Swal.fire('ผิดพลาด', result.message, 'error');
+                }
+            } catch (err) {
+                Swal.fire('Error', 'ไม่สามารถเชื่อมต่อระบบได้', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "ส่งแบบประเมิน";
+            }
+        }
+
+        // ==========================================
         // 🔄 เอฟเฟกต์ปุ่มโหลด
         // ==========================================
-        function toggleBtn(id, loading) {
+        function toggleBtn(id, loading, originalText) {
             const btn = document.getElementById(id);
             btn.disabled = loading;
-            btn.innerText = loading ? 'กำลังประมวลผล...' : (id === 'btn-login' ? 'เข้าใช้งาน' : 'ลงทะเบียน');
+            btn.innerText = loading ? 'กำลังประมวลผล...' : originalText;
             if(loading) {
                 btn.classList.add('opacity-50', 'cursor-not-allowed');
             } else {

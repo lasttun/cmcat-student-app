@@ -4,7 +4,7 @@
 const SHEET_ID = '19wLK2Pxn0ZGE4hy-DykS4n6ohN1Cq7ew4JopnUp5y8U';
 
 // ==========================================
-// 👨‍🏫 ส่วนที่ 1: ระบบหน้าบ้านของครูที่ปรึกษา (รันด้วย google.script.run - เก็บไว้เผื่อฉุกเฉิน)
+// 👨‍🏫 ส่วนที่ 1: ระบบหน้าบ้านเก่า (รันด้วย google.script.run - เก็บไว้เผื่อฉุกเฉิน)
 // ==========================================
 function doGet() {
   return HtmlService.createTemplateFromFile('index')
@@ -19,7 +19,7 @@ function include(filename) {
 }
 
 // ==========================================
-// 🛠️ ส่วนฟังก์ชันจัดการข้อมูล (ถูกเรียกใช้จาก API)
+// 🛠️ ส่วนฟังก์ชันจัดการข้อมูล
 // ==========================================
 function getRoomData() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
@@ -47,20 +47,17 @@ function getStudentsInRoom(roomString) {
              .map(row => ({ id: row[0].toString(), name: row[2] }));
 }
 
-// 🟢 อัปเดต: เปลี่ยนจากการดึง Email อัตโนมัติ เป็นรับค่าชื่อครู (teacherName) จากระบบ Login
-function saveSDQData(payload, teacherName) {
+function saveSDQData(payload, evaluatorName) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName('SDQ_Results') || ss.insertSheet('SDQ_Results');
   if (sheet.getLastRow() === 0) {
-    sheet.appendRow(['วันที่บันทึก', 'ครูผู้บันทึก', 'รหัสนักเรียน', 'ชื่อ-นามสกุล', 'คะแนนรวม', 'สถานะ', 'ด้านอารมณ์', 'ด้านความประพฤติ', 'ด้านไม่อยู่นิ่ง', 'ด้านเพื่อน', 'ด้านสังคม']);
+    sheet.appendRow(['วันที่บันทึก', 'ผู้ประเมิน', 'รหัสนักเรียน', 'ชื่อ-นามสกุล', 'คะแนนรวม', 'สถานะ', 'ด้านอารมณ์', 'ด้านความประพฤติ', 'ด้านไม่อยู่นิ่ง', 'ด้านเพื่อน', 'ด้านสังคม']);
   }
   
-  // ใช้ teacherName แทน Session.getActiveUser().getEmail()
-  sheet.appendRow([new Date(), teacherName, payload.studentId, payload.studentName, payload.totalScore, payload.status, payload.scores.emotional, payload.scores.conduct, payload.scores.hyper, payload.scores.peer, payload.scores.prosocial]);
+  sheet.appendRow([new Date(), evaluatorName, payload.studentId, payload.studentName, payload.totalScore, payload.status, payload.scores.emotional, payload.scores.conduct, payload.scores.hyper, payload.scores.peer, payload.scores.prosocial]);
   return { success: true };
 }
 
-// 🟢 อัปเดต: เปลี่ยนจากการดึง Email อัตโนมัติ เป็นรับค่าชื่อครู (teacherName) จากระบบ Login
 function saveAttendance(records, teacherName) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName('Attendance_Logs') || ss.insertSheet('Attendance_Logs');
@@ -70,56 +67,50 @@ function saveAttendance(records, teacherName) {
   const now = new Date();
   const today = now.toLocaleDateString('th-TH');
   
-  // ใช้ teacherName แทน Session.getActiveUser().getEmail()
   const rows = records.map(r => [now, today, teacherName, r.id, r.name, r.status]);
   sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, 6).setValues(rows);
   return { success: true, count: rows.length };
 }
 
-// ==========================================
-// 🎓 ส่วนที่ 2: Backend API (ใช้ติดต่อกับ Cloudflare Pages ผ่าน fetch)
-// ==========================================
-function doPost(e) {
-  const headers = {
-    "Access-Control-Allow-Origin": "*",
-    "Content-Type": "application/json"
-  };
-
-  try {
-    const requestData = JSON.parse(e.postData.contents);
-    const action = requestData.action; 
-    let result = {};
-
-    // 📌 API สำหรับนักเรียน
-    if (action === 'register') {
-      result = registerStudent(requestData);
-    } else if (action === 'login') {
-      result = loginStudent(requestData);
-    } else if (action === 'getHistory') {
-      result = getStudentHistory(requestData);
-    } 
-    // 📌 API สำหรับครูที่ปรึกษา (เพิ่มเข้ามาใหม่)
-    else if (action === 'getRoomData') {
-      result = { success: true, data: getRoomData() };
-    } else if (action === 'getStudentsInRoom') {
-      result = { success: true, data: getStudentsInRoom(requestData.roomString) };
-    } else if (action === 'saveAttendance') {
-      result = saveAttendance(requestData.records, requestData.teacherName); 
-    } else if (action === 'saveSDQData') {
-      result = saveSDQData(requestData.payload, requestData.teacherName); 
-    } else {
-      result = { success: false, message: 'ไม่พบคำสั่ง (action) ที่ระบุ' };
-    }
-
-    return ContentService.createTextOutput(JSON.stringify(result))
-      .setMimeType(ContentService.MimeType.JSON);
-
-  } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({ success: false, message: error.message }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
+function getStudentHistory(data) {
+  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('Attendance_Logs'); 
+  if(!sheet) return { success: true, data: [] };
+  
+  const dbData = sheet.getDataRange().getDisplayValues(); 
+  if (dbData.length <= 1) return { success: true, data: [] };
+  
+  const logs = dbData.slice(1);
+  const personalLogs = logs.filter(row => row[3].toString() === data.studentId.toString()).reverse();
+  
+  return { success: true, data: personalLogs };
 }
 
+function getSDQDashboard(roomString) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sdqSheet = ss.getSheetByName('SDQ_Results');
+  if (!sdqSheet) return { success: true, data: [] };
+  
+  const sdqData = sdqSheet.getDataRange().getValues();
+  sdqData.shift(); 
+  
+  const studentsInRoom = getStudentsInRoom(roomString);
+  const studentIds = studentsInRoom.map(s => s.id);
+  
+  const results = sdqData.filter(row => studentIds.includes(row[2].toString()))
+    .map(row => ({
+      id: row[2],
+      name: row[3],
+      totalScore: row[4],
+      status: row[5],
+      evaluator: row[1] 
+    }));
+    
+  return { success: true, data: results };
+}
+
+// ==========================================
+// 🔐 ส่วนระบบสมาชิก (Login / Register)
+// ==========================================
 function registerStudent(data) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(15000)) return { success: false, message: 'ระบบคนใช้งานเยอะ กรุณาลองใหม่' };
@@ -151,7 +142,6 @@ function registerStudent(data) {
 function loginStudent(data) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   
-  // 1. ค้นหาในฐานข้อมูลนักเรียนก่อน
   const studentSheet = ss.getSheetByName('Users');
   if (studentSheet) {
     const studentData = studentSheet.getDataRange().getValues();
@@ -167,7 +157,6 @@ function loginStudent(data) {
     }
   }
 
-  // 2. ถ้าไม่ใช่นักเรียน ให้ค้นหาในฐานข้อมูลครู
   const teacherSheet = ss.getSheetByName('Teachers');
   if (teacherSheet) {
     const teacherData = teacherSheet.getDataRange().getValues();
@@ -186,16 +175,27 @@ function loginStudent(data) {
   return { success: false, message: 'รหัสผู้ใช้งาน หรือรหัสผ่านไม่ถูกต้อง' };
 }
 
-function getStudentHistory(data) {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('Attendance_Logs'); 
-  if(!sheet) return { success: true, data: [] };
-  
-  const dbData = sheet.getDataRange().getDisplayValues(); 
-  if (dbData.length <= 1) return { success: true, data: [] };
-  
-  const logs = dbData.slice(1);
-  // เทียบกับ Index 3 (รหัสนักเรียนในตาราง Attendance_Logs ที่ครูเช็ค)
-  const personalLogs = logs.filter(row => row[3].toString() === data.studentId.toString()).reverse();
-  
-  return { success: true, data: personalLogs };
+// ==========================================
+// 🚀 ส่วนหัวใจหลัก: ศูนย์กลางรับ-ส่ง API (มี doPost ตัวเดียว)
+// ==========================================
+function doPost(e) {
+  const res = (data) => ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
+  try {
+    const requestData = JSON.parse(e.postData.contents);
+    const action = requestData.action;
+
+    // เลือกทำงานตาม Action ที่ส่งมาจากหน้าเว็บ
+    if (action === 'login') return res(loginStudent(requestData));
+    if (action === 'register') return res(registerStudent(requestData));
+    if (action === 'getRoomData') return res({ success: true, data: getRoomData() });
+    if (action === 'getStudentsInRoom') return res({ success: true, data: getStudentsInRoom(requestData.roomString) });
+    if (action === 'saveAttendance') return res(saveAttendance(requestData.records, requestData.teacherName));
+    if (action === 'saveSDQData') return res(saveSDQData(requestData.payload, requestData.evaluatorName));
+    if (action === 'getSDQDashboard') return res(getSDQDashboard(requestData.roomString));
+    if (action === 'getHistory') return res(getStudentHistory(requestData));
+
+    return res({ success: false, message: 'Action not found' });
+  } catch (error) {
+    return res({ success: false, message: error.toString() });
+  }
 }

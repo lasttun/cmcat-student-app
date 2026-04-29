@@ -15,7 +15,7 @@
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #10b981; border-radius: 10px; }
     </style>
 </head>
-<body class="bg-slate-100 min-h-screen pb-10">
+<body class="bg-slate-100 min-h-screen pb-10 relative">
 
     <nav class="bg-emerald-800 text-white p-4 shadow-lg flex justify-between items-center sticky top-0 z-40">
         <div class="flex items-center gap-3">
@@ -138,7 +138,6 @@
         fetchRooms();
     };
 
-    // 🟢 ดึงห้องจากข้อมูลที่ติดมากับ User (ไม่ต้องยิง API)
     function fetchRooms() {
         const select = document.getElementById('room-select');
         const myRooms = currentUser.rooms || [];
@@ -152,14 +151,12 @@
         select.innerHTML = '<option value="">-- เลือกห้องเรียน --</option>' + 
                            myRooms.map(r => `<option value="${r}">${r}</option>`).join('');
         
-        // ถ้ามีห้องเดียว ให้เลือกและโหลดทันที
         if(myRooms.length === 1) {
             select.value = myRooms[0];
             loadStudents();
         }
     }
 
-    // 🟢 โหลดรายชื่อนักเรียนและผล SDQ ล่าสุด
     async function loadStudents() {
         const roomString = document.getElementById('room-select').value;
         const container = document.getElementById('students-container');
@@ -330,29 +327,44 @@
         let html = `<table class="w-full border-collapse"><thead><tr class="bg-slate-50 text-slate-500 uppercase tracking-tighter"><th class="p-3 border">วันที่</th><th class="p-3 border">โดย</th><th class="p-3 border text-center">รวม</th><th class="p-3 border">อารมณ์</th><th class="p-3 border">พฤติกรรม</th><th class="p-3 border">สมาธิ</th><th class="p-3 border">เพื่อน</th><th class="p-3 border">สังคม(+)</th></tr></thead><tbody>`;
         data.forEach(d => {
             const isStudent = d.evaluator === 'นักเรียนประเมินตนเอง';
-            html += `<tr class="${isStudent ? 'bg-white' : 'bg-emerald-50'}"><td class="p-3 border">${new Date(d.date).toLocaleDateString('th-TH')}</td><td class="p-3 border font-bold">${isStudent ? '👦 นักเรียน' : '👨‍🏫 ครู'}</td><td class="p-3 border text-center font-bold ${d.total > 16 ? 'text-red-500' : 'text-emerald-700'}">${d.total}</td><td class="p-3 border text-center">${d.scores.emotional}</td><td class="p-3 border text-center">${d.scores.conduct}</td><td class="p-3 border text-center">${d.scores.hyper}</td><td class="p-3 border text-center">${d.scores.peer}</td><td class="p-3 border text-center text-blue-600 font-bold">${d.scores.prosocial}</td></tr>`;
+            html += `<tr class="${isStudent ? 'bg-white' : 'bg-emerald-50'}"><td class="p-3 border">${new Date(d.date).toLocaleDateString('th-TH')}</td><td class="p-3 border font-bold">${isStudent ? '👦 นักเรียน' : '👨‍🏫 ครู'}</td><td class="p-3 border text-center font-bold ${d.total > 15 ? 'text-red-500' : 'text-emerald-700'}">${d.total}</td><td class="p-3 border text-center">${d.scores.emotional}</td><td class="p-3 border text-center">${d.scores.conduct}</td><td class="p-3 border text-center">${d.scores.hyper}</td><td class="p-3 border text-center">${d.scores.peer}</td><td class="p-3 border text-center text-blue-600 font-bold">${d.scores.prosocial}</td></tr>`;
         });
         html += `</tbody></table>`;
         document.getElementById('deep-history-table').innerHTML = html;
     }
 
+    // 🛡️ [PATCHED] ส่วนที่ได้รับการแก้ไขอุดช่องโหว่การประเมินของครู
     async function submitTeacherSDQ() {
         const form = document.getElementById('teacher-sdq-form');
         const formData = new FormData(form);
-        const answers = Array.from(formData.values()).map(Number);
-        if(answers.length < 25) return Swal.fire('ข้อมูลไม่ครบ', 'กรุณาประเมินให้ครบทั้ง 25 ข้อครับ', 'warning');
+        const answers = [];
+        
+        // 1. ดึงข้อมูลแบบ Index แน่นอน ป้องกันการส่งข้อมูลแหว่ง
+        for(let i=0; i<25; i++) {
+            const val = formData.get(`tq${i}`);
+            if(val === null) return Swal.fire('ข้อมูลไม่ครบ', `กรุณาประเมินข้อที่ ${i+1} ให้ครบถ้วนครับ`, 'warning');
+            answers.push(Number(val));
+        }
 
         const btn = document.getElementById('btn-submit-teacher-sdq');
         btn.disabled = true; btn.innerHTML = "กำลังบันทึก...";
 
-        const getSum = (idx) => idx.reduce((a, i) => a + answers[i], 0);
-        const emotional = getSum([2, 7, 12, 15, 23]);
-        const conduct = getSum([4, 6, 11, 17, 21]);
-        const hyper = getSum([1, 9, 14, 19, 24]);
-        const peer = getSum([5, 10, 13, 18, 22]);
-        const prosocial = getSum([0, 3, 8, 16, 20]);
+        // 2. ฟังก์ชันคิดคะแนนย้อนกลับ (Reverse Scoring: 0->2, 1->1, 2->0)
+        const rev = (val) => (val === 0 ? 2 : (val === 2 ? 0 : 1));
+
+        // 3. แยกด้านและจัดการ Reverse Scoring สำหรับครูประเมิน
+        const emotional = answers[2] + answers[7] + answers[12] + answers[15] + answers[23];
+        const conduct = answers[4] + rev(answers[6]) + answers[11] + answers[17] + answers[21];
+        const hyper = answers[1] + answers[9] + answers[14] + rev(answers[20]) + rev(answers[24]);
+        const peer = answers[5] + rev(answers[10]) + rev(answers[13]) + answers[18] + answers[22];
+        const prosocial = answers[0] + answers[3] + answers[8] + answers[16] + answers[19];
+
         const totalScore = emotional + conduct + hyper + peer;
-        const status = totalScore <= 13 ? "ปกติ" : (totalScore <= 16 ? "เสี่ยง" : "มีปัญหา");
+        
+        // 4. เกณฑ์การประเมินของครู (Thai Norm) เข้มงวดกว่านักเรียน
+        let status = "ปกติ"; // 0-11
+        if (totalScore >= 16) status = "มีปัญหา"; // 16-40
+        else if (totalScore >= 12) status = "เสี่ยง"; // 12-15
 
         const payloadData = {
             studentId: currentViewingStudent.id,
@@ -368,9 +380,14 @@
                 Swal.fire('สำเร็จ', 'บันทึกการประเมินของครูแล้ว', 'success');
                 openDeepData(currentViewingStudent.id, currentViewingStudent.name);
                 loadStudents();
+            } else {
+                throw new Error(resJson.message);
             }
-        } catch (e) { Swal.fire('Error', 'บันทึกไม่สำเร็จ', 'error'); }
-        finally { btn.disabled = false; btn.innerHTML = "บันทึกผลประเมินครู"; }
+        } catch (e) { 
+            Swal.fire('Error', 'บันทึกไม่สำเร็จ', 'error'); 
+        } finally { 
+            btn.disabled = false; btn.innerHTML = "บันทึกผลประเมินครู"; 
+        }
     }
 
     function closeDeepData() { document.getElementById('deep-data-modal').classList.add('hidden'); }

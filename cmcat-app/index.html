@@ -70,7 +70,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
-        // ⚠️ API_URL ของคุณ (ถูกต้องแล้ว)
+        // ⚠️ API_URL ของคุณ
         const API_URL = "https://script.google.com/macros/s/AKfycbztsC4Wng1zDAVyNmHka6N00m1os6aHGqcZV2LW1l1NBrlATIWPLzwdORzU4lP_P6_p/exec"; 
 
         // คำถาม SDQ 25 ข้อ
@@ -109,7 +109,7 @@
                 const res = await fetch(API_URL, {
                     method: 'POST',
                     headers: { "Content-Type": "text/plain;charset=utf-8" },
-                    body: JSON.stringify({ action: 'login', studentId, password })
+                    body: JSON.stringify({ action: 'login', payload: { studentId, password } })
                 });
                 const data = await res.json();
                 
@@ -128,7 +128,7 @@
                             icon: 'success', title: 'สวัสดีครับคุณครู', text: `เข้าสู่ระบบในชื่อ: ${data.user.name}`,
                             timer: 2000, showConfirmButton: false
                         }).then(() => {
-                            window.location.href = "teacher.html"; // พาครูไปหน้า teacher.html
+                            window.location.href = "teacher.html"; 
                         });
                     }
                 } else {
@@ -149,7 +149,7 @@
                 const res = await fetch(API_URL, { 
                     method: 'POST', 
                     headers: { "Content-Type": "text/plain;charset=utf-8" },
-                    body: JSON.stringify({ action: 'getHistory', studentId }) 
+                    body: JSON.stringify({ action: 'getHistory', payload: { studentId } }) 
                 });
                 const result = await res.json();
                 const list = document.getElementById('history-list');
@@ -203,11 +203,15 @@
         async function submitSDQ() {
             const form = document.getElementById('sdq-form');
             const formData = new FormData(form);
-            const scores = Array.from(formData.values()).map(Number);
+            const answers = [];
             
-            // เช็คว่าทำครบ 25 ข้อไหม
-            if(scores.length < 25) {
-                return Swal.fire('แจ้งเตือน', `คุณทำแบบประเมินไปแล้ว ${scores.length} ข้อ<br>กรุณาทำโจทย์ให้ครบทั้ง 25 ข้อครับ`, 'warning');
+            // ตรวจสอบและดึงค่าทีละข้อ
+            for(let i=0; i<25; i++) {
+                const val = formData.get(`q${i}`);
+                if(val === null) {
+                    return Swal.fire('แจ้งเตือน', `กรุณาทำแบบประเมินให้ครบทั้ง 25 ข้อครับ`, 'warning');
+                }
+                answers.push(Number(val));
             }
 
             const btn = document.getElementById('btn-submit-sdq');
@@ -215,23 +219,49 @@
             btn.innerText = "กำลังบันทึกข้อมูล...";
 
             try {
-                // คำนวณคะแนนรวม
-                const totalScore = scores.reduce((a, b) => a + b, 0);
-                let status = totalScore <= 13 ? "ปกติ" : (totalScore <= 16 ? "เสี่ยง" : "มีปัญหา");
+                // 🔄 ฟังก์ชันคิดคะแนนย้อนกลับ (Reverse Scoring: 0->2, 1->1, 2->0)
+                const rev = (val) => (val === 0 ? 2 : (val === 2 ? 0 : 1));
+                
+                // 🧮 แยกด้านตามเกณฑ์มาตรฐาน (Array index เริ่มที่ 0)
+                // ด้านอารมณ์ (ข้อ 3, 8, 13, 16, 24)
+                const emotional = answers[2] + answers[7] + answers[12] + answers[15] + answers[23];
+                // ด้านพฤติกรรมเกเร (ข้อ 5, 7(R), 12, 18, 22)
+                const conduct = answers[4] + rev(answers[6]) + answers[11] + answers[17] + answers[21];
+                // ด้านไม่อยู่นิ่ง (ข้อ 2, 10, 15, 21(R), 25(R))
+                const hyper = answers[1] + answers[9] + answers[14] + rev(answers[20]) + rev(answers[24]);
+                // ด้านเพื่อน (ข้อ 6, 11(R), 14(R), 19, 23)
+                const peer = answers[5] + rev(answers[10]) + rev(answers[13]) + answers[18] + answers[22];
+                // ด้านสัมพันธภาพทางสังคม (ข้อ 1, 4, 9, 17, 20) -> ไม่นำไปรวมกับคะแนนรวมปัญหา
+                const prosocial = answers[0] + answers[3] + answers[8] + answers[16] + answers[19];
+
+                // รวมคะแนนปัญหา 4 ด้าน (คะแนนเต็ม 40)
+                const totalScore = emotional + conduct + hyper + peer;
+                
+                // 🎯 เกณฑ์สำหรับ "นักเรียนประเมินตนเอง"
+                let status = "ปกติ";
+                if (totalScore >= 20) status = "มีปัญหา"; // 20 - 40
+                else if (totalScore >= 16) status = "เสี่ยง"; // 16 - 19
 
                 const user = JSON.parse(localStorage.getItem('currentUser'));
-                const payload = {
+                const payloadData = {
                     studentId: user.id,
                     studentName: user.name,
                     totalScore: totalScore,
                     status: status,
-                    scores: { emotional: 0, conduct: 0, hyper: 0, peer: 0, prosocial: 0 } // ส่งแบบรวมไปก่อน
+                    scores: { emotional, conduct, hyper, peer, prosocial } 
                 };
 
                 const res = await fetch(API_URL, {
                     method: 'POST',
                     headers: { "Content-Type": "text/plain;charset=utf-8" },
-                    body: JSON.stringify({ action: 'saveSDQData', payload, evaluatorName: 'นักเรียนประเมินตนเอง' })
+                    // โครงสร้าง Body ที่ตรงกับ High Quality Backend 
+                    body: JSON.stringify({ 
+                        action: 'saveSDQData', 
+                        payload: { 
+                            payload: payloadData, 
+                            evaluatorName: 'นักเรียนประเมินตนเอง' 
+                        } 
+                    })
                 });
                 
                 const result = await res.json();

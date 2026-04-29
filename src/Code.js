@@ -1,7 +1,7 @@
 /**
  * CMCAT Information System - Ultra-High Quality Core Backend
  * Updated: 2026-04-29
- * Focus: Reliability, Deep Data Analytics, and Type Safety
+ * Focus: Reliability, Deep Data Analytics, Calendar System, and Type Safety
  */
 
 // ==========================================
@@ -63,6 +63,7 @@ function doPost(e) {
       case 'getSDQDashboard': return output(fetchSDQOverview(payload.roomString));
       case 'getHistory': return output(fetchStudentAttendanceHistory(payload.studentId));
       case 'getStudentDeepData': return output(fetchIndividualDeepSDQ(payload.studentId));
+      case 'getRoomCalendar': return output(fetchRoomAttendanceCalendar(payload.roomString)); // 🟢 ใหม่: ระบบปฏิทิน
       default:
         return output({ success: false, message: `Action [${action}] is not implemented.` });
     }
@@ -215,6 +216,41 @@ function fetchSDQOverview(roomString) {
   });
 
   return { success: true, data: Array.from(latestMap.values()) };
+}
+
+/** 8. 🟢 ใหม่: สรุปข้อมูลการเช็คชื่อทั้งห้องเพื่อทำระบบ Calendar */
+function fetchRoomAttendanceCalendar(roomString) {
+  const sheet = getTargetSheet(ATTENDANCE_SHEET_NAME);
+  if (sheet.getLastRow() <= 1) return { success: true, data: {} };
+
+  const data = sheet.getDataRange().getDisplayValues();
+  data.shift(); // ลบหัวตาราง
+
+  // หากรองรายชื่อเด็กในห้องก่อน เพื่อป้องกันการดึงข้อมูลเด็กห้องอื่นมาปน
+  const studentResult = fetchStudentsByRoom(roomString);
+  if (!studentResult.success) return studentResult;
+  const studentIds = studentResult.data.map(s => s.id);
+
+  // รูปแบบข้อมูลที่ส่งกลับ: { "29/04/2569": { "มา": 38, "สาย": 2, "ลา": 0, "ขาด": 0, "total": 40 } }
+  const calendarData = {};
+
+  data.forEach(r => {
+    const dateKey = r[1]; // คอลัมน์ Date_TH
+    const sId = r[3];
+    const status = r[5];
+
+    if (studentIds.includes(sId)) {
+      if (!calendarData[dateKey]) {
+        calendarData[dateKey] = { 'มา': 0, 'สาย': 0, 'ลา': 0, 'ขาด': 0, 'total': 0 };
+      }
+      if (calendarData[dateKey][status] !== undefined) {
+        calendarData[dateKey][status]++;
+      }
+      calendarData[dateKey]['total']++;
+    }
+  });
+
+  return { success: true, data: calendarData };
 }
 
 // ==========================================

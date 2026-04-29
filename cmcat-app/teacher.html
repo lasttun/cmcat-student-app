@@ -80,6 +80,11 @@
                                 <span class="w-2 h-6 bg-emerald-500 rounded-full"></span>
                                 ประวัติการประเมินรายด้านย้อนหลัง
                             </h3>
+                            <div class="flex gap-4 mb-2 text-[10px] text-slate-500 justify-end">
+                                <span class="flex items-center gap-1">🟢 ปกติ</span>
+                                <span class="flex items-center gap-1">🟡 เสี่ยง</span>
+                                <span class="flex items-center gap-1">🔴 มีปัญหา</span>
+                            </div>
                             <div id="deep-history-table" class="overflow-x-auto text-xs">
                                 </div>
                         </div>
@@ -108,7 +113,6 @@
 
 <script>
     // 1. Config & State
-    // ⚠️ เช็ค API_URL ให้แน่ใจว่าเป็นตัวที่ได้จาก "New Deployment" ล่าสุดเท่านั้น!
     const API_URL = "https://script.google.com/macros/s/AKfycbztsC4Wng1zDAVyNmHka6N00m1os6aHGqcZV2LW1l1NBrlATIWPLzwdORzU4lP_P6_p/exec";
     
     const currentUser = JSON.parse(localStorage.getItem('currentUser'));
@@ -176,7 +180,17 @@
             if(dataS.success) {
                 currentStudentsData = dataS.data.map(s => ({ ...s, status: 'มา' }));
                 const latestSDQMap = {};
-                if(dataSDQ.success) dataSDQ.data.forEach(item => latestSDQMap[item.id] = item);
+                if(dataSDQ.success) {
+                    dataSDQ.data.forEach(item => {
+                        if(!latestSDQMap[item.id]) latestSDQMap[item.id] = { student: null, teacher: null };
+                        // เก็บค่าล่าสุดแยกตามฝ่าย
+                        if(item.evaluator === 'นักเรียนประเมินตนเอง') {
+                            latestSDQMap[item.id].student = item;
+                        } else {
+                            latestSDQMap[item.id].teacher = item;
+                        }
+                    });
+                }
                 renderTable(currentStudentsData, latestSDQMap);
             } else {
                 throw new Error(dataS.message);
@@ -185,6 +199,29 @@
             console.error(e);
             container.innerHTML = `<div class="p-8 text-center text-red-500 bg-red-50 rounded-3xl font-bold border border-red-100">❌ เกิดข้อผิดพลาด: ${e.message}<br><small>กรุณาตรวจสอบการตั้งค่า Deployment ใน Apps Script</small></div>`;
         }
+    }
+
+    // 🟢 ฟังก์ชันคำนวณอิโมจิตามเกณฑ์ (Thai Norm)
+    function getSdqEmoji(domain, score, isStudent) {
+        if (domain === 'emotional') {
+            if (isStudent) return score <= 5 ? '🟢' : (score === 6 ? '🟡' : '🔴');
+            else return score <= 4 ? '🟢' : (score === 5 ? '🟡' : '🔴');
+        }
+        if (domain === 'conduct') {
+            if (isStudent) return score <= 3 ? '🟢' : (score === 4 ? '🟡' : '🔴');
+            else return score <= 2 ? '🟢' : (score === 3 ? '🟡' : '🔴');
+        }
+        if (domain === 'hyper') {
+            return score <= 5 ? '🟢' : (score === 6 ? '🟡' : '🔴'); // เกณฑ์เท่ากัน
+        }
+        if (domain === 'peer') {
+            if (isStudent) return score <= 3 ? '🟢' : (score <= 5 ? '🟡' : '🔴');
+            else return score <= 3 ? '🟢' : (score === 4 ? '🟡' : '🔴');
+        }
+        if (domain === 'prosocial') { // จุดแข็ง (ยิ่งเยอะยิ่งดี)
+            return score >= 6 ? '🟢' : (score === 5 ? '🟡' : '🔴');
+        }
+        return '';
     }
 
     function renderTable(students, sdqMap) {
@@ -196,19 +233,25 @@
                         <th class="p-5 font-bold w-16 text-center">#</th>
                         <th class="p-5 font-bold">ข้อมูลนักเรียน</th>
                         <th class="p-5 font-bold text-center">บันทึกการเช็คชื่อ</th>
-                        <th class="p-5 font-bold text-center">ผลการประเมินล่าสุด (SDQ)</th>
+                        <th class="p-5 font-bold text-center border-l border-slate-100">SDQ (นักเรียนทำ)</th>
+                        <th class="p-5 font-bold text-center">SDQ (ครูทำ)</th>
+                        <th class="p-5 font-bold text-center">การจัดการ</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-50">`;
 
+        // Helper ฟังก์ชันสร้างป้ายอิโมจิ
+        const getBadge = (sdqData, party) => {
+            if(!sdqData) return `<span class="px-3 py-1 rounded-full text-[10px] font-bold border text-slate-400 bg-slate-50 border-slate-200 w-28 text-center inline-block">⚪ ค้างประเมิน</span>`;
+            let color = 'text-emerald-600 bg-emerald-50 border-emerald-100';
+            let emoji = '🟢';
+            if(sdqData.status === 'มีปัญหา') { color = 'text-red-600 bg-red-50 border-red-100'; emoji = '🔴'; }
+            else if(sdqData.status === 'เสี่ยง') { color = 'text-orange-600 bg-orange-50 border-orange-100'; emoji = '🟡'; }
+            return `<span class="px-3 py-1 flex items-center justify-center gap-1.5 rounded-full text-[10px] font-bold border w-28 mx-auto ${color}">${emoji} ${sdqData.status} (${sdqData.totalScore})</span>`;
+        };
+
         students.forEach((s, i) => {
-            const sdq = sdqMap[s.id];
-            let statusColor = 'text-slate-400 bg-slate-50 border-slate-100';
-            if(sdq) {
-                if(sdq.status === 'มีปัญหา') statusColor = 'text-red-600 bg-red-50 border-red-100';
-                else if(sdq.status === 'เสี่ยง') statusColor = 'text-orange-600 bg-orange-50 border-orange-100';
-                else statusColor = 'text-emerald-600 bg-emerald-50 border-emerald-100';
-            }
+            const sdq = sdqMap[s.id] || { student: null, teacher: null };
             
             html += `
             <tr class="hover:bg-slate-50/50 transition-colors group">
@@ -229,13 +272,16 @@
                         `).join('')}
                     </div>
                 </td>
-                <td class="p-5">
-                    <div class="flex flex-col items-center gap-2">
-                        <span class="px-3 py-1 rounded-full text-[10px] font-bold border ${statusColor}">${sdq ? `${sdq.status} (${sdq.totalScore})` : 'ยังไม่มีผล'}</span>
-                        <button onclick="openDeepData('${s.id}', '${s.name}')" class="bg-white border border-slate-200 text-slate-600 hover:bg-emerald-700 hover:text-white hover:border-emerald-700 text-[10px] px-4 py-2 rounded-xl font-bold w-full max-w-[140px] transition-all shadow-sm">
-                            วิเคราะห์/ประเมิน
-                        </button>
-                    </div>
+                <td class="p-5 text-center border-l border-slate-100">
+                    ${getBadge(sdq.student, 'เด็ก')}
+                </td>
+                <td class="p-5 text-center">
+                    ${getBadge(sdq.teacher, 'ครู')}
+                </td>
+                <td class="p-5 text-center">
+                    <button onclick="openDeepData('${s.id}', '${s.name}')" class="bg-white border border-slate-200 text-slate-600 hover:bg-emerald-700 hover:text-white hover:border-emerald-700 text-[10px] px-4 py-2 rounded-xl font-bold w-full max-w-[120px] transition-all shadow-sm">
+                        เจาะลึก/ประเมิน
+                    </button>
                 </td>
             </tr>`;
         });
@@ -303,7 +349,6 @@
             return;
         }
 
-        // วาดกราฟ
         const chartData = [...data].reverse();
         const labels = chartData.map(d => new Date(d.date).toLocaleDateString('th-TH', {day:'numeric', month:'short'}));
         const studentScores = chartData.map(d => d.evaluator === 'นักเรียนประเมินตนเอง' ? d.total : null);
@@ -323,23 +368,41 @@
             options: { maintainAspectRatio: false, responsive: true, plugins: { legend: { position: 'bottom' } } }
         });
 
-        // ตารางประวัติ
-        let html = `<table class="w-full border-collapse"><thead><tr class="bg-slate-50 text-slate-500 uppercase tracking-tighter"><th class="p-3 border">วันที่</th><th class="p-3 border">โดย</th><th class="p-3 border text-center">รวม</th><th class="p-3 border">อารมณ์</th><th class="p-3 border">พฤติกรรม</th><th class="p-3 border">สมาธิ</th><th class="p-3 border">เพื่อน</th><th class="p-3 border">สังคม(+)</th></tr></thead><tbody>`;
+        let html = `<table class="w-full border-collapse"><thead><tr class="bg-slate-50 text-slate-500 uppercase tracking-tighter"><th class="p-3 border">วันที่</th><th class="p-3 border">โดย</th><th class="p-3 border text-center">รวม</th><th class="p-3 border text-center">อารมณ์</th><th class="p-3 border text-center">เกเร</th><th class="p-3 border text-center">สมาธิ</th><th class="p-3 border text-center">เพื่อน</th><th class="p-3 border text-center">สังคม(+)</th></tr></thead><tbody>`;
+        
         data.forEach(d => {
             const isStudent = d.evaluator === 'นักเรียนประเมินตนเอง';
-            html += `<tr class="${isStudent ? 'bg-white' : 'bg-emerald-50'}"><td class="p-3 border">${new Date(d.date).toLocaleDateString('th-TH')}</td><td class="p-3 border font-bold">${isStudent ? '👦 นักเรียน' : '👨‍🏫 ครู'}</td><td class="p-3 border text-center font-bold ${d.total > 15 ? 'text-red-500' : 'text-emerald-700'}">${d.total}</td><td class="p-3 border text-center">${d.scores.emotional}</td><td class="p-3 border text-center">${d.scores.conduct}</td><td class="p-3 border text-center">${d.scores.hyper}</td><td class="p-3 border text-center">${d.scores.peer}</td><td class="p-3 border text-center text-blue-600 font-bold">${d.scores.prosocial}</td></tr>`;
+            const s = d.scores;
+            
+            // เรียกใช้อิโมจิตามด้านและผู้ประเมิน
+            const tEmoji = d.status === 'ปกติ' ? '🟢' : (d.status === 'เสี่ยง' ? '🟡' : '🔴');
+            const emoEmoji = getSdqEmoji('emotional', s.emotional, isStudent);
+            const conEmoji = getSdqEmoji('conduct', s.conduct, isStudent);
+            const hypEmoji = getSdqEmoji('hyper', s.hyper, isStudent);
+            const peerEmoji = getSdqEmoji('peer', s.peer, isStudent);
+            const proEmoji = getSdqEmoji('prosocial', s.prosocial, isStudent);
+
+            html += `
+            <tr class="${isStudent ? 'bg-white' : 'bg-emerald-50'}">
+                <td class="p-3 border whitespace-nowrap">${new Date(d.date).toLocaleDateString('th-TH')}</td>
+                <td class="p-3 border font-bold">${isStudent ? '👦 นักเรียน' : '👨‍🏫 ครู'}</td>
+                <td class="p-3 border text-center font-bold bg-slate-50/50">${tEmoji} ${d.total}</td>
+                <td class="p-3 border text-center">${emoEmoji} ${s.emotional}</td>
+                <td class="p-3 border text-center">${conEmoji} ${s.conduct}</td>
+                <td class="p-3 border text-center">${hypEmoji} ${s.hyper}</td>
+                <td class="p-3 border text-center">${peerEmoji} ${s.peer}</td>
+                <td class="p-3 border text-center font-bold text-blue-700">${proEmoji} ${s.prosocial}</td>
+            </tr>`;
         });
         html += `</tbody></table>`;
         document.getElementById('deep-history-table').innerHTML = html;
     }
 
-    // 🛡️ [PATCHED] ส่วนที่ได้รับการแก้ไขอุดช่องโหว่การประเมินของครู
     async function submitTeacherSDQ() {
         const form = document.getElementById('teacher-sdq-form');
         const formData = new FormData(form);
         const answers = [];
         
-        // 1. ดึงข้อมูลแบบ Index แน่นอน ป้องกันการส่งข้อมูลแหว่ง
         for(let i=0; i<25; i++) {
             const val = formData.get(`tq${i}`);
             if(val === null) return Swal.fire('ข้อมูลไม่ครบ', `กรุณาประเมินข้อที่ ${i+1} ให้ครบถ้วนครับ`, 'warning');
@@ -349,10 +412,8 @@
         const btn = document.getElementById('btn-submit-teacher-sdq');
         btn.disabled = true; btn.innerHTML = "กำลังบันทึก...";
 
-        // 2. ฟังก์ชันคิดคะแนนย้อนกลับ (Reverse Scoring: 0->2, 1->1, 2->0)
         const rev = (val) => (val === 0 ? 2 : (val === 2 ? 0 : 1));
 
-        // 3. แยกด้านและจัดการ Reverse Scoring สำหรับครูประเมิน
         const emotional = answers[2] + answers[7] + answers[12] + answers[15] + answers[23];
         const conduct = answers[4] + rev(answers[6]) + answers[11] + answers[17] + answers[21];
         const hyper = answers[1] + answers[9] + answers[14] + rev(answers[20]) + rev(answers[24]);
@@ -361,10 +422,9 @@
 
         const totalScore = emotional + conduct + hyper + peer;
         
-        // 4. เกณฑ์การประเมินของครู (Thai Norm) เข้มงวดกว่านักเรียน
-        let status = "ปกติ"; // 0-11
-        if (totalScore >= 16) status = "มีปัญหา"; // 16-40
-        else if (totalScore >= 12) status = "เสี่ยง"; // 12-15
+        let status = "ปกติ"; 
+        if (totalScore >= 16) status = "มีปัญหา"; 
+        else if (totalScore >= 12) status = "เสี่ยง"; 
 
         const payloadData = {
             studentId: currentViewingStudent.id,

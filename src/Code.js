@@ -193,7 +193,7 @@ function fetchIndividualDeepSDQ(studentId) {
   return { success: true, data: results };
 }
 
-/** 7. ดึงภาพรวม SDQ (ค่าล่าสุดของทุกคนในห้อง) สำหรับครู */
+/** 7. ดึงภาพรวม SDQ (ค่าล่าสุดของทุกคนในห้อง) สำหรับครู (แยกเด็ก/ครู) */
 function fetchSDQOverview(roomString) {
   const studentResult = fetchStudentsByRoom(roomString);
   if (!studentResult.success) return studentResult;
@@ -204,12 +204,16 @@ function fetchSDQOverview(roomString) {
 
   const sdqData = sdqSheet.getDataRange().getValues();
   
-  // ใช้ Map เพื่อเก็บเฉพาะข้อมูล "ล่าสุด" (บรรทัดล่างสุดของแต่ละคน)
+  // ใช้ Map เพื่อเก็บค่า "แยกตามผู้ประเมิน" (นักเรียนทำ vs ครูทำ) เพื่อรองรับการประเมินรอบด้าน
   const latestMap = new Map();
   sdqData.slice(1).forEach(r => {
     const id = r[2].toString();
     if (studentIds.includes(id)) {
-      latestMap.set(id, {
+      // สร้าง Key แยกกัน เพื่อไม่ให้ข้อมูลนักเรียนกับครูทับกัน (เช่น 663001_student และ 663001_teacher)
+      const roleKey = r[1] === 'นักเรียนประเมินตนเอง' ? 'student' : 'teacher';
+      const key = id + "_" + roleKey;
+      
+      latestMap.set(key, {
         id: id, name: r[3], totalScore: r[4], status: r[5], evaluator: r[1], date: r[0]
       });
     }

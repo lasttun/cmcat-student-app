@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบครูที่ปรึกษา</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body class="bg-slate-50">
+
+    <nav class="bg-emerald-700 text-white p-4 flex justify-between items-center">
+        <div class="font-bold">ระบบครูที่ปรึกษา | <span id="teacher-name-display"></span></div>
+        <button onclick="logout()" class="text-sm bg-red-600 px-3 py-1 rounded">ออกจากระบบ</button>
+    </nav>
+
+    <div class="p-6">
+        <h2 class="text-xl mb-4 font-bold">เลือกห้องเรียน</h2>
+        <select id="room-select" onchange="loadStudents()" class="border p-2 rounded w-full max-w-sm"></select>
+        
+        <div id="students-container" class="mt-6"></div>
+    </div>
+
+    <script>
+        // 1. ตรวจสอบสิทธิ์ก่อนว่าใช่ครูไหม ถ้าไม่ใช่ให้เด้งกลับหน้าล็อกอิน
+        const currentRole = localStorage.getItem('currentRole');
+        const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+
+        if(currentRole !== 'teacher' || !currentUser) {
+            window.location.href = "index.html"; // เตะกลับไปหน้าแรก
+        }
+
+        document.getElementById('teacher-name-display').innerText = currentUser.name;
+
+        // 2. ตั้งค่า API URL
+        const API_URL = "https://script.google.com/macros/s/ไอดีของคุณ/exec";
+
+        // ==========================================
+        // 🔄 ฟังก์ชันหลัก: เปลี่ยน google.script.run เป็น fetch
+        // ==========================================
+
+        // ตัวอย่างการดึงข้อมูลห้องเรียน (แทน google.script.run.getRoomData)
+        async function fetchRooms() {
+            try {
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: JSON.stringify({ action: 'getRoomData' })
+                });
+                const result = await res.json();
+                
+                if(result.success) {
+                    const select = document.getElementById('room-select');
+                    select.innerHTML = '<option value="">-- เลือกห้องเรียน --</option>' + 
+                                       result.data.map(room => `<option value="${room}">${room}</option>`).join('');
+                }
+            } catch(e) {
+                console.error('Error fetching rooms');
+            }
+        }
+
+        // ตัวอย่างการดึงรายชื่อนักเรียน
+        async function loadStudents() {
+            const roomString = document.getElementById('room-select').value;
+            if(!roomString) return;
+
+            const res = await fetch(API_URL, {
+                method: 'POST',
+                headers: { "Content-Type": "text/plain;charset=utf-8" },
+                body: JSON.stringify({ action: 'getStudentsInRoom', roomString: roomString })
+            });
+            const result = await res.json();
+            
+            if(result.success) {
+                console.log("รายชื่อนักเรียน: ", result.data);
+                // นำผลลัพธ์ไปเรนเดอร์ตารางรายชื่อได้เลย
+            }
+        }
+
+        // ตัวอย่างฟังก์ชันบันทึกการเช็คชื่อ (แทนการเรียก saveAttendance)
+        async function submitAttendance(recordsArray) {
+            const res = await fetch(API_URL, {
+                method: 'POST',
+                headers: { "Content-Type": "text/plain;charset=utf-8" },
+                body: JSON.stringify({ 
+                    action: 'saveAttendance', 
+                    records: recordsArray,
+                    teacherName: currentUser.name // 🟢 ดึงชื่อครูจาก localStorage ส่งไปให้ GAS
+                })
+            });
+            const result = await res.json();
+            if(result.success) {
+                Swal.fire('สำเร็จ', `บันทึกข้อมูล ${result.count} รายการเรียบร้อย`, 'success');
+            }
+        }
+
+        function logout() {
+            localStorage.clear();
+            window.location.href = "index.html";
+        }
+
+        // เรียกดึงข้อมูลห้องตอนเปิดหน้า
+        fetchRooms();
+    </script>
+</body>
+</html>

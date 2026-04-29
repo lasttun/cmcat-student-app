@@ -51,8 +51,9 @@
 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
-        // ⚠️ อย่าลืมเอา URL จาก GAS มาใส่ตรงนี้นะครับ (ต้องลงท้ายด้วย /exec)
+        // ⚠️ API_URL ของคุณ (ถูกต้องแล้ว)
         const API_URL = "https://script.google.com/macros/s/AKfycbztsC4Wng1zDAVyNmHka6N00m1os6aHGqcZV2LW1l1NBrlATIWPLzwdORzU4lP_P6_p/exec"; 
 
         function showPage(pageId) {
@@ -60,6 +61,9 @@
             document.getElementById(pageId).classList.remove('hidden');
         }
 
+        // ==========================================
+        // 🔐 ระบบเข้าสู่ระบบ (รองรับทั้งนักเรียนและครู)
+        // ==========================================
         async function handleLogin() {
             const studentId = document.getElementById('login-id').value;
             const password = document.getElementById('login-pass').value;
@@ -70,16 +74,48 @@
             try {
                 const res = await fetch(API_URL, {
                     method: 'POST',
-                    headers: { "Content-Type": "text/plain;charset=utf-8" }, // 🟢 จุดที่แก้: เพิ่ม Header หลอก Google
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
                     body: JSON.stringify({ action: 'login', studentId, password })
                 });
                 const data = await res.json();
                 
                 if(data.success) {
-                    document.getElementById('user-display').innerText = `สวัสดี, ${data.user ? data.user.name : data.studentData.name}`;
-                    document.getElementById('level-display').innerText = `ระดับชั้น: ${data.user ? data.user.level : data.studentData.level}`;
-                    showPage('dash-page');
-                    loadHistory(studentId);
+                    // 💾 บันทึกข้อมูลผู้ใช้ลงในเบราว์เซอร์ เพื่อเอาไปใช้หน้าอื่นต่อได้
+                    localStorage.setItem('currentUser', JSON.stringify(data.user));
+                    localStorage.setItem('currentRole', data.role);
+
+                    // 🎓 กรณี: นักเรียนล็อกอิน
+                    if (data.role === 'student') {
+                        document.getElementById('user-display').innerText = `สวัสดี, ${data.user.name}`;
+                        document.getElementById('level-display').innerText = `ระดับชั้น: ${data.user.level}`;
+                        showPage('dash-page');
+                        loadHistory(studentId);
+                    } 
+                    // 👨‍🏫 กรณี: คุณครูล็อกอิน
+                    else if (data.role === 'teacher') {
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'สวัสดีครับคุณครู',
+                            text: `เข้าสู่ระบบในชื่อ: ${data.user.name}`,
+                            timer: 2000,
+                            showConfirmButton: false
+                        }).then(() => {
+                            // 🚀 [ทางเลือก] ถ้าคุณมีลิงก์ระบบเช็คชื่อครูอยู่แล้ว (เช่น ats.cmcat.ac.th) 
+                            // ให้เปิดคอมเมนต์บรรทัดข้างล่างแล้วใส่ URL ลงไป ระบบจะเด้งไปหน้าครูอัตโนมัติครับ
+                            window.location.href = "teacher.html";
+                            
+                            // ชั่วคราว: แสดงหน้า Dashboard แบบของครู
+                            document.getElementById('user-display').innerText = `สวัสดีคุณครู, ${data.user.name}`;
+                            document.getElementById('level-display').innerText = `ตำแหน่ง: ${data.user.position}`;
+                            showPage('dash-page');
+                            document.getElementById('history-list').innerHTML = `
+                                <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 p-4 rounded-xl text-center">
+                                    <p class="font-bold">เข้าสู่โหมดครูที่ปรึกษา</p>
+                                    <p class="text-sm mt-2">เมนูการเช็คชื่อนักเรียนกำลังจะถูกนำมารวมที่นี่ในอนาคต</p>
+                                </div>
+                            `;
+                        });
+                    }
                 } else {
                     Swal.fire('ผิดพลาด', data.message, 'error');
                 }
@@ -90,6 +126,9 @@
             }
         }
 
+        // ==========================================
+        // 📝 ระบบสมัครสมาชิก (สำหรับนักเรียนเท่านั้น)
+        // ==========================================
         async function handleRegister() {
             const payload = {
                 action: 'register',
@@ -105,7 +144,7 @@
             try {
                 const res = await fetch(API_URL, { 
                     method: 'POST', 
-                    headers: { "Content-Type": "text/plain;charset=utf-8" }, // 🟢 จุดที่แก้: เพิ่ม Header
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
                     body: JSON.stringify(payload) 
                 });
                 const data = await res.json();
@@ -127,11 +166,14 @@
             }
         }
 
+        // ==========================================
+        // 📊 ระบบดึงประวัติการเช็คชื่อ (สำหรับนักเรียน)
+        // ==========================================
         async function loadHistory(studentId) {
             try {
                 const res = await fetch(API_URL, { 
                     method: 'POST', 
-                    headers: { "Content-Type": "text/plain;charset=utf-8" }, // 🟢 จุดที่แก้: เพิ่ม Header
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
                     body: JSON.stringify({ action: 'getHistory', studentId }) 
                 });
                 const result = await res.json();
@@ -155,6 +197,9 @@
             }
         }
 
+        // ==========================================
+        // 🔄 เอฟเฟกต์ปุ่มโหลด
+        // ==========================================
         function toggleBtn(id, loading) {
             const btn = document.getElementById(id);
             btn.disabled = loading;

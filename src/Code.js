@@ -4,7 +4,7 @@
 const SHEET_ID = '19wLK2Pxn0ZGE4hy-DykS4n6ohN1Cq7ew4JopnUp5y8U';
 
 // ==========================================
-// 👨‍🏫 ส่วนที่ 1: ระบบหน้าบ้านของครูที่ปรึกษา (รันด้วย google.script.run)
+// 👨‍🏫 ส่วนที่ 1: ระบบหน้าบ้านของครูที่ปรึกษา (รันด้วย google.script.run - เก็บไว้เผื่อฉุกเฉิน)
 // ==========================================
 function doGet() {
   return HtmlService.createTemplateFromFile('index')
@@ -18,6 +18,9 @@ function include(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
+// ==========================================
+// 🛠️ ส่วนฟังก์ชันจัดการข้อมูล (ถูกเรียกใช้จาก API)
+// ==========================================
 function getRoomData() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName('Students');
@@ -44,17 +47,21 @@ function getStudentsInRoom(roomString) {
              .map(row => ({ id: row[0].toString(), name: row[2] }));
 }
 
-function saveSDQData(payload) {
+// 🟢 อัปเดต: เปลี่ยนจากการดึง Email อัตโนมัติ เป็นรับค่าชื่อครู (teacherName) จากระบบ Login
+function saveSDQData(payload, teacherName) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName('SDQ_Results') || ss.insertSheet('SDQ_Results');
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(['วันที่บันทึก', 'ครูผู้บันทึก', 'รหัสนักเรียน', 'ชื่อ-นามสกุล', 'คะแนนรวม', 'สถานะ', 'ด้านอารมณ์', 'ด้านความประพฤติ', 'ด้านไม่อยู่นิ่ง', 'ด้านเพื่อน', 'ด้านสังคม']);
   }
-  sheet.appendRow([new Date(), Session.getActiveUser().getEmail(), payload.studentId, payload.studentName, payload.totalScore, payload.status, payload.scores.emotional, payload.scores.conduct, payload.scores.hyper, payload.scores.peer, payload.scores.prosocial]);
+  
+  // ใช้ teacherName แทน Session.getActiveUser().getEmail()
+  sheet.appendRow([new Date(), teacherName, payload.studentId, payload.studentName, payload.totalScore, payload.status, payload.scores.emotional, payload.scores.conduct, payload.scores.hyper, payload.scores.peer, payload.scores.prosocial]);
   return { success: true };
 }
 
-function saveAttendance(records) {
+// 🟢 อัปเดต: เปลี่ยนจากการดึง Email อัตโนมัติ เป็นรับค่าชื่อครู (teacherName) จากระบบ Login
+function saveAttendance(records, teacherName) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName('Attendance_Logs') || ss.insertSheet('Attendance_Logs');
   if (sheet.getLastRow() === 0) {
@@ -62,14 +69,15 @@ function saveAttendance(records) {
   }
   const now = new Date();
   const today = now.toLocaleDateString('th-TH');
-  const email = Session.getActiveUser().getEmail();
-  const rows = records.map(r => [now, today, email, r.id, r.name, r.status]);
+  
+  // ใช้ teacherName แทน Session.getActiveUser().getEmail()
+  const rows = records.map(r => [now, today, teacherName, r.id, r.name, r.status]);
   sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, 6).setValues(rows);
   return { success: true, count: rows.length };
 }
 
 // ==========================================
-// 🎓 ส่วนที่ 2: Backend API สำหรับนักเรียน (ใช้ติดต่อกับ Cloudflare Pages ผ่าน fetch)
+// 🎓 ส่วนที่ 2: Backend API (ใช้ติดต่อกับ Cloudflare Pages ผ่าน fetch)
 // ==========================================
 function doPost(e) {
   const headers = {
@@ -82,12 +90,23 @@ function doPost(e) {
     const action = requestData.action; 
     let result = {};
 
+    // 📌 API สำหรับนักเรียน
     if (action === 'register') {
       result = registerStudent(requestData);
     } else if (action === 'login') {
       result = loginStudent(requestData);
     } else if (action === 'getHistory') {
       result = getStudentHistory(requestData);
+    } 
+    // 📌 API สำหรับครูที่ปรึกษา (เพิ่มเข้ามาใหม่)
+    else if (action === 'getRoomData') {
+      result = { success: true, data: getRoomData() };
+    } else if (action === 'getStudentsInRoom') {
+      result = { success: true, data: getStudentsInRoom(requestData.roomString) };
+    } else if (action === 'saveAttendance') {
+      result = saveAttendance(requestData.records, requestData.teacherName); 
+    } else if (action === 'saveSDQData') {
+      result = saveSDQData(requestData.payload, requestData.teacherName); 
     } else {
       result = { success: false, message: 'ไม่พบคำสั่ง (action) ที่ระบุ' };
     }
@@ -130,28 +149,45 @@ function registerStudent(data) {
 }
 
 function loginStudent(data) {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('Users');
-  if(!sheet) return { success: false, message: 'ยังไม่มีฐานข้อมูลสมาชิก' };
-  const dbData = sheet.getDataRange().getValues();
+  const ss = SpreadsheetApp.openById(SHEET_ID);
   
-  for (let i = 1; i < dbData.length; i++) {
-    if (dbData[i][0].toString() === data.studentId.toString()) {
-      if (dbData[i][3].toString() === data.password.toString()) {
+  // 1. ค้นหาในฐานข้อมูลนักเรียนก่อน
+  const studentSheet = ss.getSheetByName('Users');
+  if (studentSheet) {
+    const studentData = studentSheet.getDataRange().getValues();
+    for (let i = 1; i < studentData.length; i++) {
+      if (studentData[i][0].toString() === data.studentId.toString() && studentData[i][3].toString() === data.password.toString()) {
         return { 
           success: true, 
-          message: 'เข้าสู่ระบบสำเร็จ!',
-          studentData: { id: dbData[i][0], name: dbData[i][1], level: dbData[i][2] }
+          role: 'student', 
+          message: 'เข้าสู่ระบบนักเรียนสำเร็จ!',
+          user: { id: studentData[i][0], name: studentData[i][1], level: studentData[i][2] }
         };
-      } else {
-        return { success: false, message: 'รหัสผ่านไม่ถูกต้อง' };
       }
     }
   }
-  return { success: false, message: 'ไม่พบรหัสนักเรียนนี้ กรุณาสมัครสมาชิก' };
+
+  // 2. ถ้าไม่ใช่นักเรียน ให้ค้นหาในฐานข้อมูลครู
+  const teacherSheet = ss.getSheetByName('Teachers');
+  if (teacherSheet) {
+    const teacherData = teacherSheet.getDataRange().getValues();
+    for (let i = 1; i < teacherData.length; i++) {
+      if (teacherData[i][0].toString() === data.studentId.toString() && teacherData[i][3].toString() === data.password.toString()) {
+        return { 
+          success: true, 
+          role: 'teacher', 
+          message: 'เข้าสู่ระบบครูที่ปรึกษาสำเร็จ!',
+          user: { id: teacherData[i][0], name: teacherData[i][1], position: teacherData[i][2] }
+        };
+      }
+    }
+  }
+
+  return { success: false, message: 'รหัสผู้ใช้งาน หรือรหัสผ่านไม่ถูกต้อง' };
 }
 
 function getStudentHistory(data) {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('Attendance_Logs'); // เปลี่ยนมาดึงจาก Logs การเช็คชื่อของครู
+  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('Attendance_Logs'); 
   if(!sheet) return { success: true, data: [] };
   
   const dbData = sheet.getDataRange().getDisplayValues(); 

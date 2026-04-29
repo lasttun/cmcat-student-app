@@ -109,64 +109,56 @@ function getSDQDashboard(roomString) {
 }
 
 // ==========================================
-// 🔐 ส่วนระบบสมาชิก (Login / Register)
+// 🔐 ส่วนระบบสมาชิก (Login เท่านั้น ไม่มี Register แล้ว)
 // ==========================================
-function registerStudent(data) {
-  const lock = LockService.getScriptLock();
-  if (!lock.tryLock(15000)) return { success: false, message: 'ระบบคนใช้งานเยอะ กรุณาลองใหม่' };
-  
-  try {
-    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('Users') || SpreadsheetApp.openById(SHEET_ID).insertSheet('Users');
-    const dbData = sheet.getDataRange().getValues();
-    
-    for (let i = 1; i < dbData.length; i++) {
-      if (dbData[i][0].toString() === data.studentId.toString()) {
-        return { success: false, message: 'รหัสนักเรียนนี้ ถูกลงทะเบียนไปแล้ว' };
-      }
-    }
-    
-    sheet.appendRow([
-      "'" + data.studentId, 
-      data.name, 
-      data.level, 
-      "'" + data.password, 
-      new Date()
-    ]);
-    
-    return { success: true, message: 'สมัครสมาชิกสำเร็จ! กรุณาเข้าสู่ระบบ' };
-  } finally { 
-    lock.releaseLock(); 
-  }
-}
-
 function loginStudent(data) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   
-  const studentSheet = ss.getSheetByName('Users');
+  // 1. ค้นหาในฐานข้อมูลนักเรียน (ชีต: Students)
+  const studentSheet = ss.getSheetByName('Students');
   if (studentSheet) {
     const studentData = studentSheet.getDataRange().getValues();
     for (let i = 1; i < studentData.length; i++) {
-      if (studentData[i][0].toString() === data.studentId.toString() && studentData[i][3].toString() === data.password.toString()) {
+      // Index 0: รหัสนักเรียน | Index 1: เลขบัตรประชาชน
+      if (studentData[i][0].toString() === data.studentId.toString() && studentData[i][1].toString() === data.password.toString()) {
         return { 
           success: true, 
           role: 'student', 
           message: 'เข้าสู่ระบบนักเรียนสำเร็จ!',
-          user: { id: studentData[i][0], name: studentData[i][1], level: studentData[i][2] }
+          user: { 
+            id: studentData[i][0], 
+            name: studentData[i][2], // ชื่อ-สกุล
+            level: `${studentData[i][3]} ${studentData[i][4]}/${studentData[i][5]}` // รวมระดับชั้น เช่น ปวช. 1/5
+          }
         };
       }
     }
   }
 
+// ... (โค้ดส่วนค้นหานักเรียนเหมือนเดิม) ...
+
+  // 2. ถ้าไม่ใช่นักเรียน ให้ค้นหาในฐานข้อมูลครู (ชีต: Teachers)
   const teacherSheet = ss.getSheetByName('Teachers');
   if (teacherSheet) {
     const teacherData = teacherSheet.getDataRange().getValues();
     for (let i = 1; i < teacherData.length; i++) {
+      // Index 0: เบอร์โทร | Index 3: รหัสผ่าน
       if (teacherData[i][0].toString() === data.studentId.toString() && teacherData[i][3].toString() === data.password.toString()) {
+        
+        // 🟢 อ่านค่าจากคอลัมน์ F (Index 5) และแยกด้วยลูกน้ำ (เผื่อมีหลายห้อง)
+        let rawRooms = teacherData[i][5] ? teacherData[i][5].toString() : "";
+        let assignedRooms = rawRooms.split(',').map(r => r.trim()).filter(r => r !== "");
+
         return { 
           success: true, 
           role: 'teacher', 
           message: 'เข้าสู่ระบบครูที่ปรึกษาสำเร็จ!',
-          user: { id: teacherData[i][0], name: teacherData[i][1], position: teacherData[i][2] }
+          user: { 
+            id: teacherData[i][0], 
+            name: teacherData[i][1], 
+            position: teacherData[i][2],
+            rooms: assignedRooms // 🟢 ส่งรายชื่อห้องกลับไปให้หน้าเว็บด้วย
+          }
         };
       }
     }
@@ -176,7 +168,7 @@ function loginStudent(data) {
 }
 
 // ==========================================
-// 🚀 ส่วนหัวใจหลัก: ศูนย์กลางรับ-ส่ง API (มี doPost ตัวเดียว)
+// 🚀 ส่วนหัวใจหลัก: ศูนย์กลางรับ-ส่ง API
 // ==========================================
 function doPost(e) {
   const res = (data) => ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
@@ -186,7 +178,6 @@ function doPost(e) {
 
     // เลือกทำงานตาม Action ที่ส่งมาจากหน้าเว็บ
     if (action === 'login') return res(loginStudent(requestData));
-    if (action === 'register') return res(registerStudent(requestData));
     if (action === 'getRoomData') return res({ success: true, data: getRoomData() });
     if (action === 'getStudentsInRoom') return res({ success: true, data: getStudentsInRoom(requestData.roomString) });
     if (action === 'saveAttendance') return res(saveAttendance(requestData.records, requestData.teacherName));

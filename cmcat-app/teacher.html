@@ -53,31 +53,37 @@
         // ตัวแปรเก็บรายชื่อนักเรียนปัจจุบัน เพื่อเตรียมส่งบันทึก
         let currentStudentsData = [];
 
-        // ==========================================
+// ==========================================
         // 3. ฟังก์ชันดึงข้อมูล (Fetch Data)
         // ==========================================
         
-        // ดึงรายการห้อง
-        async function fetchRooms() {
-            try {
-                const res = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: { "Content-Type": "text/plain;charset=utf-8" },
-                    body: JSON.stringify({ action: 'getRoomData' })
-                });
-                const result = await res.json();
-                
-                if(result.success) {
-                    const select = document.getElementById('room-select');
-                    select.innerHTML = '<option value="">-- เลือกห้องเรียน --</option>' + 
-                                       result.data.map(room => `<option value="${room}">${room}</option>`).join('');
-                }
-            } catch(e) {
-                Swal.fire('Error', 'ไม่สามารถเชื่อมต่อฐานข้อมูลได้', 'error');
+        // 🟢 ดึงรายการห้องจากข้อมูลครูที่ล็อกอิน (ไม่ต้องยิง API แล้ว เร็วขึ้น 100%)
+        function fetchRooms() {
+            const select = document.getElementById('room-select');
+            const container = document.getElementById('students-container');
+            
+            // ดึงรายชื่อห้องจาก currentUser ที่เราบันทึกไว้ตอนล็อกอิน (ต้องเพิ่มใน Sheet Teachers คอลัมน์ F)
+            const myRooms = currentUser.rooms || []; 
+            
+            if(myRooms.length === 0) {
+                select.innerHTML = '<option value="">-- คุณยังไม่มีห้องที่ปรึกษา --</option>';
+                container.innerHTML = '<div class="text-center text-slate-400 py-10 border-2 border-dashed border-slate-200 rounded-2xl bg-white">กรุณาติดต่อแอดมินเพื่อเพิ่ม "ห้องที่ปรึกษา" ให้ท่านในระบบฐานข้อมูล</div>';
+                select.disabled = true; // ล็อคปุ่มกด
+                return;
+            }
+
+            // สร้างตัวเลือกเฉพาะห้องของครูคนนี้
+            select.innerHTML = '<option value="">-- เลือกห้องเรียน --</option>' + 
+                               myRooms.map(room => `<option value="${room}">${room}</option>`).join('');
+            
+            // 🌟 ความเจ๋ง: ถ้าครูดูแลแค่ "ห้องเดียว" ให้เลือกระบบห้องให้เลย แล้วโหลดรายชื่อเด็กอัตโนมัติ!
+            if(myRooms.length === 1) {
+                select.value = myRooms[0];
+                loadStudents(); // เรียกฟังก์ชันโหลดเด็กเลย ไม่ต้องรอครูกด
             }
         }
 
-        // ดึงรายชื่อนักเรียน + ผล SDQ
+        // ดึงรายชื่อนักเรียน + ผล SDQ (เหมือนเดิม)
         async function loadStudents() {
             const roomString = document.getElementById('room-select').value;
             const container = document.getElementById('students-container');

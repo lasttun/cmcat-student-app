@@ -9,13 +9,72 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;600&display=swap" rel="stylesheet">
     <style> 
+        /* นำเข้าฟอนต์ TH Sarabun New (สำหรับพิมพ์) */
+        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap');
+        
         body { font-family: 'Prompt', sans-serif; } 
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #10b981; border-radius: 10px; }
+        
+        /* =========================================
+           🖨️ PRINT MEDIA - เอกสารราชการ (TH Sarabun New)
+           ========================================= */
+        @media print {
+            @page { size: A4 landscape; margin: 12mm 15mm; }
+            
+            /* ซ่อนทุกสิ่งบนหน้าจอเว็บ ยกเว้นกล่องสำหรับพิมพ์ */
+            body > *:not(#print-master-container) { display: none !important; }
+            
+            #print-master-container { 
+                display: block !important; 
+                background: white !important; 
+                width: 100% !important; 
+            }
+
+            /* บังคับฟอนต์ราชการและสีดำสนิท 100% */
+            * {
+                font-family: 'TH Sarabun New', 'Sarabun', sans-serif !important; 
+                color: #000000 !important; 
+            }
+
+            /* ล้างคุณสมบัติของ Tailwind ที่ขัดขวางการจัดหน้ากระดาษ */
+            .sticky { position: static !important; box-shadow: none !important; }
+            div, table, tr, th, td, p, h2, h3, span { background-color: transparent !important; }
+
+            /* โครงสร้างตารางราชการ */
+            table { width: 100% !important; border-collapse: collapse !important; }
+            th, td {
+                border: 1px solid #000000 !important;
+                padding: 4px 6px !important;
+                font-size: 14pt !important; /* ขนาดฟอนต์ตาราง */
+                text-align: center !important; /* จัดกึ่งกลางเป็นค่าเริ่มต้น */
+                vertical-align: middle !important;
+                white-space: nowrap !important;
+            }
+            
+            /* บังคับคอลัมน์ "ชื่อ-สกุล" (คอลัมน์ที่ 3) ให้ชิดซ้ายเท่านั้น */
+            td.name-col { text-align: left !important; padding-left: 10px !important; }
+            th.name-col { text-align: center !important; }
+            
+            th { font-weight: bold !important; }
+
+            /* การแบ่งหน้ากระดาษ */
+            .page-chunk { 
+                page-break-after: always !important; 
+                width: 100%; 
+                padding-top: 10px; 
+            }
+            .page-chunk:last-child { 
+                page-break-after: auto !important; 
+            }
+        }
     </style>
 </head>
 <body class="bg-slate-100 min-h-screen pb-10 relative">
+
+    <!-- 🖨️ กล่องซ่อนสำหรับรอรับการพิมพ์ PDF โดยเฉพาะ -->
+    <div id="print-master-container" class="hidden"></div>
 
     <nav class="bg-emerald-800 text-white p-3 md:p-4 shadow-lg flex justify-between items-center sticky top-0 z-40">
         <div class="flex items-center gap-2 md:gap-3 min-w-0">
@@ -52,6 +111,7 @@
         </div>
     </div>
 
+    <!-- Modals (SDQ & Reports) -->
     <div id="deep-data-modal" class="hidden fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-2 md:p-4">
         <div class="bg-white rounded-[2.5rem] w-full max-w-6xl max-h-[95vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
             <div class="p-6 md:px-10 border-b border-slate-100 flex justify-between items-center bg-emerald-50/50">
@@ -61,47 +121,27 @@
                 </div>
                 <button onclick="closeDeepData()" class="bg-white text-slate-400 hover:text-red-500 p-2 rounded-full shadow-sm hover:shadow transition-all font-bold text-xl">&times;</button>
             </div>
-            
             <div class="p-4 md:p-8 overflow-y-auto flex-1 custom-scrollbar">
                 <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
                     <div class="xl:col-span-2 space-y-6">
                         <div class="bg-white border border-slate-100 p-6 rounded-3xl shadow-sm">
-                            <h3 class="font-bold text-slate-700 mb-4 flex items-center gap-2">
-                                <span class="w-2 h-6 bg-blue-500 rounded-full"></span>
-                                กราฟแนวโน้มพฤติกรรม (Timeline)
-                            </h3>
-                            <div class="relative h-[300px]">
-                                <canvas id="sdqTimelineChart"></canvas>
-                            </div>
+                            <h3 class="font-bold text-slate-700 mb-4 flex items-center gap-2"><span class="w-2 h-6 bg-blue-500 rounded-full"></span>กราฟแนวโน้มพฤติกรรม (Timeline)</h3>
+                            <div class="relative h-[300px]"><canvas id="sdqTimelineChart"></canvas></div>
                         </div>
-
                         <div class="bg-white border border-slate-100 p-6 rounded-3xl shadow-sm">
-                            <h3 class="font-bold text-slate-700 mb-4 flex items-center gap-2">
-                                <span class="w-2 h-6 bg-emerald-500 rounded-full"></span>
-                                ประวัติการประเมินรายด้านย้อนหลัง
-                            </h3>
-                            <div class="flex gap-4 mb-2 text-[10px] text-slate-500 justify-end">
-                                <span class="flex items-center gap-1">🟢 ปกติ</span>
-                                <span class="flex items-center gap-1">🟡 เสี่ยง</span>
-                                <span class="flex items-center gap-1">🔴 มีปัญหา</span>
-                            </div>
-                            <div id="deep-history-table" class="overflow-x-auto text-xs">
-                                </div>
+                            <h3 class="font-bold text-slate-700 mb-4 flex items-center gap-2"><span class="w-2 h-6 bg-emerald-500 rounded-full"></span>ประวัติการประเมินรายด้านย้อนหลัง</h3>
+                            <div class="flex gap-4 mb-2 text-[10px] text-slate-500 justify-end"><span class="flex items-center gap-1">🟢 ปกติ</span><span class="flex items-center gap-1">🟡 เสี่ยง</span><span class="flex items-center gap-1">🔴 มีปัญหา</span></div>
+                            <div id="deep-history-table" class="overflow-x-auto text-xs"></div>
                         </div>
                     </div>
-
                     <div class="bg-slate-50 border border-slate-200 p-6 rounded-[2rem] h-fit sticky top-0">
                         <div class="mb-4">
                             <h3 class="font-bold text-emerald-800 text-lg">ประเมินนักเรียนใหม่</h3>
                             <p class="text-[10px] text-slate-500 italic leading-relaxed">ประเมินเพื่ออัปเดตสถานะปัจจุบันของนักเรียนในเทอมนี้</p>
                         </div>
-                        
-                        <form id="teacher-sdq-form" class="space-y-4 max-h-[40vh] overflow-y-auto pr-3 custom-scrollbar">
-                            </form>
-                        
+                        <form id="teacher-sdq-form" class="space-y-4 max-h-[40vh] overflow-y-auto pr-3 custom-scrollbar"></form>
                         <div class="mt-6">
                             <button onclick="submitTeacherSDQ()" id="btn-submit-teacher-sdq" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white p-4 rounded-2xl font-bold shadow-lg shadow-emerald-200 transition-all flex items-center justify-center gap-2">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                                 บันทึกผลประเมินครู
                             </button>
                         </div>
@@ -110,24 +150,30 @@
             </div>
         </div>
     </div>
+
     <div id="att-report-modal" class="hidden fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-2 md:p-4">
         <div class="bg-white rounded-[2.5rem] w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
-            <div class="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center bg-blue-50/50 gap-4">
+            <div class="p-6 border-b border-slate-100 flex flex-col xl:flex-row justify-between items-start xl:items-center bg-blue-50/50 gap-4 no-print-modal-header">
                 <div>
-                    <h2 class="text-2xl font-bold text-slate-800">📊 สรุปสถิติการปฏิบัติกิจกรรมหน้าเสาธง</h2>
-                    <p class="text-blue-700 font-medium text-sm mt-1">คำนวณร้อยละ และเกณฑ์ประเมิน (เกณฑ์ผ่าน 60%)</p>
+                    <h2 class="text-2xl font-bold text-slate-800">📊 ระบบรายงานการเข้าแถว</h2>
+                    <p class="text-blue-700 font-medium text-sm mt-1">ประมวลผลการเข้าแถวหน้าเสาธง (เกณฑ์ผ่าน 60%)</p>
                 </div>
-                <div class="flex items-center gap-3 w-full md:w-auto">
-                    <select id="report-month-select" onchange="renderAttendanceReportTable()" class="border border-blue-200 p-2 rounded-xl text-sm font-bold text-blue-800 bg-white outline-none w-full md:w-auto hidden">
-                        <option value="all">รวมทุกเดือน</option>
+                <div class="flex flex-wrap items-center gap-2 md:gap-3 w-full xl:w-auto">
+                    <button onclick="exportToPDF()" id="btn-export-pdf" class="hidden bg-slate-800 text-white hover:bg-slate-900 px-4 py-2 rounded-xl shadow-sm transition-all font-bold text-xs md:text-sm flex items-center gap-2 border border-slate-700">
+                        🖨️ <span class="hidden md:inline">พิมพ์ / Save PDF (A4)</span>
+                    </button>
+                    <select id="report-type-select" onchange="renderAttendanceReportTable()" class="border border-blue-200 p-2 rounded-xl text-xs md:text-sm font-bold text-blue-800 bg-white outline-none flex-1 md:w-auto hidden">
+                        <option value="term_summary">1. สรุปภาพรวม (ตลอดเทอม)</option>
+                        <option value="month_summary">2. สรุปภาพรวม (ประจำเดือน)</option>
+                        <option value="month_daily">3. รายละเอียดรายวัน (ประจำเดือน)</option>
                     </select>
-                    <button onclick="document.getElementById('att-report-modal').classList.add('hidden')" class="bg-white text-slate-400 hover:text-red-500 p-2 rounded-full shadow-sm hover:shadow transition-all font-bold text-xl px-4 py-1">&times; ปิด</button>
+                    <select id="report-month-select" onchange="renderAttendanceReportTable()" class="border border-blue-200 p-2 rounded-xl text-xs md:text-sm font-bold text-emerald-800 bg-emerald-50 outline-none flex-1 md:w-auto hidden">
+                    </select>
+                    <button onclick="document.getElementById('att-report-modal').classList.add('hidden')" class="bg-white text-slate-400 hover:text-red-500 p-2 rounded-full shadow-sm hover:shadow transition-all font-bold text-xl px-3 py-1">&times;</button>
                 </div>
             </div>
-            
             <div class="p-4 md:p-6 overflow-y-auto flex-1 custom-scrollbar">
-                <div id="att-report-content" class="overflow-x-auto text-sm">
-                    </div>
+                <div id="att-report-content" class="overflow-x-auto text-sm"></div>
             </div>
         </div>
     </div>
@@ -154,9 +200,7 @@
 
     window.onload = () => {
         if(!currentUser || localStorage.getItem('currentRole') !== 'teacher') {
-            Swal.fire('กรุณาล็อกอิน', 'เซสชั่นหมดอายุ กรุณาล็อกอินใหม่', 'warning').then(() => {
-                window.location.href = "index.html";
-            });
+            Swal.fire('กรุณาล็อกอิน', 'เซสชั่นหมดอายุ กรุณาล็อกอินใหม่', 'warning').then(() => { window.location.href = "index.html"; });
             return;
         }
         document.getElementById('teacher-name-display').innerText = `${currentUser.name} | ${currentUser.position}`;
@@ -166,20 +210,13 @@
     function fetchRooms() {
         const select = document.getElementById('room-select');
         const myRooms = currentUser.rooms || [];
-        
         if(myRooms.length === 0) {
             select.innerHTML = '<option value="">ไม่มีห้องที่ปรึกษาในฐานข้อมูล</option>';
             Swal.fire('ไม่พบข้อมูลห้อง', 'คุณยังไม่มีชื่อเป็นครูที่ปรึกษาในห้องใดๆ กรุณาแจ้งแอดมิน', 'info');
             return;
         }
-
-        select.innerHTML = '<option value="">-- เลือกห้องเรียน --</option>' + 
-                           myRooms.map(r => `<option value="${r}">${r}</option>`).join('');
-        
-        if(myRooms.length === 1) {
-            select.value = myRooms[0];
-            loadStudents();
-        }
+        select.innerHTML = '<option value="">-- เลือกห้องเรียน --</option>' + myRooms.map(r => `<option value="${r}">${r}</option>`).join('');
+        if(myRooms.length === 1) { select.value = myRooms[0]; loadStudents(); }
     }
 
     async function loadStudents() {
@@ -194,7 +231,6 @@
                 fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getStudentsInRoom', payload: { roomString } }) }),
                 fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getSDQDashboard', payload: { roomString } }) })
             ]);
-            
             const dataS = await resS.json();
             const dataSDQ = await resSDQ.json();
 
@@ -204,42 +240,41 @@
                 if(dataSDQ.success) {
                     dataSDQ.data.forEach(item => {
                         if(!latestSDQMap[item.id]) latestSDQMap[item.id] = { student: null, teacher: null };
-                        // เก็บค่าล่าสุดแยกตามฝ่าย
-                        if(item.evaluator === 'นักเรียนประเมินตนเอง') {
-                            latestSDQMap[item.id].student = item;
-                        } else {
-                            latestSDQMap[item.id].teacher = item;
-                        }
+                        if(item.evaluator === 'นักเรียนประเมินตนเอง') latestSDQMap[item.id].student = item;
+                        else latestSDQMap[item.id].teacher = item;
                     });
                 }
                 renderTable(currentStudentsData, latestSDQMap);
-            } else {
-                throw new Error(dataS.message);
-            }
+            } else { throw new Error(dataS.message); }
         } catch (e) {
-            console.error(e);
-            container.innerHTML = `<div class="p-8 text-center text-red-500 bg-red-50 rounded-3xl font-bold border border-red-100">❌ เกิดข้อผิดพลาด: ${e.message}<br><small>กรุณาตรวจสอบการตั้งค่า Deployment ใน Apps Script</small></div>`;
+            container.innerHTML = `<div class="p-8 text-center text-red-500 bg-red-50 rounded-3xl font-bold border border-red-100">❌ เกิดข้อผิดพลาด: ${e.message}</div>`;
         }
     }
 
-    // 🟢 ฟังก์ชันคำนวณอิโมจิตามเกณฑ์ (Thai Norm)
+// 🟢 ฟังก์ชันคำนวณระดับสีและอิโมจิ SDQ รายด้าน (อ้างอิง: เกณฑ์กรมสุขภาพจิตไทย)
     function getSdqEmoji(domain, score, isStudent) {
+        // ตัวแปร isStudent = true (ฉบับนักเรียนประเมินตนเอง), false (ฉบับครูประเมินนักเรียน)
         if (domain === 'emotional') {
+            // อารมณ์: นักเรียน (ปกติ 0-5, เสี่ยง 6, ปัญหา 7-10) | ครู (ปกติ 0-4, เสี่ยง 5, ปัญหา 6-10)
             if (isStudent) return score <= 5 ? '🟢' : (score === 6 ? '🟡' : '🔴');
             else return score <= 4 ? '🟢' : (score === 5 ? '🟡' : '🔴');
         }
         if (domain === 'conduct') {
+            // ความประพฤติเกเร: นักเรียน (ปกติ 0-3, เสี่ยง 4, ปัญหา 5-10) | ครู (ปกติ 0-2, เสี่ยง 3, ปัญหา 4-10)
             if (isStudent) return score <= 3 ? '🟢' : (score === 4 ? '🟡' : '🔴');
             else return score <= 2 ? '🟢' : (score === 3 ? '🟡' : '🔴');
         }
         if (domain === 'hyper') {
-            return score <= 5 ? '🟢' : (score === 6 ? '🟡' : '🔴'); // เกณฑ์เท่ากัน
+            // สมาธิสั้น: นักเรียนและครูใช้เกณฑ์เดียวกัน (ปกติ 0-5, เสี่ยง 6, ปัญหา 7-10)
+            return score <= 5 ? '🟢' : (score === 6 ? '🟡' : '🔴'); 
         }
         if (domain === 'peer') {
+            // ความสัมพันธ์กับเพื่อน: นักเรียน (ปกติ 0-3, เสี่ยง 4-5, ปัญหา 6-10) | ครู (ปกติ 0-3, เสี่ยง 4, ปัญหา 5-10)
             if (isStudent) return score <= 3 ? '🟢' : (score <= 5 ? '🟡' : '🔴');
             else return score <= 3 ? '🟢' : (score === 4 ? '🟡' : '🔴');
         }
-        if (domain === 'prosocial') { // จุดแข็ง (ยิ่งเยอะยิ่งดี)
+        if (domain === 'prosocial') { 
+            // พฤติกรรมทางสังคม (จุดแข็ง ยิ่งเยอะยิ่งดี): นักเรียนและครูใช้เกณฑ์เดียวกัน (ปกติ 6-10, เสี่ยง 5, ปัญหา 0-4)
             return score >= 6 ? '🟢' : (score === 5 ? '🟡' : '🔴');
         }
         return '';
@@ -261,11 +296,9 @@
                 </thead>
                 <tbody class="divide-y divide-slate-50">`;
 
-        // Helper ฟังก์ชันสร้างป้ายอิโมจิ
-        const getBadge = (sdqData, party) => {
+        const getBadge = (sdqData) => {
             if(!sdqData) return `<span class="px-3 py-1 rounded-full text-[10px] font-bold border text-slate-400 bg-slate-50 border-slate-200 w-28 text-center inline-block">⚪ ค้างประเมิน</span>`;
-            let color = 'text-emerald-600 bg-emerald-50 border-emerald-100';
-            let emoji = '🟢';
+            let color = 'text-emerald-600 bg-emerald-50 border-emerald-100', emoji = '🟢';
             if(sdqData.status === 'มีปัญหา') { color = 'text-red-600 bg-red-50 border-red-100'; emoji = '🔴'; }
             else if(sdqData.status === 'เสี่ยง') { color = 'text-orange-600 bg-orange-50 border-orange-100'; emoji = '🟡'; }
             return `<span class="px-3 py-1 flex items-center justify-center gap-1.5 rounded-full text-[10px] font-bold border w-28 mx-auto ${color}">${emoji} ${sdqData.status} (${sdqData.totalScore})</span>`;
@@ -273,16 +306,10 @@
 
         students.forEach((s, i) => {
             const sdq = sdqMap[s.id] || { student: null, teacher: null };
-            
             html += `
             <tr class="hover:bg-slate-50/50 transition-colors group">
                 <td class="p-5 text-center font-bold text-slate-300 text-sm">${i+1}</td>
-                <td class="p-5">
-                    <div class="flex flex-col">
-                        <span class="font-bold text-slate-800 text-base">${s.name}</span>
-                        <span class="text-xs text-slate-400 font-mono">ID: ${s.id}</span>
-                    </div>
-                </td>
+                <td class="p-5"><div class="flex flex-col"><span class="font-bold text-slate-800 text-base">${s.name}</span><span class="text-xs text-slate-400 font-mono">ID: ${s.id}</span></div></td>
                 <td class="p-5">
                     <div class="flex justify-center gap-1 bg-slate-100 p-1.5 rounded-2xl w-fit mx-auto shadow-inner">
                         ${['มา', 'สาย', 'ลา', 'ขาด'].map(st => `
@@ -293,28 +320,18 @@
                         `).join('')}
                     </div>
                 </td>
-                <td class="p-5 text-center border-l border-slate-100">
-                    ${getBadge(sdq.student, 'เด็ก')}
-                </td>
+                <td class="p-5 text-center border-l border-slate-100">${getBadge(sdq.student)}</td>
+                <td class="p-5 text-center">${getBadge(sdq.teacher)}</td>
                 <td class="p-5 text-center">
-                    ${getBadge(sdq.teacher, 'ครู')}
-                </td>
-                <td class="p-5 text-center">
-                    <button onclick="openDeepData('${s.id}', '${s.name}')" class="bg-white border border-slate-200 text-slate-600 hover:bg-emerald-700 hover:text-white hover:border-emerald-700 text-[10px] px-4 py-2 rounded-xl font-bold w-full max-w-[120px] transition-all shadow-sm">
-                        เจาะลึก/ประเมิน
-                    </button>
+                    <button onclick="openDeepData('${s.id}', '${s.name}')" class="bg-white border border-slate-200 text-slate-600 hover:bg-emerald-700 hover:text-white hover:border-emerald-700 text-[10px] px-4 py-2 rounded-xl font-bold transition-all shadow-sm">เจาะลึก/ประเมิน</button>
                 </td>
             </tr>`;
         });
 
         html += `</tbody></table></div>
         <div class="mt-8 flex flex-col sm:flex-row justify-center gap-4">
-            <button onclick="submitAttendance()" id="btn-save-att" class="bg-emerald-800 hover:bg-emerald-900 text-white font-bold py-4 px-10 rounded-[2rem] shadow-xl hover:scale-105 transition-all flex items-center justify-center gap-3 text-lg w-full sm:w-auto">
-                💾 ยืนยันบันทึกเช้าวันนี้
-            </button>
-            <button onclick="openAttendanceReport()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-10 rounded-[2rem] shadow-xl hover:scale-105 transition-all flex items-center justify-center gap-3 text-lg w-full sm:w-auto">
-                📊 สรุปรายงานเข้าแถว (ผ./ม.ผ.)
-            </button>
+            <button onclick="submitAttendance()" id="btn-save-att" class="bg-emerald-800 hover:bg-emerald-900 text-white font-bold py-4 px-10 rounded-[2rem] shadow-xl hover:scale-105 transition-all flex items-center justify-center gap-3 text-lg w-full sm:w-auto">💾 ยืนยันบันทึกเช้าวันนี้</button>
+            <button onclick="openAttendanceReport()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-10 rounded-[2rem] shadow-xl hover:scale-105 transition-all flex items-center justify-center gap-3 text-lg w-full sm:w-auto">📊 สรุปรายงานเข้าแถว (ผ./ม.ผ.)</button>
         </div>`;
         document.getElementById('students-container').innerHTML = html;
     }
@@ -322,169 +339,244 @@
     function updateAttendance(i, st) { currentStudentsData[i].status = st; }
 
     async function submitAttendance() {
-        const btn = document.getElementById('btn-save-att');
-        btn.disabled = true; btn.innerHTML = "กำลังบันทึก...";
+        const btn = document.getElementById('btn-save-att'); btn.disabled = true; btn.innerHTML = "กำลังบันทึก...";
         try {
             const res = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'saveAttendance', payload: { records: currentStudentsData, teacherName: currentUser.name } }) });
             const result = await res.json();
-            if(result.success) Swal.fire({ icon: 'success', title: 'เช็คชื่อสำเร็จ', text: `บันทึกข้อมูล ${result.count} รายเรียบร้อย`, confirmButtonColor: '#065f46' });
+            if(result.success) Swal.fire({ icon: 'success', title: 'เช็คชื่อสำเร็จ', text: `บันทึกข้อมูล ${result.count} รายเรียบร้อย` });
             else throw new Error(result.message);
-        } catch (e) {
-            Swal.fire('ผิดพลาด', e.message, 'error');
-        } finally {
-            btn.disabled = false; btn.innerHTML = "💾 ยืนยันบันทึกเช้าวันนี้";
-        }
+        } catch (e) { Swal.fire('ผิดพลาด', e.message, 'error'); } 
+        finally { btn.disabled = false; btn.innerHTML = "💾 ยืนยันบันทึกเช้าวันนี้"; }
     }
 
-// 🟢 ระบบรายงานสรุปเข้าแถว (รายเดือน / ร้อยละ 60)
-    let globalAttendanceData = []; // เก็บข้อมูลไว้ให้ filter รายเดือนได้
+    // 🟢 ระบบรายงานเข้าแถว
+    let globalAttendanceData = []; 
     
     async function openAttendanceReport() {
         const roomString = document.getElementById('room-select').value;
         if(!roomString) return Swal.fire('แจ้งเตือน', 'กรุณาเลือกห้องเรียนก่อน', 'warning');
-
         document.getElementById('att-report-modal').classList.remove('hidden');
         const content = document.getElementById('att-report-content');
-        
-        content.innerHTML = `
-            <div class="text-center py-12">
-                <div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-100 border-t-blue-600 mx-auto mb-4"></div>
-                <p class="text-blue-700 font-bold text-lg">กำลังดึงข้อมูลสถิติจากฐานข้อมูล...</p>
-                <p class="text-slate-500 text-sm mt-2">อาจใช้เวลาสักครู่ เนื่องจากกำลังแยกข้อมูลเป็นรายเดือน</p>
-            </div>
-        `;
+        content.innerHTML = `<div class="text-center py-12"><div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-100 border-t-blue-600 mx-auto mb-4"></div><p class="text-blue-700 font-bold">กำลังรวบรวมข้อมูลสถิติ...</p></div>`;
 
         try {
-            const fetchPromises = currentStudentsData.map(s => 
-                fetch(API_URL, { 
-                    method: 'POST', 
-                    headers: { "Content-Type": "text/plain;charset=utf-8" }, 
-                    body: JSON.stringify({ action: 'getHistory', payload: { studentId: s.id } }) 
-                }).then(res => res.json())
-            );
-            
+            const fetchPromises = currentStudentsData.map(s => fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getHistory', payload: { studentId: s.id } }) }).then(res => res.json()));
             const results = await Promise.all(fetchPromises);
-            
-            // เก็บข้อมูลส่วนกลางและดึงเดือนที่มีการเช็คชื่อออกมา
             globalAttendanceData = results.map(r => r.success ? r.data : []);
             
-            // สร้าง Set ของเดือนโดยแกะจาก String ตรงๆ ป้องกัน JS อ่านวันที่สลับ (DD/MM/YYYY)
             const monthSet = new Set();
             globalAttendanceData.forEach(studentHistory => {
                 studentHistory.forEach(record => {
-                    // record[1] คือคอลัมน์ Date_TH (เช่น 29/04/2026) ใน Google Sheets
                     const dateStr = record[1]; 
                     if(dateStr) {
                         const parts = dateStr.split('/');
-                        if(parts.length === 3) {
-                            // สร้าง Key เป็น YYYY-MM เพื่อให้เรียงลำดับได้ถูกต้อง
-                            const monthKey = `${parts[2]}-${parts[1]}`;
-                            monthSet.add(monthKey);
-                        }
+                        if(parts.length === 3) monthSet.add(`${parts[2]}-${parts[1]}`);
                     }
                 });
             });
 
-            // สร้าง Dropdown ให้เลือกเดือน
-            const monthSelect = document.getElementById('report-month-select');
-            monthSelect.innerHTML = '<option value="all">รวมทุกเดือน</option>';
-            
+            const monthSelect = document.getElementById('report-month-select'); monthSelect.innerHTML = '';
             Array.from(monthSet).sort().forEach(m => {
                 const [year, month] = m.split('-');
-                // ใช้ Date object เฉพาะเพื่อแปลงชื่อเดือนเป็นภาษาไทย
                 const monthName = new Date(year, parseInt(month)-1, 1).toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
                 monthSelect.innerHTML += `<option value="${m}">${monthName}</option>`;
             });
-            
-            if(monthSet.size > 0) monthSelect.classList.remove('hidden');
-
+            if(monthSet.size > 0) document.getElementById('report-type-select').classList.remove('hidden');
             renderAttendanceReportTable();
-
-        } catch (err) {
-            content.innerHTML = '<div class="p-8 text-center"><p class="text-red-500 font-bold text-lg">❌ เกิดข้อผิดพลาดในการดึงข้อมูลจากฐานข้อมูล</p></div>';
-        }
+        } catch (err) { content.innerHTML = '<div class="p-8 text-center text-red-500 font-bold">❌ เกิดข้อผิดพลาดในการดึงข้อมูล</div>'; }
     }
 
     function renderAttendanceReportTable() {
         const content = document.getElementById('att-report-content');
-        const selectedMonth = document.getElementById('report-month-select').value;
+        const printArea = document.getElementById('print-master-container');
+        const typeSelect = document.getElementById('report-type-select').value;
+        const monthSelect = document.getElementById('report-month-select');
+        
+        document.getElementById('btn-export-pdf').classList.remove('hidden');
 
-        let html = `
-        <table class="w-full text-left border-collapse whitespace-nowrap min-w-max">
-            <thead>
-                <tr class="bg-blue-800 text-white text-xs uppercase tracking-wide">
-                    <th class="p-3 border text-center">ที่</th>
-                    <th class="p-3 border">รหัสนักเรียน</th>
-                    <th class="p-3 border">ชื่อ-สกุล</th>
-                    <th class="p-3 border text-center bg-blue-700">รวม (วัน)</th>
-                    <th class="p-3 border text-center text-emerald-300">มา</th>
-                    <th class="p-3 border text-center text-orange-300">สาย</th>
-                    <th class="p-3 border text-center text-yellow-300">ลา</th>
-                    <th class="p-3 border text-center text-red-300">ขาด</th>
-                    <th class="p-3 border text-center bg-blue-900">ร้อยละ (%)</th>
-                    <th class="p-3 border text-center font-bold text-yellow-300">ประเมิน (เกณฑ์ 60%)</th>
-                </tr>
-            </thead>
-            <tbody class="text-slate-700">`;
+        if(typeSelect === 'term_summary') monthSelect.classList.add('hidden'); 
+        else monthSelect.classList.remove('hidden');
 
+        const selectedMonth = monthSelect.value;
+        const selectedMonthText = monthSelect.options[monthSelect.selectedIndex]?.text || '';
+        const reportTitle = typeSelect === 'term_summary' ? 'สรุปการเข้าแถวทั้งหมดประจำเทอม' : typeSelect === 'month_summary' ? `สรุปการเข้าแถวประจำเดือน ${selectedMonthText}` : `รายละเอียดการเข้าแถวรายวัน ประจำเดือน ${selectedMonthText}`;
+
+        let activeDates = new Set(); let allMonthsInTerm = new Set();
+        globalAttendanceData.forEach(history => {
+            history.forEach(record => {
+                const dateStr = record[1];
+                if(dateStr) {
+                    const parts = dateStr.split('/');
+                    if(parts.length === 3) {
+                        const mKey = `${parts[2]}-${parts[1]}`;
+                        allMonthsInTerm.add(mKey);
+                        if (typeSelect === 'term_summary' || mKey === selectedMonth) activeDates.add(dateStr);
+                    }
+                }
+            });
+        });
+        const totalRoomDays = activeDates.size;
+        
+        let passCount = 0;
         currentStudentsData.forEach((s, i) => {
             let historyData = globalAttendanceData[i] || [];
-            
-            // กรองข้อมูลตามเดือนที่เลือก
-            // กรองข้อมูลตามเดือนที่เลือก (แกะ String เหมือนข้างบน)
-            if (selectedMonth !== 'all') {
-                historyData = historyData.filter(record => {
-                    const dateStr = record[1];
-                    if(!dateStr) return false;
-                    const parts = dateStr.split('/');
-                    if(parts.length !== 3) return false;
-                    const monthKey = `${parts[2]}-${parts[1]}`;
-                    return monthKey === selectedMonth;
-                });
-            }
-            
-            let present = 0, late = 0, leave = 0, absent = 0;
-            
+            let present = 0, late = 0, leave = 0;
             historyData.forEach(record => {
-                const status = record[5];
-                if(status === 'มา') present++;
-                else if(status === 'สาย') late++;
-                else if(status === 'ลา') leave++;
-                else if(status === 'ขาด') absent++;
+                const dateStr = record[1];
+                const isTargetDate = typeSelect === 'term_summary' || (dateStr && dateStr.split('/')[2] + "-" + dateStr.split('/')[1] === selectedMonth);
+                if(isTargetDate) {
+                    if(record[5] === 'มา') present++; else if(record[5] === 'สาย') late++; else if(record[5] === 'ลา') leave++;
+                }
             });
-
-            const totalDays = present + late + leave + absent;
-            
-            let percent = 0;
-            let evalText = '<span class="text-slate-300">-</span>';
-            
-            if (totalDays > 0) {
-                const activeDays = present + late + leave; 
-                percent = Math.round((activeDays / totalDays) * 100);
-                // เปลี่ยนเกณฑ์เป็น 60%
-                evalText = percent >= 60 ? '<span class="text-emerald-600 font-bold">ผ.</span>' : '<span class="text-red-600 font-bold underline">ม.ผ.</span>';
+            if (totalRoomDays > 0) {
+                if(Math.round(((present + late + leave) / totalRoomDays) * 100) >= 60) passCount++;
             }
+        });
+        let passPercent = currentStudentsData.length > 0 ? Math.round((passCount / currentStudentsData.length) * 100) : 0;
 
-            html += `
-            <tr class="border-b hover:bg-blue-50">
-                <td class="p-3 border text-center text-slate-400">${i+1}</td>
-                <td class="p-3 border font-mono">${s.id}</td>
-                <td class="p-3 border font-bold">${s.name}</td>
-                <td class="p-3 border text-center bg-slate-50 font-bold">${totalDays}</td>
-                <td class="p-3 border text-center text-emerald-600">${present}</td>
-                <td class="p-3 border text-center text-orange-500">${late}</td>
-                <td class="p-3 border text-center text-yellow-600">${leave}</td>
-                <td class="p-3 border text-center text-red-500 font-bold">${absent}</td>
-                <td class="p-3 border text-center bg-slate-50 font-bold ${percent < 60 && totalDays > 0 ? 'text-red-500' : 'text-slate-700'}">${percent}%</td>
-                <td class="p-3 border text-center">${evalText}</td>
-            </tr>`;
+        let sortedMonths = Array.from(allMonthsInTerm).sort();
+        let sortedDates = Array.from(activeDates).sort((a, b) => {
+            const [d1, m1, y1] = a.split('/'); const [d2, m2, y2] = b.split('/');
+            return new Date(y1, m1-1, d1) - new Date(y2, m2-1, d2);
         });
 
-        html += `</tbody></table>`;
-        content.innerHTML = html;
+        let theadHtml = `<thead><tr class="bg-slate-800 text-white uppercase tracking-wide">
+                <th class="p-2 border text-center sticky left-0 print:static bg-slate-900 w-10">ที่</th>
+                <th class="p-2 border text-center sticky left-[40px] print:static bg-slate-900 min-w-[80px]">รหัสนักเรียน</th>
+                <th class="p-2 border text-center name-col sticky left-[120px] print:static bg-slate-900 shadow-[2px_0_5px_rgba(0,0,0,0.15)] print:shadow-none min-w-[150px]">ชื่อ-สกุล</th>`;
+
+        if (typeSelect === 'term_summary') {
+            sortedMonths.forEach(m => {
+                const mName = new Date(m.split('-')[0], m.split('-')[1]-1, 1).toLocaleDateString('th-TH', { month: 'short' });
+                theadHtml += `<th class="p-2 border text-center font-bold min-w-[60px]">${mName} (%)</th>`;
+            });
+            theadHtml += `<th class="p-2 border text-center font-bold bg-slate-700 min-w-[60px]">รวม (%)</th><th class="p-2 border text-center font-bold bg-slate-900 min-w-[60px]">ประเมิน</th>`;
+        } else if (typeSelect === 'month_summary') {
+            theadHtml += `<th class="p-2 border text-center">มา</th><th class="p-2 border text-center">สาย</th><th class="p-2 border text-center">ลา</th><th class="p-2 border text-center">ขาด</th><th class="p-2 border text-center bg-slate-700">ร้อยละ (%)</th><th class="p-2 border text-center bg-slate-900">ประเมิน</th>`;
+        } else {
+            sortedDates.forEach(d => { theadHtml += `<th class="p-2 border text-center font-normal min-w-[32px]">${d.split('/')[0]}</th>`; });
+            theadHtml += `<th class="p-2 border text-center bg-slate-700 min-w-[60px]">ร้อยละ</th><th class="p-2 border text-center bg-slate-900 min-w-[60px]">ประเมิน</th>`;
+        }
+        theadHtml += `</tr></thead>`;
+
+        let allRowsHtml = [];
+        currentStudentsData.forEach((s, idx) => {
+            let historyData = globalAttendanceData[idx] || [];
+            let present = 0, late = 0, leave = 0, absent = 0;
+            let monthStats = {}; let statusMap = {};
+
+            historyData.forEach(record => {
+                const dStr = record[1]; if(!dStr) return;
+                const mKey = `${dStr.split('/')[2]}-${dStr.split('/')[1]}`;
+                const status = record[5];
+                
+                if (mKey === selectedMonth) statusMap[dStr] = status;
+                if(!monthStats[mKey]) monthStats[mKey] = { active:0, present:0, late:0, leave:0 };
+                monthStats[mKey].active++;
+                if(status === 'มา') monthStats[mKey].present++; else if(status === 'สาย') monthStats[mKey].late++; else if(status === 'ลา') monthStats[mKey].leave++;
+
+                const isTargetDate = typeSelect === 'term_summary' || mKey === selectedMonth;
+                if(isTargetDate) {
+                    if(status === 'มา') present++; else if(status === 'สาย') late++; else if(status === 'ลา') leave++; else if(status === 'ขาด') absent++;
+                }
+            });
+
+            let percent = 0; let evalText = '<span class="text-slate-400 print:text-black">-</span>';
+            if (totalRoomDays > 0) {
+                percent = Math.round(((present + late + leave) / totalRoomDays) * 100);
+                if(percent >= 60) evalText = '<span class="font-bold text-emerald-600 print:text-black">ผ.</span>';
+                else evalText = '<span class="font-bold underline text-red-600 print:text-black">ม.ผ.</span>';
+            }
+
+            let rowHtml = `<tr class="border-b hover:bg-slate-50 text-center">
+                <td class="p-2 border text-center text-slate-500 sticky print:static left-0 bg-white z-10">${idx + 1}</td>
+                <td class="p-2 border text-center font-mono sticky print:static left-[40px] bg-white z-10">${s.id}</td>
+                <td class="p-2 border font-bold name-col sticky print:static left-[120px] bg-white z-10 shadow-[2px_0_5px_rgba(0,0,0,0.08)] print:shadow-none truncate max-w-[150px] print:max-w-none">${s.name}</td>`;
+
+            if (typeSelect === 'term_summary') {
+                sortedMonths.forEach(m => {
+                    let mPct = 0;
+                    if(monthStats[m] && monthStats[m].active > 0) mPct = Math.round(((monthStats[m].present + monthStats[m].late + monthStats[m].leave) / monthStats[m].active) * 100);
+                    rowHtml += `<td class="p-2 border text-center">${monthStats[m] ? mPct + '%' : '-'}</td>`;
+                });
+                rowHtml += `<td class="p-2 border text-center font-bold bg-slate-50 print:bg-white">${percent}%</td><td class="p-2 border text-center">${evalText}</td>`;
+            } 
+            else if (typeSelect === 'month_summary') {
+                rowHtml += `<td class="p-2 border text-center">${present}</td><td class="p-2 border text-center">${late}</td>
+                            <td class="p-2 border text-center">${leave}</td><td class="p-2 border text-center">${absent}</td>
+                            <td class="p-2 border text-center font-bold bg-slate-50 print:bg-white">${percent}%</td><td class="p-2 border text-center">${evalText}</td>`;
+            } 
+            else { 
+                sortedDates.forEach(d => {
+                    const st = statusMap[d]; let badge = '<span class="text-slate-300 print:text-black">-</span>'; let bgClass = "bg-white"; 
+                    if(st === 'มา') { badge = '<span class="text-emerald-700 print:text-black font-bold">ม</span>'; bgClass = "bg-emerald-50 print:bg-white"; }
+                    else if(st === 'สาย') { badge = '<span class="text-orange-600 print:text-black font-bold">ส</span>'; bgClass = "bg-orange-50 print:bg-white"; }
+                    else if(st === 'ลา') { badge = '<span class="text-yellow-700 print:text-black font-bold">ล</span>'; bgClass = "bg-yellow-50 print:bg-white"; }
+                    else if(st === 'ขาด') { badge = '<span class="text-red-700 print:text-black font-bold">ข</span>'; bgClass = "bg-red-50 print:bg-white"; }
+                    rowHtml += `<td class="p-2 border text-center ${bgClass}">${badge}</td>`;
+                });
+                rowHtml += `<td class="p-2 border text-center font-bold bg-slate-50 print:bg-white">${percent}%</td><td class="p-2 border text-center">${evalText}</td>`;
+            }
+            rowHtml += `</tr>`;
+            allRowsHtml.push(rowHtml);
+        });
+
+        // 💻 Screen HTML (หน้าจอคอม)
+        content.innerHTML = `
+        <div class="no-print-helper bg-white p-2 md:p-4">
+            <div class="mb-3 flex justify-between items-center gap-2 text-xs">
+                <span class="text-blue-700 font-bold bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-200">เข้าแถวทั้งหมด ${totalRoomDays} วัน</span>
+                <div class="flex gap-2 font-bold bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
+                    <span class="text-slate-600">ม=มา</span><span class="text-slate-600">ส=สาย</span><span class="text-slate-600">ล=ลา</span><span class="text-slate-600">ข=ขาด</span>
+                </div>
+            </div>
+            <div class="overflow-x-auto custom-scrollbar border border-slate-200 rounded-xl shadow-inner pb-2 mb-2 w-full">
+                <table class="w-full text-center border-collapse whitespace-nowrap min-w-max text-[12px] md:text-sm relative mx-auto">
+                    ${theadHtml}<tbody class="text-slate-800 text-center">${allRowsHtml.join('')}</tbody>
+                </table>
+            </div>
+            <div class="mt-4 text-sm text-slate-800 border-l-4 border-emerald-500 pl-4 py-2 bg-slate-50">
+                <p class="mb-1"><strong>สรุปผลการประเมิน:</strong> มีนักเรียน นักศึกษา ผ่านกิจกรรมหน้าเสาธงจำนวน <strong>${passCount}</strong> คน จากทั้งหมด <strong>${currentStudentsData.length}</strong> คน คิดเป็นร้อยละ <strong>${passPercent}%</strong></p>
+                <p><strong>หมายเหตุ:</strong> เกณฑ์การสรุปผล ผ่านการประเมิน (ผ.) คือ นักเรียน นักศึกษา มีร้อยละการเข้าร่วมปฏิบัติกิจกรรมไม่ต่ำกว่า ร้อยละ 60</p>
+            </div>
+        </div>`;
+
+        // 🖨️ Print HTML (PDF) ซอยหน้าละ 10 คน
+        let printOutputHtml = '';
+        const MAX_PER_PAGE = 10;
+        const totalPages = Math.ceil(allRowsHtml.length / MAX_PER_PAGE) || 1;
+
+        for (let p = 0; p < totalPages; p++) {
+            const pageRows = allRowsHtml.slice(p * MAX_PER_PAGE, (p + 1) * MAX_PER_PAGE);
+            printOutputHtml += `
+            <div class="page-chunk" style="padding-top: 20px;">
+                <div class="print-header text-center" style="text-align: center !important;">
+                    <h2 class="font-bold">วิทยาลัยเกษตรและเทคโนโลยีเชียงใหม่</h2>
+                    <h3 class="font-bold">${reportTitle}</h3>
+                    <p class="font-bold">นักเรียนระดับชั้น ${document.getElementById('room-select').value} (หน้า ${p + 1}/${totalPages})</p>
+                    <p class="font-bold">จำนวนวันที่มีกิจกรรมหน้าเสาธงทั้งหมด <strong>${totalRoomDays}</strong> วัน</p>
+                    ${typeSelect === 'month_daily' ? '<p class="font-bold" style="font-size:12pt; margin-top:2px;">(สัญลักษณ์: ม=มา, ส=สาย, ล=ลา, ข=ขาด)</p>' : ''}
+                </div>
+                <table>${theadHtml}<tbody>${pageRows.join('')}</tbody></table>
+                
+                <div class="print-footer" style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 15px;">
+                    <div style="width: 65%; border-left: 3px solid black; padding-left: 10px; text-align: left;">
+                        <p><strong>สรุปผลการประเมิน:</strong> มีนักเรียน นักศึกษา ผ่านกิจกรรมหน้าเสาธงจำนวน <strong>${passCount}</strong> คน จากทั้งหมด <strong>${currentStudentsData.length}</strong> คน คิดเป็นร้อยละ <strong>${passPercent}%</strong></p>
+                        <p><strong>หมายเหตุ:</strong> เกณฑ์การสรุปผล ผ่านการประเมิน (ผ.) คือ นักเรียน นักศึกษา มีร้อยละการเข้าร่วมปฏิบัติกิจกรรมไม่ต่ำกว่า ร้อยละ 60</p>
+                    </div>
+                    <div style="width: 35%; text-align: center; padding-top: 20px;">
+                        <p style="margin-bottom: 5px;">ลงชื่อ..........................................................ครูที่ปรึกษา</p>
+                        <p style="margin-top: 0; margin-bottom: 0;">( ${currentUser.name} )</p>
+                        <p style="margin-top: 0;">ตำแหน่ง ${currentUser.position || 'ครูผู้สอน'}</p>
+                    </div>
+                </div>
+            </div>`;
+        }
+        printArea.innerHTML = printOutputHtml;
     }
 
-    // 🟢 ระบบเจาะลึก (Deep Data)
+    function exportToPDF() { window.print(); }
+
     async function openDeepData(id, name) {
         currentViewingStudent = { id, name };
         document.getElementById('modal-student-name').innerText = `${name} (รหัส ${id})`;
@@ -530,40 +622,24 @@
         const ctx = document.getElementById('sdqTimelineChart').getContext('2d');
         timelineChart = new Chart(ctx, {
             type: 'line',
-            data: {
-                labels: labels,
-                datasets: [
-                    { label: 'นักเรียน', data: studentScores, borderColor: '#3b82f6', tension: 0.3, pointRadius: 5, spanGaps: true },
-                    { label: 'ครู', data: teacherScores, borderColor: '#10b981', borderDash: [5, 5], tension: 0.3, pointRadius: 5, spanGaps: true }
-                ]
-            },
+            data: { labels: labels, datasets: [ { label: 'นักเรียน', data: studentScores, borderColor: '#3b82f6', tension: 0.3 }, { label: 'ครู', data: teacherScores, borderColor: '#10b981', borderDash: [5, 5], tension: 0.3 } ] },
             options: { maintainAspectRatio: false, responsive: true, plugins: { legend: { position: 'bottom' } } }
         });
 
         let html = `<table class="w-full border-collapse"><thead><tr class="bg-slate-50 text-slate-500 uppercase tracking-tighter"><th class="p-3 border">วันที่</th><th class="p-3 border">โดย</th><th class="p-3 border text-center">รวม</th><th class="p-3 border text-center">อารมณ์</th><th class="p-3 border text-center">เกเร</th><th class="p-3 border text-center">สมาธิ</th><th class="p-3 border text-center">เพื่อน</th><th class="p-3 border text-center">สังคม(+)</th></tr></thead><tbody>`;
         
         data.forEach(d => {
-            const isStudent = d.evaluator === 'นักเรียนประเมินตนเอง';
-            const s = d.scores;
-            
-            // เรียกใช้อิโมจิตามด้านและผู้ประเมิน
+            const isStudent = d.evaluator === 'นักเรียนประเมินตนเอง'; const s = d.scores;
             const tEmoji = d.status === 'ปกติ' ? '🟢' : (d.status === 'เสี่ยง' ? '🟡' : '🔴');
-            const emoEmoji = getSdqEmoji('emotional', s.emotional, isStudent);
-            const conEmoji = getSdqEmoji('conduct', s.conduct, isStudent);
-            const hypEmoji = getSdqEmoji('hyper', s.hyper, isStudent);
-            const peerEmoji = getSdqEmoji('peer', s.peer, isStudent);
-            const proEmoji = getSdqEmoji('prosocial', s.prosocial, isStudent);
-
-            html += `
-            <tr class="${isStudent ? 'bg-white' : 'bg-emerald-50'}">
+            html += `<tr class="${isStudent ? 'bg-white' : 'bg-emerald-50'}">
                 <td class="p-3 border whitespace-nowrap">${new Date(d.date).toLocaleDateString('th-TH')}</td>
                 <td class="p-3 border font-bold">${isStudent ? '👦 นักเรียน' : '👨‍🏫 ครู'}</td>
-                <td class="p-3 border text-center font-bold bg-slate-50/50">${tEmoji} ${d.total}</td>
-                <td class="p-3 border text-center">${emoEmoji} ${s.emotional}</td>
-                <td class="p-3 border text-center">${conEmoji} ${s.conduct}</td>
-                <td class="p-3 border text-center">${hypEmoji} ${s.hyper}</td>
-                <td class="p-3 border text-center">${peerEmoji} ${s.peer}</td>
-                <td class="p-3 border text-center font-bold text-blue-700">${proEmoji} ${s.prosocial}</td>
+                <td class="p-3 border text-center font-bold">${tEmoji} ${d.total}</td>
+                <td class="p-3 border text-center">${getSdqEmoji('emotional', s.emotional, isStudent)} ${s.emotional}</td>
+                <td class="p-3 border text-center">${getSdqEmoji('conduct', s.conduct, isStudent)} ${s.conduct}</td>
+                <td class="p-3 border text-center">${getSdqEmoji('hyper', s.hyper, isStudent)} ${s.hyper}</td>
+                <td class="p-3 border text-center">${getSdqEmoji('peer', s.peer, isStudent)} ${s.peer}</td>
+                <td class="p-3 border text-center font-bold text-blue-700">${getSdqEmoji('prosocial', s.prosocial, isStudent)} ${s.prosocial}</td>
             </tr>`;
         });
         html += `</tbody></table>`;
@@ -581,49 +657,47 @@
             answers.push(Number(val));
         }
 
-        const btn = document.getElementById('btn-submit-teacher-sdq');
-        btn.disabled = true; btn.innerHTML = "กำลังบันทึก...";
+        document.getElementById('btn-submit-teacher-sdq').disabled = true; 
+        document.getElementById('btn-submit-teacher-sdq').innerHTML = "กำลังบันทึก...";
 
+// ฟังก์ชันกลับคะแนน (Reverse Scoring) สำหรับข้อคำถามเชิงบวก (ข้อ 7, 11, 14, 21, 25)
         const rev = (val) => (val === 0 ? 2 : (val === 2 ? 0 : 1));
-
+        
+        // 🧠 รวมคะแนน 5 ด้าน ตามคู่มือประเมิน SDQ กรมสุขภาพจิต
+        // ด้านที่ 1: อารมณ์ (Emotional) - ข้อ 3, 8, 13, 16, 24
         const emotional = answers[2] + answers[7] + answers[12] + answers[15] + answers[23];
+        // ด้านที่ 2: ความประพฤติ/เกเร (Conduct) - ข้อ 5, 7(R), 12, 18, 22
         const conduct = answers[4] + rev(answers[6]) + answers[11] + answers[17] + answers[21];
+        // ด้านที่ 3: สมาธิสั้น/อยู่ไม่นิ่ง (Hyperactivity) - ข้อ 2, 10, 15, 21(R), 25(R)
         const hyper = answers[1] + answers[9] + answers[14] + rev(answers[20]) + rev(answers[24]);
+        // ด้านที่ 4: ความสัมพันธ์กับเพื่อน (Peer) - ข้อ 6, 11(R), 14(R), 19, 23
         const peer = answers[5] + rev(answers[10]) + rev(answers[13]) + answers[18] + answers[22];
+        // ด้านที่ 5: สังคม/จุดแข็ง (Prosocial) - ข้อ 1, 4, 9, 17, 20
         const prosocial = answers[0] + answers[3] + answers[8] + answers[16] + answers[19];
 
+        // ⚠️ คะแนนรวมความปั่นป่วน (Total Difficulties Score) คิดจาก 4 ด้านที่มีปัญหา (ไม่รวมคะแนน Prosocial)
         const totalScore = emotional + conduct + hyper + peer;
         
+        // 🎯 เกณฑ์การประเมิน SDQ ฉบับ "ครูประเมินนักเรียน" (Teacher Form) ตามมาตรฐานกรมสุขภาพจิต
+        // ระดับปกติ (Normal) = 0-11 | ระดับเสี่ยง (Borderline) = 12-15 | ระดับมีปัญหา (Abnormal) = 16-40
         let status = "ปกติ"; 
-        if (totalScore >= 16) status = "มีปัญหา"; 
-        else if (totalScore >= 12) status = "เสี่ยง"; 
-
-        const payloadData = {
-            studentId: currentViewingStudent.id,
-            studentName: currentViewingStudent.name,
-            totalScore, status,
-            scores: { emotional, conduct, hyper, peer, prosocial }
-        };
+        if (totalScore >= 16) {
+            status = "มีปัญหา"; 
+        } else if (totalScore >= 12) {
+            status = "เสี่ยง"; 
+        }
 
         try {
-            const res = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'saveSDQData', payload: { payload: payloadData, evaluatorName: currentUser.name } }) });
+            const res = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'saveSDQData', payload: { studentId: currentViewingStudent.id, studentName: currentViewingStudent.name, totalScore, status, scores: { emotional, conduct, hyper, peer, prosocial } }, evaluatorName: currentUser.name }) });
             const resJson = await res.json();
-            if(resJson.success) {
-                Swal.fire('สำเร็จ', 'บันทึกการประเมินของครูแล้ว', 'success');
-                openDeepData(currentViewingStudent.id, currentViewingStudent.name);
-                loadStudents();
-            } else {
-                throw new Error(resJson.message);
-            }
-        } catch (e) { 
-            Swal.fire('Error', 'บันทึกไม่สำเร็จ', 'error'); 
-        } finally { 
-            btn.disabled = false; btn.innerHTML = "บันทึกผลประเมินครู"; 
-        }
+            if(resJson.success) { Swal.fire('สำเร็จ', 'บันทึกการประเมินของครูแล้ว', 'success'); openDeepData(currentViewingStudent.id, currentViewingStudent.name); loadStudents(); } 
+            else throw new Error(resJson.message);
+        } catch (e) { Swal.fire('Error', 'บันทึกไม่สำเร็จ', 'error'); } 
+        finally { document.getElementById('btn-submit-teacher-sdq').disabled = false; document.getElementById('btn-submit-teacher-sdq').innerHTML = "บันทึกผลประเมินครู"; }
     }
 
     function closeDeepData() { document.getElementById('deep-data-modal').classList.add('hidden'); }
     function logout() { localStorage.clear(); window.location.href = "index.html"; }
 </script>
 </body>
-</html>
+</html>"

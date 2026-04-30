@@ -107,6 +107,32 @@
             </div>
         </div>
         
+        <div id="already-checked-alert" class="hidden mb-6 bg-amber-50 border border-amber-200 p-4 md:p-5 rounded-2xl shadow-sm flex items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4">
+            <div class="flex items-start md:items-center gap-3 md:gap-4">
+                <div class="bg-amber-100 p-2 rounded-full text-amber-600 shrink-0">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                </div>
+                <div>
+                    <h3 class="font-bold text-amber-800 text-sm md:text-base">มีการเช็คชื่อห้องนี้ไปแล้วสำหรับวันนี้!</h3>
+                    <p id="checked-by-name" class="text-xs md:text-sm text-amber-700 mt-0.5">โดยครู: -</p>
+                </div>
+            </div>
+            <div class="text-xs text-amber-600 font-medium bg-white px-3 py-1.5 rounded-lg border border-amber-200 shrink-0">ปุ่มบันทึกถูกระงับชั่วคราว</div>
+        </div>
+
+<div id="already-checked-alert" class="hidden mb-6 bg-amber-50 border border-amber-200 p-4 md:p-5 rounded-2xl shadow-sm flex items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4">
+            <div class="flex items-start md:items-center gap-3 md:gap-4">
+                <div class="bg-amber-100 p-2 rounded-full text-amber-600 shrink-0">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                </div>
+                <div>
+                    <h3 class="font-bold text-amber-800 text-sm md:text-base">มีการเช็คชื่อห้องนี้ไปแล้วสำหรับวันนี้!</h3>
+                    <p id="checked-by-name" class="text-xs md:text-sm text-amber-700 mt-0.5">โดยครู: -</p>
+                </div>
+            </div>
+            <div class="text-xs text-amber-600 font-medium bg-white px-3 py-1.5 rounded-lg border border-amber-200 shrink-0">ปุ่มบันทึกถูกระงับชั่วคราว</div>
+        </div>
+
         <div id="students-container">
             <div class="text-center text-slate-400 py-20 border-4 border-dashed border-slate-200 rounded-[2rem] bg-white">
                 <svg class="w-16 h-16 mx-auto mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
@@ -252,20 +278,57 @@
         loadStudents();
     }
 
+    // ตัวแปรเก็บสถานะว่าวันนี้ห้องนี้โดนเช็คไปหรือยัง
+    let isAlreadyCheckedToday = false;
+    let checkedByTeacherName = "";
+
     async function loadStudents() {
         const roomString = document.getElementById('room-select').value;
         const container = document.getElementById('students-container');
+        const alertBox = document.getElementById('already-checked-alert');
+        
         if(!roomString) return;
 
-        container.innerHTML = `<div class="flex flex-col items-center py-20"><div class="animate-spin rounded-full h-12 w-12 border-4 border-emerald-100 border-t-emerald-700"></div><p class="mt-4 text-emerald-800 font-medium">กำลังโหลดข้อมูลนักเรียน...</p></div>`;
+        // Reset สถานะ
+        alertBox.classList.add('hidden');
+        isAlreadyCheckedToday = false;
+        checkedByTeacherName = "";
+
+        container.innerHTML = `<div class="flex flex-col items-center py-20"><div class="animate-spin rounded-full h-12 w-12 border-4 border-emerald-100 border-t-emerald-700"></div><p class="mt-4 text-emerald-800 font-medium">กำลังโหลดข้อมูลนักเรียน และตรวจสอบประวัติวันนี้...</p></div>`;
 
         try {
-            const [resS, resSDQ] = await Promise.all([
+            // 🚨 ดึงข้อมูล 3 อย่าง: นักเรียน, SDQ และ "ประวัติการเช็คชื่อทั้งหมดของห้องนี้"
+            const [resS, resSDQ, resHist] = await Promise.all([
                 fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getStudentsInRoom', payload: { roomString } }) }),
-                fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getSDQDashboard', payload: { roomString } }) })
+                fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getSDQDashboard', payload: { roomString } }) }),
+                fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getRoomHistory', payload: { roomString } }) }) // *ต้องเพิ่มฟังก์ชันนี้ใน GAS หรือถ้าไม่มีให้ข้ามไป*
             ]);
+            
             const dataS = await resS.json();
             const dataSDQ = await resSDQ.json();
+            
+            // 🛠️ ตรวจสอบว่ามีข้อมูลจาก getRoomHistory ไหม ถ้ามีให้เช็ควันที่
+            let historyData = [];
+            try { 
+                const dataHist = await resHist.json(); 
+                if(dataHist.success) historyData = dataHist.data;
+            } catch(e) { console.warn("API getRoomHistory อาจยังไม่มีในฝั่ง Backend"); }
+
+            // เช็คว่า วันนี้ (Today) มีประวัติการเช็คชื่อของห้องนี้ไหม
+            const todayStr = new Date().toLocaleDateString('th-TH');
+            const todayRecord = historyData.find(record => {
+                // สมมติว่า record[1] คือคอลัมน์ "วันที่" แบบ DD/MM/YYYY
+                return record[1] === todayStr;
+            });
+
+            if (todayRecord) {
+                isAlreadyCheckedToday = true;
+                checkedByTeacherName = todayRecord[2]; // สมมติว่า record[2] คือชื่อครูที่บันทึก
+                
+                // โชว์ป้ายเตือน
+                document.getElementById('checked-by-name').innerText = `บันทึกโดย: ${checkedByTeacherName} (เมื่อ ${todayStr})`;
+                alertBox.classList.remove('hidden');
+            }
 
             if(dataS.success) {
                 currentStudentsData = dataS.data.map(s => ({ ...s, status: 'มา' }));
@@ -371,10 +434,16 @@ function renderTable(students, sdqMap) {
 
         html += `</tbody></table></div>
         <div class="mt-10 flex flex-col sm:flex-row justify-center gap-4">
-            <button onclick="submitAttendance()" id="btn-save-att" class="bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-700 hover:to-teal-600 text-white font-bold py-4 px-10 rounded-2xl shadow-lg shadow-emerald-200 hover:-translate-y-1 transition-all duration-300 flex items-center justify-center gap-3 text-base md:text-lg w-full sm:w-auto border border-emerald-400/50">
+            ${isAlreadyCheckedToday 
+            ? `<button disabled class="bg-slate-200 text-slate-400 font-bold py-4 px-10 rounded-2xl flex items-center justify-center gap-3 text-base md:text-lg w-full sm:w-auto cursor-not-allowed border border-slate-300">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                วันนี้มีการบันทึกไปแล้ว
+               </button>`
+            : `<button onclick="submitAttendance()" id="btn-save-att" class="bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-700 hover:to-teal-600 text-white font-bold py-4 px-10 rounded-2xl shadow-lg shadow-emerald-200 hover:-translate-y-1 transition-all duration-300 flex items-center justify-center gap-3 text-base md:text-lg w-full sm:w-auto border border-emerald-400/50">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
                 บันทึกการเช็คชื่อวันนี้
-            </button>
+               </button>`
+            }
             <button onclick="openAttendanceReport()" class="bg-white hover:bg-slate-50 text-slate-700 font-bold py-4 px-10 rounded-2xl shadow-lg shadow-slate-200/50 hover:-translate-y-1 transition-all duration-300 flex items-center justify-center gap-3 text-base md:text-lg w-full sm:w-auto border border-slate-200">
                 <svg class="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                 ออกรายงานสรุป (ผ./ม.ผ.)

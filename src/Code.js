@@ -64,6 +64,7 @@ function doPost(e) {
       case 'getHistory': return output(fetchStudentAttendanceHistory(payload.studentId));
       case 'getStudentDeepData': return output(fetchIndividualDeepSDQ(payload.studentId));
       case 'getRoomCalendar': return output(fetchRoomAttendanceCalendar(payload.roomString)); // 🟢 ใหม่: ระบบปฏิทิน
+      case 'getRoomHistory': return output(fetchRoomHistory(payload.roomString)); // 🛡️ เพิ่มใหม่: ดึงประวัติทั้งห้องเพื่อกันครูเช็คชื่อซ้ำ
       default:
         return output({ success: false, message: `Action [${action}] is not implemented.` });
     }
@@ -220,6 +221,25 @@ function fetchSDQOverview(roomString) {
   });
 
   return { success: true, data: Array.from(latestMap.values()) };
+}
+
+/** 🛡️ 8.5 ดึงประวัติการเข้าแถวของทั้งห้อง (ใช้ตรวจสอบว่าวันนี้มีครูท่านอื่นเช็คไปหรือยัง) */
+function fetchRoomHistory(roomString) {
+  const studentResult = fetchStudentsByRoom(roomString);
+  if (!studentResult.success) return { success: false, data: [] };
+  
+  const studentIds = studentResult.data.map(s => s.id);
+  const sheet = getTargetSheet(ATTENDANCE_SHEET_NAME);
+  if (sheet.getLastRow() <= 1) return { success: true, data: [] };
+
+  const data = sheet.getDataRange().getDisplayValues();
+  
+  // กรองเอาเฉพาะประวัติการเช็คชื่อที่เป็นของนักเรียนในห้องนี้
+  const history = data.slice(1)
+    .filter(r => studentIds.includes(r[3])) // r[3] คือรหัสนักเรียน (Student_ID)
+    .reverse(); // เรียงจากล่าสุดไปเก่า
+
+  return { success: true, data: history };
 }
 
 /** 8. 🟢 สรุปข้อมูลการเช็คชื่อทั้งห้อง (รองรับระบบ Dynamic Days และ วันหยุด) */

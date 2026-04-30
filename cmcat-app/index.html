@@ -73,7 +73,52 @@
                 <button onclick="openSDQ()" class="bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-full font-bold shadow-md transition-all hover:scale-105">เริ่มทำแบบประเมิน SDQ</button>
             </div>
             
-            <h4 class="font-bold text-slate-700 mb-4 text-lg">📅 ประวัติการเช็คชื่อหน้าเสาธง</h4>
+<!-- 📊 กล่องสรุปสถิติการเข้าเรียน -->
+            <div class="bg-white p-5 md:p-6 rounded-3xl shadow-sm mb-6 border border-slate-100">
+                <h4 class="font-bold text-slate-700 mb-4 text-base md:text-lg border-b border-slate-50 pb-3 flex justify-between items-center">
+                    <span>📊 สรุปการเข้าร่วมกิจกรรมหน้าเสาธง</span>
+                    <span class="text-[10px] font-normal text-slate-400 bg-slate-100 px-2 py-1 rounded-lg">เกณฑ์ผ่าน 60%</span>
+                </h4>
+                
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-4">
+                    <div class="bg-slate-50 p-4 rounded-2xl text-center shadow-inner">
+                        <p class="text-xs font-bold text-slate-500 mb-1">กิจกรรมทั้งหมด</p>
+                        <p id="sum-total" class="text-2xl md:text-3xl font-bold text-slate-800">0</p>
+                        <p class="text-[10px] text-slate-400 mt-1">วัน</p>
+                    </div>
+                    <div class="bg-emerald-50 p-4 rounded-2xl text-center shadow-inner border border-emerald-100/50">
+                        <p class="text-xs font-bold text-emerald-600 mb-1">มา/สาย/ลา (นับ)</p>
+                        <p id="sum-active" class="text-2xl md:text-3xl font-bold text-emerald-700">0</p>
+                        <p class="text-[10px] text-emerald-500 mt-1">วัน</p>
+                    </div>
+                    <div class="bg-red-50 p-4 rounded-2xl text-center shadow-inner border border-red-100/50">
+                        <p class="text-xs font-bold text-red-600 mb-1">ขาด (ไม่นับ)</p>
+                        <p id="sum-absent" class="text-2xl md:text-3xl font-bold text-red-700">0</p>
+                        <p class="text-[10px] text-red-500 mt-1">วัน</p>
+                    </div>
+                    <div class="bg-blue-50 p-4 rounded-2xl text-center shadow-inner border border-blue-100/50">
+                        <p class="text-xs font-bold text-blue-600 mb-1">ร้อยละการเข้าร่วม</p>
+                        <p id="sum-percent" class="text-2xl md:text-3xl font-bold text-blue-700">0%</p>
+                        <p id="sum-eval" class="text-[10px] font-bold mt-1 text-slate-500">-</p>
+                    </div>
+                </div>
+                
+                <div class="flex flex-wrap gap-2 text-xs font-bold justify-center pt-2">
+                    <span class="bg-emerald-100/50 text-emerald-700 px-3 py-1.5 rounded-xl border border-emerald-100">มา: <span id="count-present">0</span></span>
+                    <span class="bg-orange-100/50 text-orange-700 px-3 py-1.5 rounded-xl border border-orange-100">สาย: <span id="count-late">0</span></span>
+                    <span class="bg-yellow-100/50 text-yellow-700 px-3 py-1.5 rounded-xl border border-yellow-100">ลา: <span id="count-leave">0</span></span>
+                </div>
+            </div>
+
+            <!-- 📊 สรุปรายเดือน -->
+            <h4 class="font-bold text-slate-700 mb-4 text-lg flex justify-between items-center">
+                <span>📅 สรุปการเข้าแถวรายเดือน</span>
+            </h4>
+            <div id="monthly-summary-list" class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+                <!-- ข้อมูลรายเดือนจะถูกแทรกตรงนี้ -->
+            </div>
+
+            <h4 class="font-bold text-slate-700 mb-4 text-lg">📝 ประวัติการเช็คชื่อรายวัน (ย้อนหลัง)</h4>
             <div id="history-list" class="space-y-3">
                 </div>
         </div>
@@ -172,7 +217,7 @@
         }
 
         // ==========================================
-        // 📊 ระบบดึงประวัติการเช็คชื่อ
+        // 📊 ระบบดึงประวัติการเช็คชื่อและคำนวณสถิติ
         // ==========================================
         async function loadHistory(studentId) {
             try {
@@ -186,19 +231,118 @@
                 
                 if(!result.data || result.data.length === 0) {
                     list.innerHTML = '<div class="text-center p-8 bg-white rounded-xl border border-dashed border-slate-300 text-slate-400">ยังไม่มีประวัติการเช็คชื่อ</div>';
-                } else {
-                    list.innerHTML = result.data.map(row => `
-                        <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex justify-between items-center hover:border-emerald-200 transition-colors">
-                            <div>
-                                <p class="font-bold text-slate-700">${new Date(row[0]).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                                <p class="text-xs text-slate-400 mt-1"><i class="fas fa-user-check"></i> ครูผู้เช็ค: ${row[2]}</p>
-                            </div>
-                            <span class="px-4 py-1.5 rounded-full text-sm font-bold ${row[5] === 'มา' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}">${row[5]}</span>
-                        </div>
-                    `).join('');
+                    return;
+                } 
+
+                // 🧮 1. คำนวณสถิติเข้าแถวทั้งหมด และจัดกลุ่มรายเดือน
+                let present = 0, late = 0, leave = 0, absent = 0;
+                let monthStats = {};
+
+                result.data.forEach(row => {
+                    const dateStr = row[1]; // รูปแบบ DD/MM/YYYY
+                    const status = row[5];
+                    
+                    // สถิติภาพรวม
+                    if(status === 'มา') present++;
+                    else if(status === 'สาย') late++;
+                    else if(status === 'ลา') leave++;
+                    else if(status === 'ขาด') absent++;
+
+                    // สถิติรายเดือน
+                    if(dateStr) {
+                        const parts = dateStr.split('/');
+                        if(parts.length === 3) {
+                            const mKey = `${parts[2]}-${parts[1]}`; // YYYY-MM เพื่อให้เรียงง่าย
+                            if(!monthStats[mKey]) monthStats[mKey] = { present: 0, late: 0, leave: 0, absent: 0 };
+                            
+                            if(status === 'มา') monthStats[mKey].present++;
+                            else if(status === 'สาย') monthStats[mKey].late++;
+                            else if(status === 'ลา') monthStats[mKey].leave++;
+                            else if(status === 'ขาด') monthStats[mKey].absent++;
+                        }
+                    }
+                });
+
+                const totalDays = present + late + leave + absent;
+                const activeDays = present + late + leave;
+                let percent = 0;
+                let evalText = '-';
+
+                if (totalDays > 0) {
+                    percent = Math.round((activeDays / totalDays) * 100);
+                    if (percent >= 60) evalText = '<span class="text-emerald-600 text-xs">✅ ผ่าน (ผ.)</span>';
+                    else evalText = '<span class="text-red-600 text-xs">❌ ไม่ผ่าน (ม.ผ.)</span>';
                 }
+
+                // 🔄 2. นำตัวเลขไปแสดงผลบน Dashboard UI ภาพรวม
+                document.getElementById('sum-total').innerText = totalDays;
+                document.getElementById('sum-active').innerText = activeDays;
+                document.getElementById('sum-absent').innerText = absent;
+                document.getElementById('sum-percent').innerText = percent + '%';
+                document.getElementById('sum-eval').innerHTML = evalText;
+                
+                document.getElementById('count-present').innerText = present;
+                document.getElementById('count-late').innerText = late;
+                document.getElementById('count-leave').innerText = leave;
+
+                // 📅 3. สร้าง UI สรุปรายเดือน
+                const monthContainer = document.getElementById('monthly-summary-list');
+                const sortedMonths = Object.keys(monthStats).sort((a,b) => b.localeCompare(a)); // ล่าสุดขึ้นก่อน
+                
+                if(sortedMonths.length === 0) {
+                    monthContainer.innerHTML = '<div class="col-span-1 sm:col-span-2 text-center p-4 bg-white rounded-xl border border-dashed border-slate-300 text-slate-400">ยังไม่มีข้อมูลรายเดือน</div>';
+                } else {
+                    monthContainer.innerHTML = sortedMonths.map(mKey => {
+                        const stats = monthStats[mKey];
+                        const mTotal = stats.present + stats.late + stats.leave + stats.absent;
+                        const mActive = stats.present + stats.late + stats.leave;
+                        const mPct = mTotal > 0 ? Math.round((mActive / mTotal) * 100) : 0;
+                        
+                        const [year, month] = mKey.split('-');
+                        const monthName = new Date(year, parseInt(month)-1, 1).toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
+                        
+                        return `
+                        <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow">
+                            <div class="flex justify-between items-center border-b border-slate-50 pb-2 mb-3">
+                                <span class="font-bold text-slate-700">${monthName}</span>
+                                <span class="font-bold ${mPct >= 60 ? 'text-emerald-600 bg-emerald-50' : 'text-red-600 bg-red-50'} px-2 py-1 rounded-lg text-[10px]">${mPct}%</span>
+                            </div>
+                            <div class="grid grid-cols-4 gap-2 text-center text-xs">
+                                <div class="bg-emerald-50/50 rounded-xl p-2 border border-emerald-100"><div class="font-bold text-emerald-600">${stats.present}</div><div class="text-slate-400 text-[9px]">มา</div></div>
+                                <div class="bg-orange-50/50 rounded-xl p-2 border border-orange-100"><div class="font-bold text-orange-600">${stats.late}</div><div class="text-slate-400 text-[9px]">สาย</div></div>
+                                <div class="bg-yellow-50/50 rounded-xl p-2 border border-yellow-100"><div class="font-bold text-yellow-600">${stats.leave}</div><div class="text-slate-400 text-[9px]">ลา</div></div>
+                                <div class="bg-red-50/50 rounded-xl p-2 border border-red-100"><div class="font-bold text-red-600">${stats.absent}</div><div class="text-slate-400 text-[9px]">ขาด</div></div>
+                            </div>
+                        </div>
+                        `;
+                    }).join('');
+                }
+
+                // 📝 4. แสดงประวัติรายวันแบบเรียงจากล่าสุดไปเก่าสุด (Reverse Order)
+                const sortedData = [...result.data].reverse();
+                list.innerHTML = sortedData.map(row => {
+                    let badgeClass = 'bg-slate-100 text-slate-700';
+                    if(row[5] === 'มา') badgeClass = 'bg-emerald-100 text-emerald-700 border border-emerald-200';
+                    else if(row[5] === 'สาย') badgeClass = 'bg-orange-100 text-orange-700 border border-orange-200';
+                    else if(row[5] === 'ลา') badgeClass = 'bg-yellow-100 text-yellow-700 border border-yellow-200';
+                    else if(row[5] === 'ขาด') badgeClass = 'bg-red-100 text-red-700 border border-red-200';
+                    
+                    return `
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center hover:border-emerald-300 transition-colors">
+                        <div>
+                            <p class="font-bold text-slate-700 text-sm md:text-base">${row[1]} <span class="text-[10px] font-normal text-slate-400 bg-slate-50 px-2 py-0.5 rounded-lg ml-1">เวลา ${new Date(row[0]).toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'})} น.</span></p>
+                            <p class="text-[10px] md:text-xs text-slate-500 mt-1 flex items-center gap-1">
+                                <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                                ครูผู้บันทึก: ${row[2]}
+                            </p>
+                        </div>
+                        <span class="px-4 py-1.5 rounded-xl text-xs md:text-sm font-bold shadow-sm ${badgeClass}">${row[5]}</span>
+                    </div>
+                `}).join('');
+                
             } catch (err) {
                 console.error("โหลดประวัติไม่ได้", err);
+                document.getElementById('history-list').innerHTML = '<div class="text-center p-8 bg-white rounded-xl border border-dashed border-red-300 text-red-500 font-bold shadow-sm">❌ ไม่สามารถดึงข้อมูลได้ในขณะนี้</div>';
             }
         }
 

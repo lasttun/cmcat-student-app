@@ -368,13 +368,19 @@
             // เก็บข้อมูลส่วนกลางและดึงเดือนที่มีการเช็คชื่อออกมา
             globalAttendanceData = results.map(r => r.success ? r.data : []);
             
+            // สร้าง Set ของเดือนโดยแกะจาก String ตรงๆ ป้องกัน JS อ่านวันที่สลับ (DD/MM/YYYY)
             const monthSet = new Set();
             globalAttendanceData.forEach(studentHistory => {
                 studentHistory.forEach(record => {
-                    const dateObj = new Date(record[0]);
-                    if(!isNaN(dateObj)) {
-                        const monthKey = dateObj.getFullYear() + "-" + String(dateObj.getMonth() + 1).padStart(2, '0');
-                        monthSet.add(monthKey);
+                    // record[1] คือคอลัมน์ Date_TH (เช่น 29/04/2026) ใน Google Sheets
+                    const dateStr = record[1]; 
+                    if(dateStr) {
+                        const parts = dateStr.split('/');
+                        if(parts.length === 3) {
+                            // สร้าง Key เป็น YYYY-MM เพื่อให้เรียงลำดับได้ถูกต้อง
+                            const monthKey = `${parts[2]}-${parts[1]}`;
+                            monthSet.add(monthKey);
+                        }
                     }
                 });
             });
@@ -385,7 +391,8 @@
             
             Array.from(monthSet).sort().forEach(m => {
                 const [year, month] = m.split('-');
-                const monthName = new Date(year, month-1).toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
+                // ใช้ Date object เฉพาะเพื่อแปลงชื่อเดือนเป็นภาษาไทย
+                const monthName = new Date(year, parseInt(month)-1, 1).toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
                 monthSelect.innerHTML += `<option value="${m}">${monthName}</option>`;
             });
             
@@ -424,11 +431,14 @@
             let historyData = globalAttendanceData[i] || [];
             
             // กรองข้อมูลตามเดือนที่เลือก
+            // กรองข้อมูลตามเดือนที่เลือก (แกะ String เหมือนข้างบน)
             if (selectedMonth !== 'all') {
                 historyData = historyData.filter(record => {
-                    const dateObj = new Date(record[0]);
-                    if(isNaN(dateObj)) return false;
-                    const monthKey = dateObj.getFullYear() + "-" + String(dateObj.getMonth() + 1).padStart(2, '0');
+                    const dateStr = record[1];
+                    if(!dateStr) return false;
+                    const parts = dateStr.split('/');
+                    if(parts.length !== 3) return false;
+                    const monthKey = `${parts[2]}-${parts[1]}`;
                     return monthKey === selectedMonth;
                 });
             }

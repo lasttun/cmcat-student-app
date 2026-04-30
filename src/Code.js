@@ -222,39 +222,68 @@ function fetchSDQOverview(roomString) {
   return { success: true, data: Array.from(latestMap.values()) };
 }
 
-/** 8. 🟢 ใหม่: สรุปข้อมูลการเช็คชื่อทั้งห้องเพื่อทำระบบ Calendar */
+/** 8. 🟢 สรุปข้อมูลการเช็คชื่อทั้งห้อง (รองรับระบบ Dynamic Days และ วันหยุด) */
 function fetchRoomAttendanceCalendar(roomString) {
   const sheet = getTargetSheet(ATTENDANCE_SHEET_NAME);
-  if (sheet.getLastRow() <= 1) return { success: true, data: {} };
+  if (sheet.getLastRow() <= 1) return { success: true, data: { students: {}, classActiveDays: {} } };
 
   const data = sheet.getDataRange().getDisplayValues();
   data.shift(); // ลบหัวตาราง
 
-  // หากรองรายชื่อเด็กในห้องก่อน เพื่อป้องกันการดึงข้อมูลเด็กห้องอื่นมาปน
   const studentResult = fetchStudentsByRoom(roomString);
   if (!studentResult.success) return studentResult;
   const studentIds = studentResult.data.map(s => s.id);
 
-  // รูปแบบข้อมูลที่ส่งกลับ: { "29/04/2569": { "มา": 38, "สาย": 2, "ลา": 0, "ขาด": 0, "total": 40 } }
-  const calendarData = {};
+  // 1. สร้างโครงสร้างเก็บข้อมูลนักเรียน { "6630001": { "2026-04": { "มา":10, "สาย":2, ...} } }
+  // และโครงสร้างเก็บ "วันที่มีการเช็คชื่อจริงของห้องนี้" { "2026-04": Set(วันที่) }
+  const studentStats = {};
+  const activeDaysPerMonth = {};
+
+  // เตรียมโครงสร้างเริ่มต้นให้นักเรียนทุกคน
+  studentIds.forEach(id => {
+    studentStats[id] = {};
+  });
 
   data.forEach(r => {
-    const dateKey = r[1]; // คอลัมน์ Date_TH
+    const dateStr = r[1]; // คอลัมน์ Date_TH (DD/MM/YYYY)
     const sId = r[3];
     const status = r[5];
 
     if (studentIds.includes(sId)) {
-      if (!calendarData[dateKey]) {
-        calendarData[dateKey] = { 'มา': 0, 'สาย': 0, 'ลา': 0, 'ขาด': 0, 'total': 0 };
+      // แปลง DD/MM/YYYY เป็น YYYY-MM เพื่อใช้เป็น Key ของเดือน
+      const parts = dateStr.split('/');
+      if(parts.length === 3) {
+        const monthKey = `${parts[2]}-${parts[1]}`; // YYYY-MM
+        
+        // ก. เก็บสถิติวันที่เช็คชื่อจริงของห้อง (Dynamic Denominator)
+        if (!activeDaysPerMonth[monthKey]) activeDaysPerMonth[monthKey] = new Set();
+        activeDaysPerMonth[monthKey].add(dateStr); // Set จะไม่เก็บวันที่ซ้ำกัน
+
+        // ข. เก็บสถิติของเด็กแต่ละคน
+        if (!studentStats[sId][monthKey]) {
+          studentStats[sId][monthKey] = { 'มา': 0, 'สาย': 0, 'ลา': 0, 'ขาด': 0 };
+        }
+        if (studentStats[sId][monthKey][status] !== undefined) {
+          studentStats[sId][monthKey][status]++;
+        }
       }
-      if (calendarData[dateKey][status] !== undefined) {
-        calendarData[dateKey][status]++;
-      }
-      calendarData[dateKey]['total']++;
     }
   });
 
-  return { success: true, data: calendarData };
+  // 2. แปลง Set ให้เป็นจำนวนวันรวมที่แท้จริงของแต่ละเดือน
+  const finalClassDays = {};
+  for (let month in activeDaysPerMonth) {
+    finalClassDays[month] = activeDaysPerMonth[month].size;
+  }
+
+  // ส่งข้อมูลกลับไปให้ Frontend
+  return { 
+    success: true, 
+    data: {
+      students: studentStats,
+      classActiveDays: finalClassDays // วันที่เป็นฐานในการคำนวณร้อยละ
+    }
+  };
 }
 
 // ==========================================

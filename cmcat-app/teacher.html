@@ -315,12 +315,20 @@
             <tr class="hover:bg-slate-50/50 transition-colors group">
                 <td class="p-5 text-center font-bold text-slate-300 text-sm">${i+1}</td>
                 <td class="p-5"><div class="flex flex-col"><span class="font-bold text-slate-800 text-base">${s.name}</span><span class="text-xs text-slate-400 font-mono">ID: ${s.id}</span></div></td>
-                <td class="p-5">
-                    <div class="flex justify-center gap-1 bg-slate-100 p-1.5 rounded-2xl w-fit mx-auto shadow-inner">
-                        ${['มา', 'สาย', 'ลา', 'ขาด'].map(st => `
-                            <label class="cursor-pointer">
-                                <input type="radio" name="att_${s.id}" value="${st}" ${st === 'มา' ? 'checked' : ''} onchange="updateAttendance(${i}, '${st}')" class="hidden peer">
-                                <div class="px-3 md:px-4 py-1.5 rounded-xl text-xs font-bold text-slate-400 peer-checked:bg-white peer-checked:text-emerald-700 peer-checked:shadow-sm transition-all hover:text-slate-600">${st}</div>
+                <td class="p-3 md:p-5">
+                    <div class="flex flex-nowrap justify-center gap-1.5 bg-slate-100/80 p-1.5 md:p-2 rounded-2xl w-full max-w-[280px] mx-auto shadow-inner">
+                        ${[
+                            { val: 'มา', icon: '✅', color: 'peer-checked:bg-emerald-500 peer-checked:shadow-emerald-300/50' },
+                            { val: 'สาย', icon: '⏰', color: 'peer-checked:bg-orange-500 peer-checked:shadow-orange-300/50' },
+                            { val: 'ลา', icon: '📝', color: 'peer-checked:bg-yellow-500 peer-checked:shadow-yellow-300/50' },
+                            { val: 'ขาด', icon: '❌', color: 'peer-checked:bg-red-500 peer-checked:shadow-red-300/50' }
+                        ].map(opt => `
+                            <label class="cursor-pointer flex-1">
+                                <input type="radio" name="att_${s.id}" value="${opt.val}" ${opt.val === 'มา' ? 'checked' : ''} onchange="updateAttendance(${i}, '${opt.val}')" class="hidden peer">
+                                <div class="py-2 md:py-2.5 rounded-xl text-[11px] md:text-sm font-bold text-slate-500 bg-white border border-slate-200 peer-checked:border-transparent peer-checked:text-white shadow-sm shadow-slate-200 ${opt.color} transition-all duration-300 hover:-translate-y-1 active:scale-95 text-center flex flex-col xl:flex-row items-center justify-center gap-1">
+                                    <span class="text-sm md:text-base leading-none">${opt.icon}</span>
+                                    <span class="leading-none">${opt.val}</span>
+                                </div>
                             </label>
                         `).join('')}
                     </div>
@@ -391,6 +399,20 @@
         } catch (err) { content.innerHTML = '<div class="p-8 text-center text-red-500 font-bold">❌ เกิดข้อผิดพลาดในการดึงข้อมูล</div>'; }
     }
 
+// 📅 ฟังก์ชันคำนวณเทอมและปีการศึกษาอัตโนมัติ (อ้างอิงตามปีปฏิทินการศึกษาไทย)
+    function getAcademicTermAndYear() {
+        const d = new Date();
+        const m = d.getMonth() + 1; // 1-12
+        let y = d.getFullYear() + 543; // เปลี่ยนเป็น พ.ศ.
+        let t = 1;
+        
+        if (m >= 1 && m <= 4) { t = 2; y -= 1; } // ม.ค.-เม.ย. นับเป็นเทอม 2 ของปีการศึกษาที่แล้ว
+        else if (m >= 5 && m <= 9) { t = 1; }    // พ.ค.-ก.ย. นับเป็นเทอม 1 ของปีการศึกษาปัจจุบัน
+        else { t = 2; }                          // ต.ค.-ธ.ค. นับเป็นเทอม 2 ของปีการศึกษาปัจจุบัน
+        
+        return `${t}/${y}`;
+    }
+
     function renderAttendanceReportTable() {
         const content = document.getElementById('att-report-content');
         const printArea = document.getElementById('print-master-container');
@@ -404,7 +426,11 @@
 
         const selectedMonth = monthSelect.value;
         const selectedMonthText = monthSelect.options[monthSelect.selectedIndex]?.text || '';
-        const reportTitle = typeSelect === 'term_summary' ? 'สรุปการเข้าแถวทั้งหมดประจำเทอม' : typeSelect === 'month_summary' ? `สรุปการเข้าแถวประจำเดือน ${selectedMonthText}` : `รายละเอียดการเข้าแถวรายวัน ประจำเดือน ${selectedMonthText}`;
+        const termYear = getAcademicTermAndYear(); // 🤖 ดึงค่าเทอมและปีการศึกษาอัตโนมัติ
+        
+        let reportTitle = typeSelect === 'term_summary' ? `สรุปการเข้าแถวทั้งหมดประจำภาคเรียนที่ ${termYear}` :
+                          typeSelect === 'month_summary' ? `สรุปการเข้าแถวประจำเดือน ${selectedMonthText}` :
+                          `รายละเอียดการเข้าแถวรายวัน ประจำเดือน ${selectedMonthText}`;
 
         let activeDates = new Set(); let allMonthsInTerm = new Set();
         globalAttendanceData.forEach(history => {

@@ -107,30 +107,18 @@
             </div>
         </div>
         
-        <div id="already-checked-alert" class="hidden mb-6 bg-amber-50 border border-amber-200 p-4 md:p-5 rounded-2xl shadow-sm flex items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4">
+        <!-- 🚨 ป้ายเตือนกรณีเช็คชื่อไปแล้ว -->
+        <div id="already-checked-alert" class="hidden mb-6 bg-orange-50 border border-orange-200 p-4 md:p-5 rounded-2xl shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4">
             <div class="flex items-start md:items-center gap-3 md:gap-4">
-                <div class="bg-amber-100 p-2 rounded-full text-amber-600 shrink-0">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                <div class="bg-orange-100 p-2 rounded-full text-orange-600 shrink-0">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                 </div>
                 <div>
-                    <h3 class="font-bold text-amber-800 text-sm md:text-base">มีการเช็คชื่อห้องนี้ไปแล้วสำหรับวันนี้!</h3>
-                    <p id="checked-by-name" class="text-xs md:text-sm text-amber-700 mt-0.5">โดยครู: -</p>
+                    <h3 class="font-bold text-orange-800 text-sm md:text-base">ข้อมูลการเช็คชื่อวันนี้ถูกบันทึกไปแล้ว!</h3>
+                    <p id="checked-by-name" class="text-xs md:text-sm text-orange-700 mt-0.5">โดยครู: -</p>
                 </div>
             </div>
-            <div class="text-xs text-amber-600 font-medium bg-white px-3 py-1.5 rounded-lg border border-amber-200 shrink-0">ปุ่มบันทึกถูกระงับชั่วคราว</div>
-        </div>
-
-<div id="already-checked-alert" class="hidden mb-6 bg-amber-50 border border-amber-200 p-4 md:p-5 rounded-2xl shadow-sm flex items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4">
-            <div class="flex items-start md:items-center gap-3 md:gap-4">
-                <div class="bg-amber-100 p-2 rounded-full text-amber-600 shrink-0">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-                </div>
-                <div>
-                    <h3 class="font-bold text-amber-800 text-sm md:text-base">มีการเช็คชื่อห้องนี้ไปแล้วสำหรับวันนี้!</h3>
-                    <p id="checked-by-name" class="text-xs md:text-sm text-amber-700 mt-0.5">โดยครู: -</p>
-                </div>
-            </div>
-            <div class="text-xs text-amber-600 font-medium bg-white px-3 py-1.5 rounded-lg border border-amber-200 shrink-0">ปุ่มบันทึกถูกระงับชั่วคราว</div>
+            <div class="text-xs text-orange-700 font-medium bg-white px-3 py-1.5 rounded-lg border border-orange-200 shrink-0 shadow-sm">คุณสามารถกดบันทึกเพื่อ "อัปเดต/แก้ไข" ได้</div>
         </div>
 
         <div id="students-container">
@@ -314,10 +302,16 @@
                 if(dataHist.success) historyData = dataHist.data;
             } catch(e) { console.warn("API getRoomHistory อาจยังไม่มีในฝั่ง Backend"); }
 
+            // 🛠️ แก้ไข: สร้างวันที่รูปแบบ "DD/MM/YYYY" (ค.ศ.) ให้ตรงกับระบบหลังบ้าน
+            const todayDate = new Date();
+            const dd = String(todayDate.getDate()).padStart(2, '0');
+            const mm = String(todayDate.getMonth() + 1).padStart(2, '0');
+            const yyyy = todayDate.getFullYear(); 
+            const todayStr = `${dd}/${mm}/${yyyy}`; // ตัวอย่างผลลัพธ์: 30/04/2026
+
             // เช็คว่า วันนี้ (Today) มีประวัติการเช็คชื่อของห้องนี้ไหม
-            const todayStr = new Date().toLocaleDateString('th-TH');
             const todayRecord = historyData.find(record => {
-                // สมมติว่า record[1] คือคอลัมน์ "วันที่" แบบ DD/MM/YYYY
+                // คอลัมน์ Date_TH (Index 1 จาก Database)
                 return record[1] === todayStr;
             });
 
@@ -435,9 +429,9 @@ function renderTable(students, sdqMap) {
         html += `</tbody></table></div>
         <div class="mt-10 flex flex-col sm:flex-row justify-center gap-4">
             ${isAlreadyCheckedToday 
-            ? `<button disabled class="bg-slate-200 text-slate-400 font-bold py-4 px-10 rounded-2xl flex items-center justify-center gap-3 text-base md:text-lg w-full sm:w-auto cursor-not-allowed border border-slate-300">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
-                วันนี้มีการบันทึกไปแล้ว
+            ? `<button onclick="submitAttendance()" id="btn-save-att" class="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold py-4 px-10 rounded-2xl shadow-lg shadow-orange-200 hover:-translate-y-1 transition-all duration-300 flex items-center justify-center gap-3 text-base md:text-lg w-full sm:w-auto border border-orange-400/50">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                อัปเดตข้อมูล (บันทึกทับ)
                </button>`
             : `<button onclick="submitAttendance()" id="btn-save-att" class="bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-700 hover:to-teal-600 text-white font-bold py-4 px-10 rounded-2xl shadow-lg shadow-emerald-200 hover:-translate-y-1 transition-all duration-300 flex items-center justify-center gap-3 text-base md:text-lg w-full sm:w-auto border border-emerald-400/50">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>

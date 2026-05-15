@@ -410,21 +410,25 @@ function getExecutiveSummary(payload) {
   try {
     const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
     
-    // 1. ดึงข้อมูลนักเรียนทั้งหมด เพื่อหาว่ามีห้องไหนบ้าง และเด็กกี่คน
+    // 1. ดึงข้อมูลนักเรียนทั้งหมด และสร้าง Map รหัสนักเรียน -> ห้องเรียน
     const sSheet = ss.getSheetByName(CONFIG.SHEETS.STUDENTS);
-    const sData = sSheet.getDataRange().getValues();
+    const sData = sSheet.getDataRange().getDisplayValues(); // 🟢 ใช้ getDisplayValues
     sData.shift(); // ตัดหัวตารางทิ้ง
     
     let totalStudents = sData.length;
     let roomList = new Set();
+    let studentRoomMap = {}; // 🧠 สมองกลจำว่าเด็กคนไหนอยู่ห้องไหน
+
     sData.forEach(r => {
-      const roomName = `${r[3]} ${r[4]}/${r[5]}`; // สมมติว่า ปวช. 1/1
-      roomList.add(roomName);
+      const stuId = r[0].toString().trim();
+      const roomName = `${r[3]} ${r[4]}/${r[5]}`.trim(); 
+      if(roomName) roomList.add(roomName);
+      studentRoomMap[stuId] = roomName; // บันทึกว่ารหัสนี้อยู่ห้องอะไร
     });
 
     // 2. ดึงประวัติการเข้าแถว "เฉพาะวันนี้"
     const attSheet = getTargetSheet(ATTENDANCE_SHEET_NAME);
-    const attData = attSheet.getDataRange().getValues();
+    const attData = attSheet.getDataRange().getDisplayValues(); // 🟢 ใช้ getDisplayValues
     attData.shift();
 
     const now = new Date();
@@ -432,11 +436,14 @@ function getExecutiveSummary(payload) {
     
     let attStats = { present: 0, late: 0, leave: 0, absent: 0, totalChecked: 0 };
     let roomCheckedList = new Set();
-    let roomWatchlist = {}; // เก็บสถิติรายห้องเพื่อดูว่าห้องไหนขาดเยอะ
 
     attData.forEach(r => {
-      if (r[1] === todayStr) { // ดูแค่วันนี้
-        const status = r[5];
+      const recordDate = r[1] ? r[1].toString().trim() : "";
+      
+      if (recordDate === todayStr) { // 🟢 ดูแค่วันนี้ (ข้อความเทียบข้อความ)
+        const stuId = r[3] ? r[3].toString().trim() : "";
+        const status = r[5] ? r[5].toString().trim() : "";
+        
         if (status === 'มา') attStats.present++;
         else if (status === 'สาย') attStats.late++;
         else if (status === 'ลา') attStats.leave++;
@@ -444,22 +451,28 @@ function getExecutiveSummary(payload) {
         
         attStats.totalChecked++;
         
-        // เราไม่มีคอลัมน์ห้องในหน้าเช็คชื่อ เลยต้องไปเทียบเอา แต่เพื่อความรวดเร็ว สมมติว่าเรารวมห้องที่เช็คแล้วจากครู
-        if(r[2]) roomCheckedList.add(r[2]); // ใช้ชื่อครูเป็นตัวแทนว่าครูคนนี้เช็คแล้ว
+        // 🎯 ดึงชื่อห้องจากรหัสนักเรียน เพื่อเช็คว่า "ห้องนี้ส่งยอดแล้ว"
+        const roomName = studentRoomMap[stuId];
+        if(roomName) {
+            roomCheckedList.add(roomName); 
+        }
       }
     });
 
     // 3. ดึงผลประเมิน SDQ ภาพรวม
     const sdqSheet = getTargetSheet(CONFIG.SHEETS.SDQ);
-    const sdqData = sdqSheet.getDataRange().getValues();
+    const sdqData = sdqSheet.getDataRange().getDisplayValues(); // 🟢 ใช้ getDisplayValues
     sdqData.shift();
 
     let sdqStats = { normal: 0, risk: 0, problem: 0 };
-    let latestSdqMap = {}; // หาผลล่าสุดของเด็กแต่ละคน
+    let latestSdqMap = {}; 
     
     sdqData.forEach(r => {
-      const stuId = r[2];
-      latestSdqMap[stuId] = r[5]; // status (ปกติ, เสี่ยง, มีปัญหา)
+      const stuId = r[2] ? r[2].toString().trim() : "";
+      const status = r[5] ? r[5].toString().trim() : "";
+      if(stuId && status) {
+        latestSdqMap[stuId] = status; // ดึงสถานะล่าสุด (ปกติ, เสี่ยง, มีปัญหา)
+      }
     });
 
     Object.values(latestSdqMap).forEach(status => {

@@ -194,10 +194,18 @@
                         showPage('dash-page');
                         loadHistory(studentId);
                     } 
+                    else if (data.role === 'admin') {
+                        Swal.fire({
+                            icon: 'success', title: 'ยินดีต้อนรับผู้บริหาร', text: `เข้าสู่ระบบในชื่อ: ${data.user.name}`,
+                            timer: 1500, showConfirmButton: false
+                        }).then(() => {
+                            window.location.href = "admin.html"; 
+                        });
+                    }
                     else if (data.role === 'teacher') {
                         Swal.fire({
                             icon: 'success', title: 'สวัสดีครับคุณครู', text: `เข้าสู่ระบบในชื่อ: ${data.user.name}`,
-                            timer: 2000, showConfirmButton: false
+                            timer: 1500, showConfirmButton: false
                         }).then(() => {
                             window.location.href = "teacher.html"; 
                         });

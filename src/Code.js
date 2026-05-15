@@ -64,7 +64,8 @@ function doPost(e) {
       case 'getHistory': return output(fetchStudentAttendanceHistory(payload.studentId));
       case 'getStudentDeepData': return output(fetchIndividualDeepSDQ(payload.studentId));
       case 'getRoomCalendar': return output(fetchRoomAttendanceCalendar(payload.roomString)); // 🟢 ใหม่: ระบบปฏิทิน
-      case 'getRoomHistory': return output(fetchRoomHistory(payload.roomString)); // 🛡️ เพิ่มใหม่: ดึงประวัติทั้งห้องเพื่อกันครูเช็คชื่อซ้ำ
+      case 'getRoomHistory': return output(fetchRoomHistory(payload.roomString)); // 🛡️ ดึงประวัติทั้งห้องเพื่อกันครูเช็คชื่อซ้ำ
+      case 'getExecutiveSummary': return output(getExecutiveSummary(payload)); // 📊 ใหม่: ระบบสรุปผลสำหรับผู้บริหาร
       default:
         return output({ success: false, message: `Action [${action}] is not implemented.` });
     }
@@ -370,20 +371,23 @@ function handleLogin(payload) {
     }
   }
 
-  // --- 2. ตรวจสอบในฐานข้อมูลครู (Teachers) ---
+// --- 2. ตรวจสอบในฐานข้อมูลครู (Teachers) ---
   const tSheet = ss.getSheetByName(CONFIG.SHEETS.TEACHERS);
   if (tSheet) {
     const tData = tSheet.getDataRange().getValues();
     const teacher = tData.find(r => r[0].toString().trim() === inputID && r[3].toString().trim() === inputPass);
     
     if (teacher) {
-      // คอลัมน์ที่ 6 (Index 5) คือรายการห้อง
+      // 1. จัดการรายการห้องที่ปรึกษา (คอลัมน์ F / Index 5)
       const rawRooms = teacher[5] ? teacher[5].toString() : "";
       const rooms = rawRooms.split(',').map(r => r.trim()).filter(r => r);
       
+      // 2. ตรวจสอบสิทธิ์จากระบบ (คอลัมน์ G / Index 6) ถ้าไม่ระบุให้เป็น teacher
+      const systemRole = teacher[6] ? teacher[6].toString().toLowerCase().trim() : "teacher";
+      
       return {
         success: true,
-        role: 'teacher',
+        role: systemRole, // ส่งค่า admin หรือ teacher กลับไปให้ Frontend
         user: { 
           id: teacher[0].toString(), 
           name: teacher[1], 
@@ -395,4 +399,88 @@ function handleLogin(payload) {
   }
 
   return { success: false, message: "รหัสประจำตัวหรือรหัสผ่านไม่ถูกต้อง" };
+}
+
+// ==========================================
+// 📊 EXECUTIVE DASHBOARD API (สำหรับผู้บริหาร)
+// ==========================================
+
+/** ดึงข้อมูลสรุปภาพรวมสำหรับผู้บริหาร */
+function getExecutiveSummary(payload) {
+  try {
+    const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
+    
+    // 1. ดึงข้อมูลนักเรียนทั้งหมด เพื่อหาว่ามีห้องไหนบ้าง และเด็กกี่คน
+    const sSheet = ss.getSheetByName(CONFIG.SHEETS.STUDENTS);
+    const sData = sSheet.getDataRange().getValues();
+    sData.shift(); // ตัดหัวตารางทิ้ง
+    
+    let totalStudents = sData.length;
+    let roomList = new Set();
+    sData.forEach(r => {
+      const roomName = `${r[3]} ${r[4]}/${r[5]}`; // สมมติว่า ปวช. 1/1
+      roomList.add(roomName);
+    });
+
+    // 2. ดึงประวัติการเข้าแถว "เฉพาะวันนี้"
+    const attSheet = getTargetSheet(ATTENDANCE_SHEET_NAME);
+    const attData = attSheet.getDataRange().getValues();
+    attData.shift();
+
+    const now = new Date();
+    const todayStr = Utilities.formatDate(now, CONFIG.TIMEZONE, "dd/MM/yyyy");
+    
+    let attStats = { present: 0, late: 0, leave: 0, absent: 0, totalChecked: 0 };
+    let roomCheckedList = new Set();
+    let roomWatchlist = {}; // เก็บสถิติรายห้องเพื่อดูว่าห้องไหนขาดเยอะ
+
+    attData.forEach(r => {
+      if (r[1] === todayStr) { // ดูแค่วันนี้
+        const status = r[5];
+        if (status === 'มา') attStats.present++;
+        else if (status === 'สาย') attStats.late++;
+        else if (status === 'ลา') attStats.leave++;
+        else if (status === 'ขาด') attStats.absent++;
+        
+        attStats.totalChecked++;
+        
+        // เราไม่มีคอลัมน์ห้องในหน้าเช็คชื่อ เลยต้องไปเทียบเอา แต่เพื่อความรวดเร็ว สมมติว่าเรารวมห้องที่เช็คแล้วจากครู
+        if(r[2]) roomCheckedList.add(r[2]); // ใช้ชื่อครูเป็นตัวแทนว่าครูคนนี้เช็คแล้ว
+      }
+    });
+
+    // 3. ดึงผลประเมิน SDQ ภาพรวม
+    const sdqSheet = getTargetSheet(CONFIG.SHEETS.SDQ);
+    const sdqData = sdqSheet.getDataRange().getValues();
+    sdqData.shift();
+
+    let sdqStats = { normal: 0, risk: 0, problem: 0 };
+    let latestSdqMap = {}; // หาผลล่าสุดของเด็กแต่ละคน
+    
+    sdqData.forEach(r => {
+      const stuId = r[2];
+      latestSdqMap[stuId] = r[5]; // status (ปกติ, เสี่ยง, มีปัญหา)
+    });
+
+    Object.values(latestSdqMap).forEach(status => {
+      if (status === 'ปกติ') sdqStats.normal++;
+      else if (status === 'เสี่ยง') sdqStats.risk++;
+      else if (status === 'มีปัญหา') sdqStats.problem++;
+    });
+
+    return {
+      success: true,
+      data: {
+        todayDate: todayStr,
+        totalStudents: totalStudents,
+        totalRooms: roomList.size,
+        checkedRoomsCount: roomCheckedList.size,
+        attendance: attStats,
+        sdq: sdqStats
+      }
+    };
+
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
 }

@@ -375,16 +375,25 @@
 
 function renderTable(students, sdqMap) {
         let html = `
-        <div class="bg-white/90 backdrop-blur-sm rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden border border-slate-200/60 overflow-x-auto custom-scrollbar">
+        <div class="bg-white/90 backdrop-blur-sm rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden border border-slate-200/60">
+            <div class="bg-white/50 p-3 md:p-4 flex flex-col sm:flex-row justify-between items-center gap-3 border-b border-slate-200/60">
+                <span class="font-bold text-slate-700 text-sm flex items-center gap-2"><span class="text-xl">⚡</span> กำหนดสถานะทุกคนเป็น:</span>
+                <div class="flex gap-2 w-full sm:w-auto">
+                    <button onclick="setAllAttendance('มา')" class="flex-1 sm:flex-none bg-emerald-100 text-emerald-700 px-4 py-2 rounded-xl text-xs font-bold hover:bg-emerald-200 transition-colors shadow-sm active:scale-95">✅ มาทุกคน</button>
+                    <button onclick="setAllAttendance('ขาด')" class="flex-1 sm:flex-none bg-red-100 text-red-700 px-4 py-2 rounded-xl text-xs font-bold hover:bg-red-200 transition-colors shadow-sm active:scale-95">❌ ขาดทุกคน</button>
+                </div>
+            </div>
+            
+            <div class="overflow-x-auto custom-scrollbar">
             <table class="w-full text-left border-collapse whitespace-nowrap min-w-max">
                 <thead>
                     <tr class="bg-slate-50/80 backdrop-blur-md text-slate-500 text-[11px] uppercase tracking-widest border-b border-slate-200/80">
-                        <th class="p-5 font-bold w-16 text-center">#</th>
-                        <th class="p-5 font-bold">ข้อมูลนักเรียน</th>
-                        <th class="p-5 font-bold text-center">บันทึกการเช็คชื่อ</th>
-                        <th class="p-5 font-bold text-center border-l border-slate-100">SDQ (นักเรียนทำ)</th>
-                        <th class="p-5 font-bold text-center">SDQ (ครูทำ)</th>
-                        <th class="p-5 font-bold text-center">การจัดการ</th>
+                        <th class="p-2 md:p-5 font-bold w-10 md:w-16 text-center">#</th>
+                        <th class="p-2 md:p-5 font-bold sticky left-0 bg-slate-50/90 backdrop-blur-md z-20 shadow-[2px_0_5px_rgba(0,0,0,0.05)]">ข้อมูลนักเรียน</th>
+                        <th class="p-2 md:p-5 font-bold text-center">บันทึกการเช็คชื่อ</th>
+                        <th class="p-2 md:p-5 font-bold text-center border-l border-slate-100">SDQ (นักเรียนทำ)</th>
+                        <th class="p-2 md:p-5 font-bold text-center">SDQ (ครูทำ)</th>
+                        <th class="p-2 md:p-5 font-bold text-center">การจัดการ</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-50">`;
@@ -401,10 +410,15 @@ function renderTable(students, sdqMap) {
             const sdq = sdqMap[s.id] || { student: null, teacher: null };
             html += `
             <tr class="hover:bg-slate-50/50 transition-colors group">
-                <td class="p-5 text-center font-bold text-slate-300 text-sm">${i+1}</td>
-                <td class="p-5"><div class="flex flex-col"><span class="font-bold text-slate-800 text-base">${s.name}</span><span class="text-xs text-slate-400 font-mono">ID: ${s.id}</span></div></td>
-                <td class="p-3 md:p-5">
-                    <div class="flex flex-nowrap justify-center gap-1.5 bg-slate-100/80 p-1.5 md:p-2 rounded-2xl w-full max-w-[280px] mx-auto shadow-inner">
+                <td class="p-2 md:p-5 text-center font-bold text-slate-300 text-xs md:text-sm">${i+1}</td>
+                <td class="p-2 md:p-5 sticky left-0 bg-white/90 backdrop-blur-md group-hover:bg-slate-50/90 z-10 shadow-[2px_0_5px_rgba(0,0,0,0.05)] transition-colors">
+                    <div class="flex flex-col pr-2">
+                        <span class="font-bold text-slate-800 text-sm md:text-base truncate max-w-[130px] md:max-w-[200px] lg:max-w-full">${s.name}</span>
+                        <span class="text-[9px] md:text-xs text-slate-400 font-mono">ID: ${s.id}</span>
+                    </div>
+                </td>
+                <td class="p-2 md:p-5">
+                    <div class="flex flex-nowrap justify-center gap-1 md:gap-1.5 bg-slate-100/80 p-1 md:p-2 rounded-2xl w-[220px] md:w-full md:max-w-[280px] mx-auto shadow-inner">
                         ${[
                             { val: 'มา', icon: '✅', color: 'peer-checked:bg-emerald-500 peer-checked:shadow-emerald-300/50' },
                             { val: 'สาย', icon: '⏰', color: 'peer-checked:bg-orange-500 peer-checked:shadow-orange-300/50' },
@@ -412,24 +426,24 @@ function renderTable(students, sdqMap) {
                             { val: 'ขาด', icon: '❌', color: 'peer-checked:bg-red-500 peer-checked:shadow-red-300/50' }
                         ].map(opt => `
                             <label class="cursor-pointer flex-1">
-                                <input type="radio" name="att_${s.id}" value="${opt.val}" ${opt.val === 'มา' ? 'checked' : ''} onchange="updateAttendance(${i}, '${opt.val}')" class="hidden peer">
-                                <div class="py-2 md:py-2.5 rounded-xl text-[11px] md:text-sm font-bold text-slate-500 bg-white border border-slate-200 peer-checked:border-transparent peer-checked:text-white shadow-sm shadow-slate-200 ${opt.color} transition-all duration-300 hover:-translate-y-1 active:scale-95 text-center flex flex-col xl:flex-row items-center justify-center gap-1">
-                                    <span class="text-sm md:text-base leading-none">${opt.icon}</span>
+                                <input type="radio" name="att_${s.id}" value="${opt.val}" ${s.status === opt.val ? 'checked' : ''} onchange="updateAttendance(${i}, '${opt.val}')" class="hidden peer">
+                                <div class="py-1.5 md:py-2.5 rounded-xl text-[10px] md:text-sm font-bold text-slate-500 bg-white border border-slate-200 peer-checked:border-transparent peer-checked:text-white shadow-sm shadow-slate-200 ${opt.color} transition-all duration-300 hover:-translate-y-0.5 active:scale-95 text-center flex flex-col xl:flex-row items-center justify-center gap-0.5 md:gap-1">
+                                    <span class="text-xs md:text-base leading-none">${opt.icon}</span>
                                     <span class="leading-none">${opt.val}</span>
                                 </div>
                             </label>
                         `).join('')}
                     </div>
                 </td>
-                <td class="p-5 text-center border-l border-slate-100">${getBadge(sdq.student)}</td>
-                <td class="p-5 text-center">${getBadge(sdq.teacher)}</td>
-                <td class="p-5 text-center">
-                    <button onclick="openDeepData('${s.id}', '${s.name}')" class="bg-white border border-slate-200 text-slate-600 hover:bg-emerald-700 hover:text-white hover:border-emerald-700 text-[10px] px-4 py-2 rounded-xl font-bold transition-all shadow-sm">เจาะลึก/ประเมิน</button>
+                <td class="p-2 md:p-5 text-center border-l border-slate-100">${getBadge(sdq.student)}</td>
+                <td class="p-2 md:p-5 text-center">${getBadge(sdq.teacher)}</td>
+                <td class="p-2 md:p-5 text-center">
+                    <button onclick="openDeepData('${s.id}', '${s.name}')" class="bg-white border border-slate-200 text-slate-600 hover:bg-emerald-700 hover:text-white hover:border-emerald-700 text-[10px] px-3 py-1.5 md:px-4 md:py-2 rounded-xl font-bold transition-all shadow-sm">ประเมิน</button>
                 </td>
             </tr>`;
         });
 
-        html += `</tbody></table></div>
+        html += `</tbody></table></div></div>
         <div class="mt-10 flex flex-col sm:flex-row justify-center gap-4">
             ${isAlreadyCheckedToday 
             ? `<button disabled class="bg-slate-200 text-slate-400 font-bold py-4 px-10 rounded-2xl flex items-center justify-center gap-3 text-base md:text-lg w-full sm:w-auto cursor-not-allowed border border-slate-300 transition-all duration-300">
@@ -449,7 +463,29 @@ function renderTable(students, sdqMap) {
         document.getElementById('students-container').innerHTML = html;
     }
 
+    // ฟังก์ชันอัปเดตสถานะรายบุคคล
     function updateAttendance(i, st) { currentStudentsData[i].status = st; }
+
+    // ⚡ ฟังก์ชันใหม่: อัปเดตสถานะทุกคนพร้อมกัน (Bulk Action) ลื่นไหลไม่กระตุก
+    function setAllAttendance(status) {
+        // 1. อัปเดต Data หลังบ้านทั้งหมด
+        currentStudentsData.forEach(s => s.status = status);
+        
+        // 2. อัปเดตหน้าจอ UI (Radio Buttons) ให้ติ๊กเปลี่ยนตามทันที
+        const radios = document.querySelectorAll(`input[type="radio"][value="${status}"]`);
+        radios.forEach(radio => {
+            radio.checked = true;
+        });
+        
+        // 3. โชว์การแจ้งเตือนสวยๆ มุมจอ
+        const Toast = Swal.mixin({
+            toast: true, position: 'top-end', showConfirmButton: false, timer: 1500, timerProgressBar: true
+        });
+        Toast.fire({
+            icon: 'success',
+            title: `เปลี่ยนสถานะทุกคนเป็น "${status}" เรียบร้อยแล้ว`
+        });
+    }
 
     async function submitAttendance() {
         const btn = document.getElementById('btn-save-att'); btn.disabled = true; btn.innerHTML = "กำลังบันทึก...";
@@ -819,7 +855,26 @@ function renderTable(students, sdqMap) {
         }
 
         try {
-            const res = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'saveSDQData', payload: { studentId: currentViewingStudent.id, studentName: currentViewingStudent.name, totalScore, status, scores: { emotional, conduct, hyper, peer, prosocial } }, evaluatorName: currentUser.name }) });
+            // ปรับโครงสร้างให้อยู่ภายใต้ key 'payload' ตามที่ Code.js ต้องการรับ
+            const payloadData = {
+                studentId: currentViewingStudent.id,
+                studentName: currentViewingStudent.name,
+                totalScore: totalScore,
+                status: status,
+                scores: { emotional, conduct, hyper, peer, prosocial }
+            };
+
+            const res = await fetch(API_URL, { 
+                method: 'POST', 
+                headers: { "Content-Type": "text/plain;charset=utf-8" }, 
+                body: JSON.stringify({ 
+                    action: 'saveSDQData', 
+                    payload: { 
+                        payload: payloadData, 
+                        evaluatorName: currentUser.name 
+                    } 
+                }) 
+            });
             const resJson = await res.json();
             if(resJson.success) { Swal.fire('สำเร็จ', 'บันทึกการประเมินของครูแล้ว', 'success'); openDeepData(currentViewingStudent.id, currentViewingStudent.name); loadStudents(); } 
             else throw new Error(resJson.message);

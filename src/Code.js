@@ -120,41 +120,74 @@ function fetchStudentsByRoom(roomString) {
   return { success: true, data: students };
 }
 
-/** 3. บันทึกการเช็คชื่อเข้าแถวหน้าเสาธง */
+/** 3. บันทึกการเช็คชื่อเข้าแถวหน้าเสาธง (Premium Lock Queue System) */
 function recordAttendance(payload) {
   const { records, teacherName } = payload;
   if (!records || !Array.isArray(records)) return { success: false, message: "Invalid records." };
 
-  const sheet = getTargetSheet(ATTENDANCE_SHEET_NAME);
-  if (sheet.getLastRow() === 0) {
-    sheet.appendRow(['Timestamp', 'Date_TH', 'Teacher', 'Student_ID', 'Name', 'Status']);
-  }
+  // 🛡️ เรียกใช้ระบบจัดคิว (Lock Service) ป้องกันการเขียนทับ
+  const lock = LockService.getScriptLock();
+  try {
+    // ให้คิวรอสูงสุด 30 วินาที ถ้ามีคนกำลังเขียนอยู่
+    lock.waitLock(30000); 
 
-  const now = new Date();
-  const dateStr = Utilities.formatDate(now, CONFIG.TIMEZONE, "dd/MM/yyyy");
-  const rows = records.map(r => [now, dateStr, teacherName, r.id.toString(), r.name, r.status]);
-  
-  sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, 6).setValues(rows);
-  return { success: true, count: rows.length };
+    const sheet = getTargetSheet(ATTENDANCE_SHEET_NAME);
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow(['Timestamp', 'Date_TH', 'Teacher', 'Student_ID', 'Name', 'Status']);
+    }
+
+    const now = new Date();
+    const dateStr = Utilities.formatDate(now, CONFIG.TIMEZONE, "dd/MM/yyyy");
+    const rows = records.map(r => [now, dateStr, teacherName, r.id.toString(), r.name, r.status]);
+    
+    // เขียนข้อมูลทีละก้อน (Bulk Insert)
+    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, 6).setValues(rows);
+    
+    // ⚡ บังคับให้ Google Sheets อัปเดตตารางเดี๋ยวนั้นทันที ก่อนจะปล่อยคิวให้คนต่อไป
+    SpreadsheetApp.flush(); 
+    
+    return { success: true, count: rows.length };
+
+  } catch (error) {
+    // ถ้าคิวเต็มจริงๆ หรือรอเกิน 30 วินาที จะแจ้งเตือนให้ผู้ใช้กดใหม่แทนที่จะปล่อยให้แอปค้าง
+    return { success: false, message: "ระบบกำลังมีผู้ใช้งานจำนวนมาก กรุณากดบันทึกอีกครั้งครับ" };
+  } finally {
+    // 🔓 ปลดล็อกคิวเสมอ ไม่ว่าระบบจะบันทึกสำเร็จหรือ Error ก็ตาม
+    lock.releaseLock();
+  }
 }
 
-/** 4. บันทึกผลประเมิน SDQ (ทั้งครูและนักเรียน) */
+/** 4. บันทึกผลประเมิน SDQ (Premium Lock Queue System) */
 function recordSDQ(payload) {
-  // รองรับการส่งข้อมูลแบบ { payload: {...}, evaluatorName: "..." }
-  const data = payload.payload || payload;
-  const evaluator = payload.evaluatorName || "Unknown";
-  
-  const sheet = getTargetSheet(CONFIG.SHEETS.SDQ);
-  if (sheet.getLastRow() === 0) {
-    sheet.appendRow(['Timestamp', 'Evaluator', 'Student_ID', 'Name', 'Total', 'Status', 'Emotional', 'Conduct', 'Hyper', 'Peer', 'Prosocial']);
-  }
+  // 🛡️ เรียกใช้ระบบจัดคิว (Lock Service)
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000); // รอคิวสูงสุด 30 วินาที
 
-  const s = data.scores || { emotional:0, conduct:0, hyper:0, peer:0, prosocial:0 };
-  sheet.appendRow([
-    new Date(), evaluator, data.studentId.toString(), data.studentName, 
-    data.totalScore, data.status, s.emotional, s.conduct, s.hyper, s.peer, s.prosocial
-  ]);
-  return { success: true };
+    const data = payload.payload || payload;
+    const evaluator = payload.evaluatorName || "Unknown";
+    
+    const sheet = getTargetSheet(CONFIG.SHEETS.SDQ);
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow(['Timestamp', 'Evaluator', 'Student_ID', 'Name', 'Total', 'Status', 'Emotional', 'Conduct', 'Hyper', 'Peer', 'Prosocial']);
+    }
+
+    const s = data.scores || { emotional:0, conduct:0, hyper:0, peer:0, prosocial:0 };
+    sheet.appendRow([
+      new Date(), evaluator, data.studentId.toString(), data.studentName, 
+      data.totalScore, data.status, s.emotional, s.conduct, s.hyper, s.peer, s.prosocial
+    ]);
+    
+    // ⚡ บังคับเขียนลง Sheets ให้เสร็จก่อนปล่อยคิว
+    SpreadsheetApp.flush();
+    return { success: true };
+
+  } catch (error) {
+    return { success: false, message: "ระบบกำลังมีผู้ใช้งานจำนวนมาก กรุณากดส่งอีกครั้งครับ" };
+  } finally {
+    // 🔓 ปลดล็อกคิว
+    lock.releaseLock();
+  }
 }
 
 /** 5. ดึงประวัติการเข้าแถวรายบุคคล */

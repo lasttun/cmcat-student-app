@@ -2,8 +2,18 @@
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <script>
+  // ==========================================
+  // ⚙️ GLOBAL STATE & UTILITIES
+  // ==========================================
+  let _cachedRooms = null;
+  let _currentStudent = {};
+  let _attendanceStudents = [];
+  let _isSubmitting = false;
+  let _currentTeacherName = 'ไม่ระบุ';
+
   function showLoader(status) {
-    document.getElementById('loader').style.display = status ? 'flex' : 'none';
+    const loader = document.getElementById('loader');
+    if (loader) loader.style.display = status ? 'flex' : 'none';
   }
 
   function backToMenu() {
@@ -11,34 +21,48 @@
     document.getElementById('module-container').style.display = 'none';
   }
 
-  // แคช rooms ไว้ใน memory — ป้องกันการเรียก Sheets API ซ้ำทุกครั้งที่เปิดโมดูล
-  let _cachedRooms = null;
+  function setCurrentTeacher(name) {
+    _currentTeacherName = name || 'ไม่ระบุ';
+  }
 
+  /**
+   * ดึงข้อมูลห้องเรียน (พร้อมระบบ Caching เพื่อลดการโหลดเซิร์ฟเวอร์)
+   */
   function getRooms(callback) {
     if (_cachedRooms) return callback(_cachedRooms);
+    
     showLoader(true);
-    google.script.run.withSuccessHandler(rooms => {
-      _cachedRooms = rooms;
-      callback(rooms);
-    }).getRoomData();
+    google.script.run
+      .withSuccessHandler(rooms => {
+        _cachedRooms = rooms;
+        callback(rooms);
+      })
+      .withFailureHandler(err => {
+        showLoader(false);
+        Swal.fire('ข้อผิดพลาด', 'ไม่สามารถโหลดข้อมูลห้องเรียนได้ กรุณารีเฟรชหน้าจอ', 'error');
+      })
+      .getRoomData();
   }
 
   function buildRoomOptions(rooms) {
     return rooms.map(r => `<option value="${r}">${r}</option>`).join('');
   }
 
+  // ==========================================
+  // 🚀 ROUTING & MODULE LOADER
+  // ==========================================
   function loadModule(name) {
     document.getElementById('menu-page').style.display = 'none';
     document.getElementById('module-container').style.display = 'block';
     const content = document.getElementById('module-content');
     
-    if(name === 'sdq') {
+    if (name === 'sdq') {
       getRooms(rooms => {
         let options = buildRoomOptions(rooms);
         content.innerHTML = `
-          <div class="card p-4 shadow-sm border-0">
+          <div class="card p-4 shadow-sm border-0 rounded-4">
             <h4 class="text-primary fw-bold mb-3"><i class="fas fa-search me-2"></i>เลือกห้องเรียนเพื่อประเมิน SDQ</h4>
-            <select id="room-select" class="form-select form-select-lg mb-3" onchange="loadStudents(this.value)">
+            <select id="room-select" class="form-select form-select-lg mb-3 shadow-sm" onchange="loadStudents(this.value)">
               <option value="">-- กรุณาเลือกห้องเรียน --</option>
               ${options}
             </select>
@@ -47,13 +71,14 @@
         `;
         showLoader(false);
       });
-    } else if(name === 'attendance') {
+    } 
+    else if (name === 'attendance') {
       getRooms(rooms => {
         let options = buildRoomOptions(rooms);
         content.innerHTML = `
-          <div class="card p-4 shadow-sm border-0">
+          <div class="card p-4 shadow-sm border-0 rounded-4">
             <h4 class="text-success fw-bold mb-3"><i class="fas fa-user-check me-2"></i>เช็คชื่อหน้าเสาธง</h4>
-            <select id="room-select-att" class="form-select mb-3" onchange="loadAttendanceList(this.value)">
+            <select id="room-select-att" class="form-select form-select-lg mb-3 shadow-sm" onchange="loadAttendanceList(this.value)">
               <option value="">-- เลือกห้องเรียน --</option>
               ${options}
             </select>
@@ -61,36 +86,20 @@
           </div>`;
         showLoader(false);
       });
-    } else if(name === 'homevisit') {
-      content.innerHTML = '<h4 class="text-info">ระบบบันทึกเยี่ยมบ้าน</h4>';
+    } 
+    else if (name === 'homevisit') {
+      content.innerHTML = `
+        <div class="card p-4 shadow-sm border-0 rounded-4 text-center">
+            <h4 class="text-info fw-bold mb-3"><i class="fas fa-home me-2"></i>ระบบบันทึกเยี่ยมบ้าน</h4>
+            <p class="text-muted">กำลังอยู่ในช่วงพัฒนา (Coming Soon)</p>
+            <button class="btn btn-secondary mt-3" onclick="backToMenu()">กลับหน้าเมนู</button>
+        </div>`;
     }
   }
 
-  function loadStudents(roomName) {
-    if(!roomName) return;
-    showLoader(true);
-    
-    google.script.run.withSuccessHandler(students => {
-      let listHtml = `
-        <div class="list-group">
-          <div class="list-group-item bg-light fw-bold">รายชื่อนักเรียนในห้อง ${roomName}</div>
-      `;
-      
-      students.forEach(std => {
-        listHtml += `
-          <button onclick="startSDQ('${std.id}', '${std.name}')" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
-            <span>${std.id} - ${std.name}</span>
-            <span class="badge bg-primary rounded-pill">ทำแบบประเมิน <i class="fas fa-chevron-right ms-1"></i></span>
-          </button>
-        `;
-      });
-      
-      listHtml += '</div>';
-      document.getElementById('student-list-container').innerHTML = listHtml;
-      showLoader(false);
-    }).getStudentsInRoom(roomName);
-  }
-
+  // ==========================================
+  // 🧠 SDQ ASSESSMENT MODULE
+  // ==========================================
   const sdqQuestions = [
     { text: "ห่วงใยความรู้สึกคนอื่น", type: "prosocial", reverse: false },
     { text: "อยู่ไม่นิ่ง นั่งนานไม่ได้", type: "hyper", reverse: false },
@@ -119,26 +128,55 @@
     { text: "ทำงานได้จนเสร็จ ความตั้งใจดี", type: "hyper", reverse: true }
   ];
 
-  let currentStudent = {};
+  function loadStudents(roomName) {
+    if (!roomName) return;
+    showLoader(true);
+    
+    google.script.run
+      .withSuccessHandler(students => {
+        let listHtml = `
+          <div class="list-group shadow-sm">
+            <div class="list-group-item bg-light fw-bold text-secondary">รายชื่อนักเรียนในห้อง ${roomName}</div>
+        `;
+        
+        students.forEach(std => {
+          listHtml += `
+            <button onclick="startSDQ('${std.id}', '${std.name}')" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+              <span>${std.id} - <strong>${std.name}</strong></span>
+              <span class="badge bg-primary rounded-pill py-2 px-3 shadow-sm">ประเมิน <i class="fas fa-chevron-right ms-1"></i></span>
+            </button>
+          `;
+        });
+        
+        listHtml += '</div>';
+        document.getElementById('student-list-container').innerHTML = listHtml;
+        showLoader(false);
+      })
+      .withFailureHandler(err => {
+        showLoader(false);
+        Swal.fire('เกิดข้อผิดพลาด', 'โหลดรายชื่อไม่สำเร็จ กรุณาลองใหม่', 'error');
+      })
+      .getStudentsInRoom(roomName);
+  }
 
   function startSDQ(id, name) {
-    currentStudent = { id: id, name: name };
+    _currentStudent = { id: id, name: name };
     
     let formHtml = `
-      <div class="card shadow-sm border-0">
-        <div class="card-header bg-warning text-dark fw-bold">
-          <i class="fas fa-edit me-2"></i>แบบประเมิน SDQ : ${name} (${id})
+      <div class="card shadow-sm border-0 rounded-4">
+        <div class="card-header bg-warning bg-gradient text-dark fw-bold py-3">
+          <i class="fas fa-clipboard-list me-2"></i>แบบประเมิน SDQ : ${name} <span class="badge bg-dark ms-2">${id}</span>
         </div>
-        <div class="card-body p-2">
+        <div class="card-body p-3 p-md-4">
           <form id="sdq-form">
-            <div class="table-responsive">
-              <table class="table table-sm table-hover align-middle">
+            <div class="table-responsive border rounded-3 mb-4">
+              <table class="table table-hover align-middle mb-0">
               <thead class="table-light">
                 <tr>
                   <th>ข้อคำถาม</th>
-                  <th class="text-center" style="width: 100px;">ไม่จริง</th>
-                  <th class="text-center" style="width: 100px;">จริงบ้าง</th>
-                  <th class="text-center" style="width: 100px;">จริงแน่นอน</th>
+                  <th class="text-center" style="width: 90px;"><small>ไม่จริง</small></th>
+                  <th class="text-center" style="width: 90px;"><small>จริงบ้าง</small></th>
+                  <th class="text-center" style="width: 90px;"><small>จริงแน่นอน</small></th>
                 </tr>
               </thead>
               <tbody>
@@ -147,10 +185,10 @@
     sdqQuestions.forEach((q, i) => {
       formHtml += `
         <tr>
-          <td>${i+1}. ${q.text}</td>
-          <td class="text-center"><input type="radio" name="q${i}" value="0" required class="form-check-input"></td>
-          <td class="text-center"><input type="radio" name="q${i}" value="1" required class="form-check-input"></td>
-          <td class="text-center"><input type="radio" name="q${i}" value="2" required class="form-check-input"></td>
+          <td class="py-3">${i+1}. ${q.text}</td>
+          <td class="text-center"><input type="radio" name="q${i}" value="0" required class="form-check-input" style="transform: scale(1.3);"></td>
+          <td class="text-center"><input type="radio" name="q${i}" value="1" required class="form-check-input" style="transform: scale(1.3);"></td>
+          <td class="text-center"><input type="radio" name="q${i}" value="2" required class="form-check-input" style="transform: scale(1.3);"></td>
         </tr>
       `;
     });
@@ -158,9 +196,10 @@
     formHtml += `
               </tbody>
             </table>
-            <div class="text-end mt-4">
-              <button type="button" class="btn btn-secondary me-2" onclick="loadModule('sdq')">ยกเลิก</button>
-              <button type="submit" class="btn btn-primary btn-lg px-5">บันทึกผลการประเมิน</button>
+            </div>
+            <div class="d-flex justify-content-end gap-2">
+              <button type="button" class="btn btn-light border px-4" onclick="loadModule('sdq')">ยกเลิก</button>
+              <button type="submit" id="btn-submit-sdq" class="btn btn-primary px-5 fw-bold shadow-sm">บันทึกผลประเมิน</button>
             </div>
           </form>
         </div>
@@ -168,7 +207,6 @@
     `;
 
     document.getElementById('module-content').innerHTML = formHtml;
-
     document.getElementById('sdq-form').onsubmit = function(e) {
       e.preventDefault();
       calculateAndSaveSDQ();
@@ -176,57 +214,62 @@
   }
 
   function calculateAndSaveSDQ() {
+    if (_isSubmitting) return;
+    
     const form = document.getElementById('sdq-form');
     const formData = new FormData(form);
+    const btn = document.getElementById('btn-submit-sdq');
+    
+    _isSubmitting = true;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>กำลังบันทึก...';
     
     let scores = { emotional: 0, conduct: 0, hyper: 0, peer: 0, prosocial: 0 };
     
     sdqQuestions.forEach((q, i) => {
       let val = parseInt(formData.get(`q${i}`) || 0);
-      if (q.reverse) {
-        val = 2 - val;
-      }
+      if (q.reverse) val = 2 - val;
       scores[q.type] += val;
     });
 
     const totalScore = scores.emotional + scores.conduct + scores.hyper + scores.peer;
-    
     let status = "ปกติ";
     if (totalScore >= 19) status = "มีปัญหา";
     else if (totalScore >= 16) status = "กลุ่มเสี่ยง";
 
     showLoader(true);
-    
-    google.script.run.withSuccessHandler(res => {
-      showLoader(false);
-      Swal.fire({
-        title: 'บันทึกสำเร็จ!',
-        html: `นักเรียน: ${currentStudent.name}<br>คะแนนรวม: <b>${totalScore}</b><br>สถานะ: <span class="badge ${status==='ปกติ'?'bg-success':'bg-danger'}">${status}</span>`,
-        icon: 'success'
-      }).then(() => {
-        // เมื่อบันทึกสำเร็จ ให้กลับไปหน้าเลือกรายชื่อเด็กห้องเดิม จะได้ทำคนต่อไปได้เลย
-        loadModule('sdq'); 
+    google.script.run
+      .withSuccessHandler(res => {
+        showLoader(false);
+        _isSubmitting = false;
+        Swal.fire({
+          title: 'บันทึกสำเร็จ!',
+          html: `นักเรียน: <b>${_currentStudent.name}</b><br>คะแนนรวม: <b class="text-primary">${totalScore}</b><br>สถานะ: <span class="badge ${status==='ปกติ'?'bg-success': (status==='กลุ่มเสี่ยง'?'bg-warning text-dark':'bg-danger')}">${status}</span>`,
+          icon: 'success',
+          confirmButtonText: 'ประเมินคนต่อไป'
+        }).then(() => {
+          loadModule('sdq'); 
+        });
+      })
+      .withFailureHandler(err => {
+        showLoader(false);
+        _isSubmitting = false;
+        btn.disabled = false;
+        btn.innerHTML = 'บันทึกผลประเมิน';
+        Swal.fire('เกิดข้อผิดพลาด', 'บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง', 'error');
+      })
+      .saveSDQData({
+        studentId: _currentStudent.id,
+        studentName: _currentStudent.name,
+        scores: scores,
+        totalScore: totalScore,
+        status: status
       });
-    }).saveSDQData({
-      studentId: currentStudent.id,
-      studentName: currentStudent.name,
-      scores: scores,
-      totalScore: totalScore,
-      status: status
-    });
-  }
-  // --- ระบบเช็คชื่อหน้าเสาธง ---
-
-  // เก็บ state ของห้องที่กำลังเช็คอยู่ และป้องกันส่งซ้ำ
-  let _attendanceStudents = [];
-  let _isSubmitting = false;
-  let _currentTeacherName = '';  // ดึงจาก session ที่ login ไว้
-
-  // เรียกตอน login สำเร็จ เพื่อเก็บชื่อครูไว้ใช้ตอนบันทึก
-  function setCurrentTeacher(name) {
-    _currentTeacherName = name || 'ไม่ระบุ';
   }
 
+  // ==========================================
+  // 📝 ATTENDANCE MODULE
+  // ==========================================
   function loadAttendanceList(roomName) {
     if (!roomName) return;
     showLoader(true);
@@ -237,19 +280,15 @@
       .withSuccessHandler(students => {
         _attendanceStudents = students;
 
-        // ตรวจสอบว่าห้องนี้เช็คชื่อวันนี้แล้วหรือยัง
+        // ตรวจสอบประวัติการเช็คชื่อของวันนี้
         google.script.run
           .withSuccessHandler(history => {
             const todayStr = new Date().toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' });
-            // history เป็น array ของ rows — เช็คว่ามีวันนี้อยู่ไหม
-            const alreadyChecked = history.length > 0 &&
-              history.some(r => r[1] === todayStr);
-
+            const alreadyChecked = history.length > 0 && history.some(r => r[1] === todayStr);
             renderAttendanceList(students, roomName, alreadyChecked);
             showLoader(false);
           })
           .withFailureHandler(() => {
-            // ถ้าโหลด history ไม่ได้ก็ render ปกติโดยไม่แจ้งเตือน
             renderAttendanceList(students, roomName, false);
             showLoader(false);
           })
@@ -271,42 +310,46 @@
     ];
 
     let warningHtml = alreadyChecked
-      ? `<div class="alert alert-warning py-2 mb-3">
-           <i class="fas fa-exclamation-triangle me-1"></i>
-           ห้องนี้มีการเช็คชื่อวันนี้แล้ว — ถ้าบันทึกอีกครั้งจะเพิ่มแถวใหม่
-         </div>`
-      : '';
+      ? `<div class="alert alert-danger py-3 mb-3 shadow-sm border-danger">
+           <i class="fas fa-lock me-2 fs-5"></i>
+           <strong>ห้องนี้ถูกเช็คชื่อของวันนี้ไปเรียบร้อยแล้ว!</strong><br>
+           <small>ระบบทำการล็อกการบันทึก เพื่อป้องกันข้อมูลซ้ำซ้อนจากครูที่ปรึกษาหลายท่าน</small>
+         </div>` : '';
 
     let html = `
       ${warningHtml}
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <small class="text-muted">รายชื่อ ${students.length} คน</small>
-        <button class="btn btn-sm btn-outline-secondary" onclick="markAllStatus('มา')">
-          <i class="fas fa-check-double me-1"></i>ทุกคนมา
+      <div class="d-flex justify-content-between align-items-center mb-3 p-2 bg-light rounded-3 border">
+        <span class="text-muted fw-bold"><i class="fas fa-users me-2"></i>รายชื่อ ${students.length} คน</span>
+        <button class="btn btn-sm btn-outline-success fw-bold shadow-sm" onclick="markAllStatus('มา')" ${alreadyChecked ? 'disabled' : ''}>
+          <i class="fas fa-check-double me-1"></i>ติ๊ก 'มา' ทุกคน
         </button>
       </div>
-      <div class="table-responsive">
-        <table class="table table-sm table-hover align-middle mb-0" id="att-table">
+      
+      <div class="table-responsive border rounded-3 mb-4 shadow-sm">
+        <table class="table table-hover align-middle mb-0" id="att-table">
           <thead class="table-dark">
             <tr>
-              <th style="width:50%">ชื่อ-นามสกุล</th>
+              <th style="width:40%" class="ps-3">ชื่อ-นามสกุล</th>
               <th class="text-center">สถานะ</th>
             </tr>
           </thead>
           <tbody>`;
 
     students.forEach((std, i) => {
-      html += `<tr id="att-row-${i}">
-        <td class="small">${i + 1}. ${std.name}</td>
-        <td class="text-center">
-          <div class="btn-group btn-group-sm" role="group">`;
+      html += `<tr id="att-row-${i}" class="table-success transition-all">
+        <td class="ps-3 fw-medium">
+            <span class="text-muted small me-1">${i + 1}.</span> ${std.name}
+            <div class="text-muted small" style="font-size: 0.75rem;">${std.id}</div>
+        </td>
+        <td class="text-center py-2">
+          <div class="btn-group btn-group-sm shadow-sm w-100 max-w-200" role="group">`;
 
       statusOptions.forEach(opt => {
         const checked = opt.value === 'มา' ? 'checked' : '';
         html += `
-            <input type="radio" class="btn-check" name="status${i}" id="${opt.value}${i}" value="${opt.value}" ${checked}
+            <input type="radio" class="btn-check" name="status${i}" id="${opt.value}${i}" value="${opt.value}" ${checked} ${alreadyChecked ? 'disabled' : ''}
               onchange="highlightRow(${i}, '${opt.value}')">
-            <label class="btn ${opt.cls} px-2" for="${opt.value}${i}">${opt.label}</label>`;
+            <label class="btn ${opt.cls} px-2 py-1 ${alreadyChecked ? 'opacity-50' : ''}" for="${opt.value}${i}">${opt.label}</label>`;
       });
 
       html += `
@@ -322,21 +365,27 @@
         </table>
       </div>
 
-      <div class="sticky-bottom bg-white pt-2 pb-1 border-top mt-3">
-        <div class="d-flex justify-content-between align-items-center mb-2 px-1">
-          <small class="text-muted" id="att-summary">มา: <span id="cnt-มา">0</span> | สาย: <span id="cnt-สาย">0</span> | ลา: <span id="cnt-ลา">0</span> | ขาด: <span id="cnt-ขาด">0</span></small>
+      <div class="sticky-bottom bg-white pt-3 pb-2 border-top shadow-lg px-3 mx-n3" style="z-index: 1020;">
+        <div class="d-flex justify-content-center gap-3 mb-3">
+          <span class="badge bg-success bg-opacity-10 text-success border border-success px-3 py-2">มา <span id="cnt-มา" class="ms-1 fs-6">0</span></span>
+          <span class="badge bg-warning bg-opacity-10 text-warning border border-warning px-3 py-2">สาย <span id="cnt-สาย" class="ms-1 fs-6">0</span></span>
+          <span class="badge bg-info bg-opacity-10 text-info border border-info px-3 py-2">ลา <span id="cnt-ลา" class="ms-1 fs-6">0</span></span>
+          <span class="badge bg-danger bg-opacity-10 text-danger border border-danger px-3 py-2">ขาด <span id="cnt-ขาด" class="ms-1 fs-6">0</span></span>
         </div>
-        <button id="btn-submit-att" class="btn btn-success w-100 py-2 fw-bold"
-          onclick="submitAttendance()">
-          <i class="fas fa-save me-1"></i> บันทึกการเช็คชื่อ ${students.length} คน
-        </button>
+        ${alreadyChecked 
+          ? `<button class="btn btn-secondary w-100 py-3 fw-bold fs-5 shadow-sm rounded-3 cursor-not-allowed" disabled>
+               <i class="fas fa-lock me-2"></i> วันนี้บันทึกข้อมูลเรียบร้อยแล้ว
+             </button>` 
+          : `<button id="btn-submit-att" class="btn btn-success w-100 py-3 fw-bold fs-5 shadow-sm rounded-3" onclick="submitAttendance()">
+               <i class="fas fa-save me-2"></i> ยืนยันการบันทึกข้อมูล (${students.length} คน)
+             </button>`
+        }
       </div>`;
 
     document.getElementById('attendance-container').innerHTML = html;
     updateAttSummary();
   }
 
-  // เปลี่ยนสีแถวตามสถานะที่เลือก
   function highlightRow(i, status) {
     const row = document.getElementById(`att-row-${i}`);
     row.classList.remove('table-success', 'table-warning', 'table-info', 'table-danger');
@@ -345,7 +394,6 @@
     updateAttSummary();
   }
 
-  // นับสรุปยอดแบบ real-time
   function updateAttSummary() {
     const counts = { 'มา': 0, 'สาย': 0, 'ลา': 0, 'ขาด': 0 };
     _attendanceStudents.forEach((_, i) => {
@@ -358,22 +406,26 @@
     });
   }
 
-  // ปุ่มลัด — ทำเครื่องหมายทุกคนพร้อมกัน
   function markAllStatus(status) {
     _attendanceStudents.forEach((_, i) => {
       const radio = document.getElementById(`${status}${i}`);
-      if (radio) { radio.checked = true; highlightRow(i, status); }
+      if (radio) { 
+        radio.checked = true; 
+        highlightRow(i, status); 
+      }
     });
     updateAttSummary();
   }
 
   function submitAttendance() {
-    // 🛡️ Guard: ป้องกันกดซ้ำ
     if (_isSubmitting) return;
+    
     _isSubmitting = true;
-
     const btn = document.getElementById('btn-submit-att');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> กำลังบันทึก...'; }
+    if (btn) { 
+        btn.disabled = true; 
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> กำลังประมวลผลการบันทึก...'; 
+    }
 
     const records = _attendanceStudents.map((_, i) => ({
       id:     document.getElementById(`id${i}`).value,
@@ -389,7 +441,7 @@
         _isSubmitting = false;
         Swal.fire({
           title: 'บันทึกสำเร็จ!',
-          html: `เช็คชื่อ <b>${res.count}</b> คน เรียบร้อย`,
+          html: `เช็คชื่อ <b>${res.count}</b> คน เรียบร้อยแล้ว`,
           icon: 'success',
           timer: 2000,
           showConfirmButton: false,
@@ -398,9 +450,12 @@
       .withFailureHandler(err => {
         showLoader(false);
         _isSubmitting = false;
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save me-1"></i> บันทึกการเช็คชื่อ'; }
+        if (btn) { 
+            btn.disabled = false; 
+            btn.innerHTML = `<i class="fas fa-save me-2"></i> ยืนยันการบันทึกข้อมูล (${records.length} คน)`; 
+        }
         Swal.fire('เกิดข้อผิดพลาด', 'บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง', 'error');
       })
-      .saveAttendance({ records, teacherName: _currentTeacherName });
+      .saveAttendance({ records: records, teacherName: _currentTeacherName });
   }
 </script>

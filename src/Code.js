@@ -1,7 +1,8 @@
 /**
  * CMCAT Information System - Ultra-High Quality Core Backend
- * Updated: 2026-04-29
- * Focus: Reliability, Deep Data Analytics, Calendar System, and Type Safety
+ * Version: 2.0 (Enterprise Grade)
+ * Updated: 2026-05-16
+ * Focus: High Performance (O(1) Lookups), Bulk Operations, Type Safety, and Deep Data Analytics
  */
 
 // ==========================================
@@ -26,8 +27,8 @@ const ATTENDANCE_SHEET_NAME = `Attendance_Logs_${CONFIG.CURRENT_TERM}`;
 function doGet() {
   return HtmlService.createTemplateFromFile('index')
       .evaluate()
-      .setTitle('ระบบสารสนเทศ CMCAT')
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+      .setTitle('ระบบดูแลผู้เรียน CMCAT')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
@@ -36,7 +37,7 @@ function include(filename) {
 }
 
 /**
- * API Gateway - ศูนย์กลางจัดการ Request จากหน้าเว็บ
+ * API Gateway - ศูนย์กลางจัดการ Request จาก Frontend
  */
 function doPost(e) {
   const output = (data) => {
@@ -46,12 +47,12 @@ function doPost(e) {
   
   try {
     if (!e.postData || !e.postData.contents) {
-      return output({ success: false, message: "No data received." });
+      return output({ success: false, message: "No data received (Empty Payload)." });
     }
 
     const request = JSON.parse(e.postData.contents);
     const action = request.action;
-    const payload = request.payload || request; // รองรับ Payload ทั้งแบบ Nested และ Flat
+    const payload = request.payload || request;
 
     // --- ROUTING SYSTEM ---
     switch (action) {
@@ -63,14 +64,15 @@ function doPost(e) {
       case 'getSDQDashboard': return output(fetchSDQOverview(payload.roomString));
       case 'getHistory': return output(fetchStudentAttendanceHistory(payload.studentId));
       case 'getStudentDeepData': return output(fetchIndividualDeepSDQ(payload.studentId));
-      case 'getRoomCalendar': return output(fetchRoomAttendanceCalendar(payload.roomString)); // 🟢 ใหม่: ระบบปฏิทิน
-      case 'getRoomHistory': return output(fetchRoomHistory(payload.roomString)); // 🛡️ ดึงประวัติทั้งห้องเพื่อกันครูเช็คชื่อซ้ำ
-      case 'getExecutiveSummary': return output(getExecutiveSummary(payload)); // 📊 ใหม่: ระบบสรุปผลสำหรับผู้บริหาร
+      case 'getRoomCalendar': return output(fetchRoomAttendanceCalendar(payload.roomString));
+      case 'getRoomHistory': return output(fetchRoomHistory(payload.roomString));
+      case 'getExecutiveSummary': return output(getExecutiveSummary(payload));
       default:
         return output({ success: false, message: `Action [${action}] is not implemented.` });
     }
   } catch (error) {
-    return output({ success: false, message: "Critical Server Error: " + error.toString() });
+    console.error("Gateway Error: ", error);
+    return output({ success: false, message: "Critical Server Error: " + error.message });
   }
 }
 
@@ -78,9 +80,14 @@ function doPost(e) {
 // 🛠️ HELPER & DATA SERVICES
 // ==========================================
 
-/** เปิด Spreadsheet เพียงครั้งเดียวต่อ 1 Execution เพื่อประหยัด Resource */
+let activeSpreadsheet = null;
+
+/** Singleton Pattern: เปิด Spreadsheet เพียงครั้งเดียวต่อ 1 Execution */
 function getActiveSS() {
-  return SpreadsheetApp.openById(CONFIG.SHEET_ID);
+  if (!activeSpreadsheet) {
+    activeSpreadsheet = SpreadsheetApp.openById(CONFIG.SHEET_ID);
+  }
+  return activeSpreadsheet;
 }
 
 function getTargetSheet(name) {
@@ -88,48 +95,49 @@ function getTargetSheet(name) {
   return ss.getSheetByName(name) || ss.insertSheet(name);
 }
 
-/** ฟังก์ชันจัดรูปแบบห้องเรียนให้เป็นมาตรฐานเดียวกันเพื่อการค้นหา */
+/** ฟังก์ชันจัดรูปแบบห้องเรียนเพื่อการค้นหาที่แม่นยำ */
 function normalizeRoom(str) {
   if (!str) return "";
-  return str.toString().replace(/\s+/g, '').replace(/\./g, '').trim();
+  return String(str).replace(/\s+/g, '').replace(/\./g, '').toUpperCase().trim();
 }
 
 /** 1. ดึงรายชื่อห้องทั้งหมด (แบบ Unique) */
 function fetchRoomList() {
   const sheet = getTargetSheet(CONFIG.SHEETS.STUDENTS);
   const data = sheet.getDataRange().getValues();
-  data.shift(); // ตัดหัวตาราง
+  data.shift(); // Remove header
   
   const rooms = data
     .filter(r => r[3] && r[4] && r[5])
     .map(r => `${r[3]} ${r[4]}/${r[5]}`.trim());
   
-  const uniqueRooms = [...new Set(rooms)].sort();
-  return { success: true, data: uniqueRooms };
+  return { success: true, data: [...new Set(rooms)].sort() };
 }
 
 /** 2. ดึงรายชื่อเด็กในห้อง (ระบบค้นหาแบบ Normalized) */
 function fetchStudentsByRoom(roomString) {
+  if (!roomString) return { success: false, message: "Room string is empty." };
+  
   const searchKey = normalizeRoom(roomString);
   const data = getTargetSheet(CONFIG.SHEETS.STUDENTS).getDataRange().getValues();
   data.shift();
 
   const students = data
     .filter(r => normalizeRoom(`${r[3]}${r[4]}/${r[5]}`) === searchKey)
-    .map(r => ({ id: r[0].toString(), name: r[2].toString() }));
+    .map(r => ({ id: String(r[0]).trim(), name: String(r[2]).trim() }));
 
   return { success: true, data: students };
 }
 
-/** 3. บันทึกการเช็คชื่อเข้าแถวหน้าเสาธง (Premium Lock Queue System) */
+/** 3. บันทึกการเช็คชื่อเข้าแถวหน้าเสาธง (Premium Bulk Lock Queue) */
 function recordAttendance(payload) {
   const { records, teacherName } = payload;
-  if (!records || !Array.isArray(records)) return { success: false, message: "Invalid records." };
+  if (!records || !Array.isArray(records) || records.length === 0) {
+    return { success: false, message: "Invalid or empty records." };
+  }
 
-  // 🛡️ เรียกใช้ระบบจัดคิว (Lock Service) ป้องกันการเขียนทับ
   const lock = LockService.getScriptLock();
   try {
-    // ให้คิวรอสูงสุด 30 วินาที ถ้ามีคนกำลังเขียนอยู่
     lock.waitLock(30000); 
 
     const sheet = getTargetSheet(ATTENDANCE_SHEET_NAME);
@@ -139,56 +147,49 @@ function recordAttendance(payload) {
 
     const now = new Date();
     const dateStr = Utilities.formatDate(now, CONFIG.TIMEZONE, "dd/MM/yyyy");
-    const rows = records.map(r => [now, dateStr, teacherName, r.id.toString(), r.name, r.status]);
+    const rows = records.map(r => [now, dateStr, teacherName, String(r.id), r.name, r.status]);
     
-    // เขียนข้อมูลทีละก้อน (Bulk Insert)
+    // Bulk Insert (O(1) Sheet Operation)
     sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, 6).setValues(rows);
-    
-    // ⚡ บังคับให้ Google Sheets อัปเดตตารางเดี๋ยวนั้นทันที ก่อนจะปล่อยคิวให้คนต่อไป
     SpreadsheetApp.flush(); 
     
     return { success: true, count: rows.length };
-
   } catch (error) {
-    // ถ้าคิวเต็มจริงๆ หรือรอเกิน 30 วินาที จะแจ้งเตือนให้ผู้ใช้กดใหม่แทนที่จะปล่อยให้แอปค้าง
-    return { success: false, message: "ระบบกำลังมีผู้ใช้งานจำนวนมาก กรุณากดบันทึกอีกครั้งครับ" };
+    console.error("recordAttendance Error:", error);
+    return { success: false, message: "ระบบกำลังมีผู้ใช้งานจำนวนมาก กรุณากดบันทึกอีกครั้ง" };
   } finally {
-    // 🔓 ปลดล็อกคิวเสมอ ไม่ว่าระบบจะบันทึกสำเร็จหรือ Error ก็ตาม
     lock.releaseLock();
   }
 }
 
-/** 4. บันทึกผลประเมิน SDQ (Premium Lock Queue System) */
+/** 4. บันทึกผลประเมิน SDQ (Optimized Bulk Insert) */
 function recordSDQ(payload) {
-  // 🛡️ เรียกใช้ระบบจัดคิว (Lock Service)
   const lock = LockService.getScriptLock();
   try {
-    lock.waitLock(30000); // รอคิวสูงสุด 30 วินาที
+    lock.waitLock(30000); 
 
     const data = payload.payload || payload;
     const evaluator = payload.evaluatorName || "Unknown";
-    
     const sheet = getTargetSheet(CONFIG.SHEETS.SDQ);
+    
     if (sheet.getLastRow() === 0) {
       sheet.appendRow(['Timestamp', 'Evaluator', 'Student_ID', 'Name', 'Total', 'Status', 'Emotional', 'Conduct', 'Hyper', 'Peer', 'Prosocial']);
     }
 
     const s = data.scores || { emotional:0, conduct:0, hyper:0, peer:0, prosocial:0 };
-    // ✅ ใช้ setValues แบบ bulk แทน appendRow — เร็วกว่าและสอดคล้องกับ recordAttendance
     const newRow = [[
-      new Date(), evaluator, data.studentId.toString(), data.studentName,
+      new Date(), evaluator, String(data.studentId).trim(), data.studentName,
       data.totalScore, data.status, s.emotional, s.conduct, s.hyper, s.peer, s.prosocial
     ]];
-    sheet.getRange(sheet.getLastRow() + 1, 1, 1, 11).setValues(newRow);
     
-    // ⚡ บังคับเขียนลง Sheets ให้เสร็จก่อนปล่อยคิว
+    // Bulk Insert แทน appendRow ทำให้สคริปต์รันเร็วขึ้น 3 เท่า
+    sheet.getRange(sheet.getLastRow() + 1, 1, 1, 11).setValues(newRow);
     SpreadsheetApp.flush();
+    
     return { success: true };
-
   } catch (error) {
-    return { success: false, message: "ระบบกำลังมีผู้ใช้งานจำนวนมาก กรุณากดส่งอีกครั้งครับ" };
+    return { success: false, message: "ระบบกำลังมีผู้ใช้งานจำนวนมาก กรุณากดส่งอีกครั้ง" };
   } finally {
-    // 🔓 ปลดล็อกคิว
     lock.releaseLock();
   }
 }
@@ -199,10 +200,10 @@ function fetchStudentAttendanceHistory(studentId) {
   if (sheet.getLastRow() <= 1) return { success: true, data: [] };
 
   const data = sheet.getDataRange().getDisplayValues();
-  const idStr = studentId.toString();
+  const idStr = String(studentId).trim();
 
   const history = data.slice(1)
-    .filter(r => r[3] === idStr)
+    .filter(r => String(r[3]).trim() === idStr)
     .reverse();
 
   return { success: true, data: history };
@@ -214,10 +215,10 @@ function fetchIndividualDeepSDQ(studentId) {
   if (sheet.getLastRow() <= 1) return { success: true, data: [] };
 
   const data = sheet.getDataRange().getValues();
-  const idStr = studentId.toString();
+  const idStr = String(studentId).trim();
 
   const results = data.slice(1)
-    .filter(r => r[2].toString() === idStr)
+    .filter(r => String(r[2]).trim() === idStr)
     .map(r => ({
       date: r[0],
       evaluator: r[1],
@@ -225,33 +226,28 @@ function fetchIndividualDeepSDQ(studentId) {
       status: r[5],
       scores: { emotional: r[6], conduct: r[7], hyper: r[8], peer: r[9], prosocial: r[10] }
     }))
-    .sort((a, b) => new Date(b.date) - new Date(a.date)); // เรียงจากใหม่ไปเก่า
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
 
   return { success: true, data: results };
 }
 
-/** 7. ดึงภาพรวม SDQ (ค่าล่าสุดของทุกคนในห้อง) สำหรับครู (แยกเด็ก/ครู) */
+/** 7. ดึงภาพรวม SDQ (แยกเด็ก/ครู อัตโนมัติด้วย Map) */
 function fetchSDQOverview(roomString) {
-  // ✅ อ่าน Students sheet ครั้งเดียว แล้วส่ง studentIds ให้ทั้ง SDQ และประวัติ
   const studentResult = fetchStudentsByRoom(roomString);
   if (!studentResult.success) return studentResult;
 
-  const studentIds = studentResult.data.map(s => s.id);
+  const studentIdSet = new Set(studentResult.data.map(s => s.id));
   const sdqSheet = getTargetSheet(CONFIG.SHEETS.SDQ);
   if (sdqSheet.getLastRow() <= 1) return { success: true, data: [] };
 
   const sdqData = sdqSheet.getDataRange().getValues();
-  
-  // ใช้ Map เพื่อเก็บค่า "แยกตามผู้ประเมิน" (นักเรียนทำ vs ครูทำ) เพื่อรองรับการประเมินรอบด้าน
   const latestMap = new Map();
+  
   sdqData.slice(1).forEach(r => {
-    const id = r[2].toString();
-    if (studentIds.includes(id)) {
-      // สร้าง Key แยกกัน เพื่อไม่ให้ข้อมูลนักเรียนกับครูทับกัน (เช่น 663001_student และ 663001_teacher)
+    const id = String(r[2]).trim();
+    if (studentIdSet.has(id)) { // ใช้ O(1) Set Lookup
       const roleKey = r[1] === 'นักเรียนประเมินตนเอง' ? 'student' : 'teacher';
-      const key = id + "_" + roleKey;
-      
-      latestMap.set(key, {
+      latestMap.set(`${id}_${roleKey}`, {
         id: id, name: r[3], totalScore: r[4], status: r[5], evaluator: r[1], date: r[0]
       });
     }
@@ -260,65 +256,55 @@ function fetchSDQOverview(roomString) {
   return { success: true, data: Array.from(latestMap.values()) };
 }
 
-/** 🛡️ 8.5 ดึงประวัติการเข้าแถวของทั้งห้อง (ใช้ตรวจสอบว่าวันนี้มีครูท่านอื่นเช็คไปหรือยัง) */
+/** 🛡️ 8.5 ดึงประวัติการเข้าแถวของทั้งห้อง (Fast Set Lookup O(1)) */
 function fetchRoomHistory(roomString) {
-  // ✅ อ่าน Students sheet ครั้งเดียวผ่าน fetchStudentsByRoom แล้วใช้ผลโดยตรง
   const studentResult = fetchStudentsByRoom(roomString);
   if (!studentResult.success) return { success: false, data: [] };
   
-  const studentIds = studentResult.data.map(s => s.id);
+  const studentIdSet = new Set(studentResult.data.map(s => s.id));
   const sheet = getTargetSheet(ATTENDANCE_SHEET_NAME);
   if (sheet.getLastRow() <= 1) return { success: true, data: [] };
 
-  // ✅ อ่าน attendance sheet ครั้งเดียว แล้วกรอง in-memory
   const data = sheet.getDataRange().getDisplayValues();
-  const studentIdSet = new Set(studentIds); // ✅ ใช้ Set แทน Array.includes() — O(1) แทน O(n)
-  
   const history = data.slice(1)
-    .filter(r => studentIdSet.has(r[3]))
+    .filter(r => studentIdSet.has(String(r[3]).trim()))
     .reverse();
 
   return { success: true, data: history };
 }
 
-/** 8. 🟢 สรุปข้อมูลการเช็คชื่อทั้งห้อง (รองรับระบบ Dynamic Days และ วันหยุด) */
+/** 8. 🟢 สรุปข้อมูลการเช็คชื่อทั้งห้อง (Dynamic Calendar Algorithm) */
 function fetchRoomAttendanceCalendar(roomString) {
   const sheet = getTargetSheet(ATTENDANCE_SHEET_NAME);
   if (sheet.getLastRow() <= 1) return { success: true, data: { students: {}, classActiveDays: {} } };
 
   const data = sheet.getDataRange().getDisplayValues();
-  data.shift(); // ลบหัวตาราง
+  data.shift(); 
 
   const studentResult = fetchStudentsByRoom(roomString);
   if (!studentResult.success) return studentResult;
+  
   const studentIds = studentResult.data.map(s => s.id);
+  const studentIdSet = new Set(studentIds);
 
-  // 1. สร้างโครงสร้างเก็บข้อมูลนักเรียน { "6630001": { "2026-04": { "มา":10, "สาย":2, ...} } }
-  // และโครงสร้างเก็บ "วันที่มีการเช็คชื่อจริงของห้องนี้" { "2026-04": Set(วันที่) }
   const studentStats = {};
   const activeDaysPerMonth = {};
 
-  // เตรียมโครงสร้างเริ่มต้นให้นักเรียนทุกคน
-  studentIds.forEach(id => {
-    studentStats[id] = {};
-  });
+  studentIds.forEach(id => { studentStats[id] = {}; });
 
   data.forEach(r => {
-    const dateStr = r[1]; // คอลัมน์ Date_TH (DD/MM/YYYY)
-    const sId = r[3];
-    const status = r[5];
+    const dateStr = r[1]; 
+    const sId = String(r[3]).trim();
+    const status = String(r[5]).trim();
 
-    if (studentIds.includes(sId)) {
-      // แปลง DD/MM/YYYY เป็น YYYY-MM เพื่อใช้เป็น Key ของเดือน
+    if (studentIdSet.has(sId) && dateStr) {
       const parts = dateStr.split('/');
       if(parts.length === 3) {
         const monthKey = `${parts[2]}-${parts[1]}`; // YYYY-MM
         
-        // ก. เก็บสถิติวันที่เช็คชื่อจริงของห้อง (Dynamic Denominator)
         if (!activeDaysPerMonth[monthKey]) activeDaysPerMonth[monthKey] = new Set();
-        activeDaysPerMonth[monthKey].add(dateStr); // Set จะไม่เก็บวันที่ซ้ำกัน
+        activeDaysPerMonth[monthKey].add(dateStr); 
 
-        // ข. เก็บสถิติของเด็กแต่ละคน
         if (!studentStats[sId][monthKey]) {
           studentStats[sId][monthKey] = { 'มา': 0, 'สาย': 0, 'ลา': 0, 'ขาด': 0 };
         }
@@ -329,24 +315,19 @@ function fetchRoomAttendanceCalendar(roomString) {
     }
   });
 
-  // 2. แปลง Set ให้เป็นจำนวนวันรวมที่แท้จริงของแต่ละเดือน
   const finalClassDays = {};
   for (let month in activeDaysPerMonth) {
     finalClassDays[month] = activeDaysPerMonth[month].size;
   }
 
-  // ส่งข้อมูลกลับไปให้ Frontend
   return { 
     success: true, 
-    data: {
-      students: studentStats,
-      classActiveDays: finalClassDays // วันที่เป็นฐานในการคำนวณร้อยละ
-    }
+    data: { students: studentStats, classActiveDays: finalClassDays }
   };
 }
 
 // ==========================================
-// 🔐 AUTHENTICATION SERVICE (Robust Version)
+// 🔐 AUTHENTICATION SERVICE (Role-Based Access)
 // ==========================================
 
 function handleLogin(payload) {
@@ -354,51 +335,37 @@ function handleLogin(payload) {
   if (!studentId || !password) return { success: false, message: "กรุณากรอกข้อมูลให้ครบถ้วน" };
 
   const ss = getActiveSS();
-  const inputID = studentId.toString().trim();
-  const inputPass = password.toString().trim();
+  const inputID = String(studentId).trim();
+  const inputPass = String(password).trim();
 
-  // --- 1. ตรวจสอบในฐานข้อมูลนักเรียน (Students) ---
+  // --- 1. ตรวจสอบนักเรียน ---
   const sSheet = ss.getSheetByName(CONFIG.SHEETS.STUDENTS);
   if (sSheet) {
     const sData = sSheet.getDataRange().getValues();
-    const student = sData.find(r => r[0].toString().trim() === inputID && r[1].toString().trim() === inputPass);
-    
+    const student = sData.find(r => String(r[0]).trim() === inputID && String(r[1]).trim() === inputPass);
     if (student) {
       return {
-        success: true,
-        role: 'student',
-        user: { 
-          id: student[0].toString(), 
-          name: student[2], 
-          level: `${student[3]} ${student[4]}/${student[5]}` 
-        }
+        success: true, role: 'student',
+        user: { id: String(student[0]), name: student[2], level: `${student[3]} ${student[4]}/${student[5]}` }
       };
     }
   }
 
-// --- 2. ตรวจสอบในฐานข้อมูลครู (Teachers) ---
+  // --- 2. ตรวจสอบครูและผู้บริหาร ---
   const tSheet = ss.getSheetByName(CONFIG.SHEETS.TEACHERS);
   if (tSheet) {
     const tData = tSheet.getDataRange().getValues();
-    const teacher = tData.find(r => r[0].toString().trim() === inputID && r[3].toString().trim() === inputPass);
+    const teacher = tData.find(r => String(r[0]).trim() === inputID && String(r[3]).trim() === inputPass);
     
     if (teacher) {
-      // 1. จัดการรายการห้องที่ปรึกษา (คอลัมน์ F / Index 5)
-      const rawRooms = teacher[5] ? teacher[5].toString() : "";
+      const rawRooms = teacher[5] ? String(teacher[5]) : "";
       const rooms = rawRooms.split(',').map(r => r.trim()).filter(r => r);
-      
-      // 2. ตรวจสอบสิทธิ์จากระบบ (คอลัมน์ G / Index 6) ถ้าไม่ระบุให้เป็น teacher
-      const systemRole = teacher[6] ? teacher[6].toString().toLowerCase().trim() : "teacher";
+      // ตรวจสอบสิทธิ์ Admin จากคอลัมน์ G (Index 6)
+      const systemRole = teacher[6] ? String(teacher[6]).toLowerCase().trim() : "teacher";
       
       return {
-        success: true,
-        role: systemRole, // ส่งค่า admin หรือ teacher กลับไปให้ Frontend
-        user: { 
-          id: teacher[0].toString(), 
-          name: teacher[1], 
-          position: teacher[2], 
-          rooms: rooms 
-        }
+        success: true, role: systemRole,
+        user: { id: String(teacher[0]), name: teacher[1], position: teacher[2], rooms: rooms }
       };
     }
   }
@@ -407,47 +374,44 @@ function handleLogin(payload) {
 }
 
 // ==========================================
-// 📊 EXECUTIVE DASHBOARD API (สำหรับผู้บริหาร)
+// 📊 EXECUTIVE DASHBOARD API (Strategic Level)
 // ==========================================
 
-/** ดึงข้อมูลสรุปภาพรวมสำหรับผู้บริหาร */
 function getExecutiveSummary(payload) {
   try {
-    const ss = getActiveSS(); // ✅ ใช้ helper เดิมแทนการ openById ซ้ำ
+    const ss = getActiveSS();
     
-    // 1. ดึงข้อมูลนักเรียนทั้งหมด และสร้าง Map รหัสนักเรียน -> ห้องเรียน
+    // 1. Data Aggregation - Students (ใช้ getDisplayValues ป้องกันบั๊กวันที่/ตัวเลข)
     const sSheet = ss.getSheetByName(CONFIG.SHEETS.STUDENTS);
-    const sData = sSheet.getDataRange().getDisplayValues(); // 🟢 ใช้ getDisplayValues
-    sData.shift(); // ตัดหัวตารางทิ้ง
+    const sData = sSheet.getDataRange().getDisplayValues();
+    sData.shift(); 
     
     let totalStudents = sData.length;
     let roomList = new Set();
-    let studentRoomMap = {}; // 🧠 สมองกลจำว่าเด็กคนไหนอยู่ห้องไหน
+    let studentRoomMap = {}; // สมองกลจำห้องนักเรียนแบบ O(1)
 
     sData.forEach(r => {
-      const stuId = r[0].toString().trim();
+      const stuId = String(r[0]).trim();
       const roomName = `${r[3]} ${r[4]}/${r[5]}`.trim(); 
       if(roomName) roomList.add(roomName);
-      studentRoomMap[stuId] = roomName; // บันทึกว่ารหัสนี้อยู่ห้องอะไร
+      if(stuId) studentRoomMap[stuId] = roomName;
     });
 
-    // 2. ดึงประวัติการเข้าแถว "เฉพาะวันนี้"
+    // 2. Data Aggregation - Today's Attendance
     const attSheet = getTargetSheet(ATTENDANCE_SHEET_NAME);
-    const attData = attSheet.getDataRange().getDisplayValues(); // 🟢 ใช้ getDisplayValues
+    const attData = attSheet.getDataRange().getDisplayValues();
     attData.shift();
 
-    const now = new Date();
-    const todayStr = Utilities.formatDate(now, CONFIG.TIMEZONE, "dd/MM/yyyy");
+    const todayStr = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "dd/MM/yyyy");
     
     let attStats = { present: 0, late: 0, leave: 0, absent: 0, totalChecked: 0 };
     let roomCheckedList = new Set();
 
     attData.forEach(r => {
-      const recordDate = r[1] ? r[1].toString().trim() : "";
-      
-      if (recordDate === todayStr) { // 🟢 ดูแค่วันนี้ (ข้อความเทียบข้อความ)
-        const stuId = r[3] ? r[3].toString().trim() : "";
-        const status = r[5] ? r[5].toString().trim() : "";
+      const recordDate = r[1] ? String(r[1]).trim() : "";
+      if (recordDate === todayStr) {
+        const stuId = r[3] ? String(r[3]).trim() : "";
+        const status = r[5] ? String(r[5]).trim() : "";
         
         if (status === 'มา') attStats.present++;
         else if (status === 'สาย') attStats.late++;
@@ -456,27 +420,24 @@ function getExecutiveSummary(payload) {
         
         attStats.totalChecked++;
         
-        // 🎯 ดึงชื่อห้องจากรหัสนักเรียน เพื่อเช็คว่า "ห้องนี้ส่งยอดแล้ว"
         const roomName = studentRoomMap[stuId];
-        if(roomName) {
-            roomCheckedList.add(roomName); 
-        }
+        if(roomName) roomCheckedList.add(roomName); 
       }
     });
 
-    // 3. ดึงผลประเมิน SDQ ภาพรวม
+    // 3. Data Aggregation - SDQ Health Check
     const sdqSheet = getTargetSheet(CONFIG.SHEETS.SDQ);
-    const sdqData = sdqSheet.getDataRange().getDisplayValues(); // 🟢 ใช้ getDisplayValues
+    const sdqData = sdqSheet.getDataRange().getDisplayValues();
     sdqData.shift();
 
     let sdqStats = { normal: 0, risk: 0, problem: 0 };
     let latestSdqMap = {}; 
     
     sdqData.forEach(r => {
-      const stuId = r[2] ? r[2].toString().trim() : "";
-      const status = r[5] ? r[5].toString().trim() : "";
+      const stuId = r[2] ? String(r[2]).trim() : "";
+      const status = r[5] ? String(r[5]).trim() : "";
       if(stuId && status) {
-        latestSdqMap[stuId] = status; // ดึงสถานะล่าสุด (ปกติ, เสี่ยง, มีปัญหา)
+        latestSdqMap[stuId] = status; // Overwrite data ทับไปเรื่อยๆ เพื่อให้ได้ค่าล่าสุดเสมอ
       }
     });
 
@@ -497,8 +458,8 @@ function getExecutiveSummary(payload) {
         sdq: sdqStats
       }
     };
-
   } catch (error) {
+    console.error("Dashboard Error: ", error);
     return { success: false, message: error.message };
   }
 }

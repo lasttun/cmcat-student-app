@@ -215,56 +215,192 @@
       status: status
     });
   }
-  // --- ฟังก์ชันเพิ่มเติมสำหรับระบบเช็คชื่อ ---
-  function loadAttendanceList(roomName) {
-    if(!roomName) return;
-    showLoader(true);
-    google.script.run.withSuccessHandler(students => {
-      let html = `
-        <div class="table-responsive mt-3">
-          <table class="table table-sm table-hover align-middle">
-            <thead class="table-dark">
-              <tr><th>ชื่อ-นามสกุล</th><th class="text-center">สถานะ</th></tr>
-            </thead>
-            <tbody>`;
-      students.forEach((std, i) => {
-        html += `
-          <tr>
-            <td class="small">${std.name}</td>
-            <td class="text-center">
-              <div class="btn-group btn-group-sm" role="group">
-                <input type="radio" class="btn-check" name="status${i}" id="p${i}" value="มา" checked>
-                <label class="btn btn-outline-success px-3" for="p${i}">มา</label>
-                <input type="radio" class="btn-check" name="status${i}" id="a${i}" value="ขาด">
-                <label class="btn btn-outline-danger" for="a${i}">ขาด</label>
-              </div>
-              <input type="hidden" id="id${i}" value="${std.id}">
-              <input type="hidden" id="name${i}" value="${std.name}">
-            </td>
-          </tr>`;
-      });
-      html += `</tbody></table></div>
-        <button class="btn btn-success w-100 mt-3 py-2 fw-bold" onclick="submitAttendance(${students.length})">
-          <i class="fas fa-save me-1"></i> บันทึกการเช็คชื่อ
-        </button>`;
-      document.getElementById('attendance-container').innerHTML = html;
-      showLoader(false);
-    }).getStudentsInRoom(roomName);
+  // --- ระบบเช็คชื่อหน้าเสาธง ---
+
+  // เก็บ state ของห้องที่กำลังเช็คอยู่ และป้องกันส่งซ้ำ
+  let _attendanceStudents = [];
+  let _isSubmitting = false;
+  let _currentTeacherName = '';  // ดึงจาก session ที่ login ไว้
+
+  // เรียกตอน login สำเร็จ เพื่อเก็บชื่อครูไว้ใช้ตอนบันทึก
+  function setCurrentTeacher(name) {
+    _currentTeacherName = name || 'ไม่ระบุ';
   }
 
-  function submitAttendance(count) {
-    let records = [];
-    for(let i=0; i<count; i++) {
-      records.push({
-        id: document.getElementById(`id${i}`).value,
-        name: document.getElementById(`name${i}`).value,
-        status: document.querySelector(`input[name="status${i}"]:checked`).value
-      });
-    }
+  function loadAttendanceList(roomName) {
+    if (!roomName) return;
     showLoader(true);
-    google.script.run.withSuccessHandler(res => {
-      showLoader(false);
-      Swal.fire('สำเร็จ!', `เช็คชื่อนักเรียน ${res.count} คน เรียบร้อย`, 'success').then(() => backToMenu());
-    }).saveAttendance(records);
+    _isSubmitting = false;
+    _attendanceStudents = [];
+
+    google.script.run
+      .withSuccessHandler(students => {
+        _attendanceStudents = students;
+
+        // ตรวจสอบว่าห้องนี้เช็คชื่อวันนี้แล้วหรือยัง
+        google.script.run
+          .withSuccessHandler(history => {
+            const todayStr = new Date().toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            // history เป็น array ของ rows — เช็คว่ามีวันนี้อยู่ไหม
+            const alreadyChecked = history.length > 0 &&
+              history.some(r => r[1] === todayStr);
+
+            renderAttendanceList(students, roomName, alreadyChecked);
+            showLoader(false);
+          })
+          .withFailureHandler(() => {
+            // ถ้าโหลด history ไม่ได้ก็ render ปกติโดยไม่แจ้งเตือน
+            renderAttendanceList(students, roomName, false);
+            showLoader(false);
+          })
+          .getRoomHistory(roomName);
+      })
+      .withFailureHandler(err => {
+        showLoader(false);
+        Swal.fire('เกิดข้อผิดพลาด', 'โหลดรายชื่อไม่สำเร็จ กรุณาลองใหม่', 'error');
+      })
+      .getStudentsInRoom(roomName);
+  }
+
+  function renderAttendanceList(students, roomName, alreadyChecked) {
+    const statusOptions = [
+      { value: 'มา',  label: 'มา',  cls: 'btn-outline-success' },
+      { value: 'สาย', label: 'สาย', cls: 'btn-outline-warning' },
+      { value: 'ลา',  label: 'ลา',  cls: 'btn-outline-info'    },
+      { value: 'ขาด', label: 'ขาด', cls: 'btn-outline-danger'  },
+    ];
+
+    let warningHtml = alreadyChecked
+      ? `<div class="alert alert-warning py-2 mb-3">
+           <i class="fas fa-exclamation-triangle me-1"></i>
+           ห้องนี้มีการเช็คชื่อวันนี้แล้ว — ถ้าบันทึกอีกครั้งจะเพิ่มแถวใหม่
+         </div>`
+      : '';
+
+    let html = `
+      ${warningHtml}
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <small class="text-muted">รายชื่อ ${students.length} คน</small>
+        <button class="btn btn-sm btn-outline-secondary" onclick="markAllStatus('มา')">
+          <i class="fas fa-check-double me-1"></i>ทุกคนมา
+        </button>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle mb-0" id="att-table">
+          <thead class="table-dark">
+            <tr>
+              <th style="width:50%">ชื่อ-นามสกุล</th>
+              <th class="text-center">สถานะ</th>
+            </tr>
+          </thead>
+          <tbody>`;
+
+    students.forEach((std, i) => {
+      html += `<tr id="att-row-${i}">
+        <td class="small">${i + 1}. ${std.name}</td>
+        <td class="text-center">
+          <div class="btn-group btn-group-sm" role="group">`;
+
+      statusOptions.forEach(opt => {
+        const checked = opt.value === 'มา' ? 'checked' : '';
+        html += `
+            <input type="radio" class="btn-check" name="status${i}" id="${opt.value}${i}" value="${opt.value}" ${checked}
+              onchange="highlightRow(${i}, '${opt.value}')">
+            <label class="btn ${opt.cls} px-2" for="${opt.value}${i}">${opt.label}</label>`;
+      });
+
+      html += `
+          </div>
+          <input type="hidden" id="id${i}" value="${std.id}">
+          <input type="hidden" id="name${i}" value="${std.name}">
+        </td>
+      </tr>`;
+    });
+
+    html += `
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sticky-bottom bg-white pt-2 pb-1 border-top mt-3">
+        <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+          <small class="text-muted" id="att-summary">มา: <span id="cnt-มา">0</span> | สาย: <span id="cnt-สาย">0</span> | ลา: <span id="cnt-ลา">0</span> | ขาด: <span id="cnt-ขาด">0</span></small>
+        </div>
+        <button id="btn-submit-att" class="btn btn-success w-100 py-2 fw-bold"
+          onclick="submitAttendance()">
+          <i class="fas fa-save me-1"></i> บันทึกการเช็คชื่อ ${students.length} คน
+        </button>
+      </div>`;
+
+    document.getElementById('attendance-container').innerHTML = html;
+    updateAttSummary();
+  }
+
+  // เปลี่ยนสีแถวตามสถานะที่เลือก
+  function highlightRow(i, status) {
+    const row = document.getElementById(`att-row-${i}`);
+    row.classList.remove('table-success', 'table-warning', 'table-info', 'table-danger');
+    const map = { 'มา': 'table-success', 'สาย': 'table-warning', 'ลา': 'table-info', 'ขาด': 'table-danger' };
+    if (map[status]) row.classList.add(map[status]);
+    updateAttSummary();
+  }
+
+  // นับสรุปยอดแบบ real-time
+  function updateAttSummary() {
+    const counts = { 'มา': 0, 'สาย': 0, 'ลา': 0, 'ขาด': 0 };
+    _attendanceStudents.forEach((_, i) => {
+      const checked = document.querySelector(`input[name="status${i}"]:checked`);
+      if (checked && counts[checked.value] !== undefined) counts[checked.value]++;
+    });
+    Object.keys(counts).forEach(k => {
+      const el = document.getElementById(`cnt-${k}`);
+      if (el) el.textContent = counts[k];
+    });
+  }
+
+  // ปุ่มลัด — ทำเครื่องหมายทุกคนพร้อมกัน
+  function markAllStatus(status) {
+    _attendanceStudents.forEach((_, i) => {
+      const radio = document.getElementById(`${status}${i}`);
+      if (radio) { radio.checked = true; highlightRow(i, status); }
+    });
+    updateAttSummary();
+  }
+
+  function submitAttendance() {
+    // 🛡️ Guard: ป้องกันกดซ้ำ
+    if (_isSubmitting) return;
+    _isSubmitting = true;
+
+    const btn = document.getElementById('btn-submit-att');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> กำลังบันทึก...'; }
+
+    const records = _attendanceStudents.map((_, i) => ({
+      id:     document.getElementById(`id${i}`).value,
+      name:   document.getElementById(`name${i}`).value,
+      status: document.querySelector(`input[name="status${i}"]:checked`)?.value || 'มา',
+    }));
+
+    showLoader(true);
+
+    google.script.run
+      .withSuccessHandler(res => {
+        showLoader(false);
+        _isSubmitting = false;
+        Swal.fire({
+          title: 'บันทึกสำเร็จ!',
+          html: `เช็คชื่อ <b>${res.count}</b> คน เรียบร้อย`,
+          icon: 'success',
+          timer: 2000,
+          showConfirmButton: false,
+        }).then(() => backToMenu());
+      })
+      .withFailureHandler(err => {
+        showLoader(false);
+        _isSubmitting = false;
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save me-1"></i> บันทึกการเช็คชื่อ'; }
+        Swal.fire('เกิดข้อผิดพลาด', 'บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง', 'error');
+      })
+      .saveAttendance({ records, teacherName: _currentTeacherName });
   }
 </script>

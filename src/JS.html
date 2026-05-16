@@ -11,15 +11,30 @@
     document.getElementById('module-container').style.display = 'none';
   }
 
+  // แคช rooms ไว้ใน memory — ป้องกันการเรียก Sheets API ซ้ำทุกครั้งที่เปิดโมดูล
+  let _cachedRooms = null;
+
+  function getRooms(callback) {
+    if (_cachedRooms) return callback(_cachedRooms);
+    showLoader(true);
+    google.script.run.withSuccessHandler(rooms => {
+      _cachedRooms = rooms;
+      callback(rooms);
+    }).getRoomData();
+  }
+
+  function buildRoomOptions(rooms) {
+    return rooms.map(r => `<option value="${r}">${r}</option>`).join('');
+  }
+
   function loadModule(name) {
     document.getElementById('menu-page').style.display = 'none';
     document.getElementById('module-container').style.display = 'block';
     const content = document.getElementById('module-content');
     
     if(name === 'sdq') {
-      showLoader(true);
-      google.script.run.withSuccessHandler(rooms => {
-        let options = rooms.map(r => `<option value="${r}">${r}</option>`).join('');
+      getRooms(rooms => {
+        let options = buildRoomOptions(rooms);
         content.innerHTML = `
           <div class="card p-4 shadow-sm border-0">
             <h4 class="text-primary fw-bold mb-3"><i class="fas fa-search me-2"></i>เลือกห้องเรียนเพื่อประเมิน SDQ</h4>
@@ -31,11 +46,10 @@
           </div>
         `;
         showLoader(false);
-      }).getRoomData();
+      });
     } else if(name === 'attendance') {
-      showLoader(true);
-      google.script.run.withSuccessHandler(rooms => {
-        let options = rooms.map(r => `<option value="${r}">${r}</option>`).join('');
+      getRooms(rooms => {
+        let options = buildRoomOptions(rooms);
         content.innerHTML = `
           <div class="card p-4 shadow-sm border-0">
             <h4 class="text-success fw-bold mb-3"><i class="fas fa-user-check me-2"></i>เช็คชื่อหน้าเสาธง</h4>
@@ -46,7 +60,7 @@
             <div id="attendance-container"></div>
           </div>`;
         showLoader(false);
-      }).getRoomData();
+      });
     } else if(name === 'homevisit') {
       content.innerHTML = '<h4 class="text-info">ระบบบันทึกเยี่ยมบ้าน</h4>';
     }

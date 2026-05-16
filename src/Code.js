@@ -174,10 +174,12 @@ function recordSDQ(payload) {
     }
 
     const s = data.scores || { emotional:0, conduct:0, hyper:0, peer:0, prosocial:0 };
-    sheet.appendRow([
-      new Date(), evaluator, data.studentId.toString(), data.studentName, 
+    // ✅ ใช้ setValues แบบ bulk แทน appendRow — เร็วกว่าและสอดคล้องกับ recordAttendance
+    const newRow = [[
+      new Date(), evaluator, data.studentId.toString(), data.studentName,
       data.totalScore, data.status, s.emotional, s.conduct, s.hyper, s.peer, s.prosocial
-    ]);
+    ]];
+    sheet.getRange(sheet.getLastRow() + 1, 1, 1, 11).setValues(newRow);
     
     // ⚡ บังคับเขียนลง Sheets ให้เสร็จก่อนปล่อยคิว
     SpreadsheetApp.flush();
@@ -230,6 +232,7 @@ function fetchIndividualDeepSDQ(studentId) {
 
 /** 7. ดึงภาพรวม SDQ (ค่าล่าสุดของทุกคนในห้อง) สำหรับครู (แยกเด็ก/ครู) */
 function fetchSDQOverview(roomString) {
+  // ✅ อ่าน Students sheet ครั้งเดียว แล้วส่ง studentIds ให้ทั้ง SDQ และประวัติ
   const studentResult = fetchStudentsByRoom(roomString);
   if (!studentResult.success) return studentResult;
 
@@ -259,6 +262,7 @@ function fetchSDQOverview(roomString) {
 
 /** 🛡️ 8.5 ดึงประวัติการเข้าแถวของทั้งห้อง (ใช้ตรวจสอบว่าวันนี้มีครูท่านอื่นเช็คไปหรือยัง) */
 function fetchRoomHistory(roomString) {
+  // ✅ อ่าน Students sheet ครั้งเดียวผ่าน fetchStudentsByRoom แล้วใช้ผลโดยตรง
   const studentResult = fetchStudentsByRoom(roomString);
   if (!studentResult.success) return { success: false, data: [] };
   
@@ -266,12 +270,13 @@ function fetchRoomHistory(roomString) {
   const sheet = getTargetSheet(ATTENDANCE_SHEET_NAME);
   if (sheet.getLastRow() <= 1) return { success: true, data: [] };
 
+  // ✅ อ่าน attendance sheet ครั้งเดียว แล้วกรอง in-memory
   const data = sheet.getDataRange().getDisplayValues();
+  const studentIdSet = new Set(studentIds); // ✅ ใช้ Set แทน Array.includes() — O(1) แทน O(n)
   
-  // กรองเอาเฉพาะประวัติการเช็คชื่อที่เป็นของนักเรียนในห้องนี้
   const history = data.slice(1)
-    .filter(r => studentIds.includes(r[3])) // r[3] คือรหัสนักเรียน (Student_ID)
-    .reverse(); // เรียงจากล่าสุดไปเก่า
+    .filter(r => studentIdSet.has(r[3]))
+    .reverse();
 
   return { success: true, data: history };
 }
@@ -408,7 +413,7 @@ function handleLogin(payload) {
 /** ดึงข้อมูลสรุปภาพรวมสำหรับผู้บริหาร */
 function getExecutiveSummary(payload) {
   try {
-    const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
+    const ss = getActiveSS(); // ✅ ใช้ helper เดิมแทนการ openById ซ้ำ
     
     // 1. ดึงข้อมูลนักเรียนทั้งหมด และสร้าง Map รหัสนักเรียน -> ห้องเรียน
     const sSheet = ss.getSheetByName(CONFIG.SHEETS.STUDENTS);

@@ -445,7 +445,12 @@
           icon: 'success',
           timer: 2000,
           showConfirmButton: false,
-        }).then(() => backToMenu());
+        }).then(() => {
+          // 🔄 ดึงชื่อห้องปัจจุบันที่กำลังเลือกอยู่
+          const currentRoom = document.getElementById('room-select-att').value;
+          // สั่งโหลดข้อมูลห้องนี้ใหม่ เพื่อให้ระบบเช็คประวัติและล็อกปุ่มเป็นสีเทาอัตโนมัติ
+          loadAttendanceList(currentRoom); 
+        });
       })
       .withFailureHandler(err => {
         showLoader(false);

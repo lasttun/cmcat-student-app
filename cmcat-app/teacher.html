@@ -392,8 +392,8 @@ function renderTable(students, sdqMap) {
             <div class="bg-white/50 p-3 md:p-4 flex flex-col sm:flex-row justify-between items-center gap-3 border-b border-slate-200/60">
                 <span class="font-bold text-slate-700 text-sm flex items-center gap-2"><span class="text-xl">⚡</span> กำหนดสถานะทุกคนเป็น:</span>
                 <div class="flex gap-2 w-full sm:w-auto">
-                    <button onclick="setAllAttendance('มา')" class="flex-1 sm:flex-none bg-emerald-100 text-emerald-700 px-4 py-2 rounded-xl text-xs font-bold hover:bg-emerald-200 transition-colors shadow-sm active:scale-95">✅ มาทุกคน</button>
-                    <button onclick="setAllAttendance('ขาด')" class="flex-1 sm:flex-none bg-red-100 text-red-700 px-4 py-2 rounded-xl text-xs font-bold hover:bg-red-200 transition-colors shadow-sm active:scale-95">❌ ขาดทุกคน</button>
+                    <button onclick="setAllAttendance('มา')" class="flex-1 sm:flex-none bg-emerald-100 text-emerald-700 px-4 py-2 rounded-xl text-xs font-bold hover:bg-emerald-200 transition-colors shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" ${isAlreadyCheckedToday ? 'disabled' : ''}>✅ มาทุกคน</button>
+                    <button onclick="setAllAttendance('ขาด')" class="flex-1 sm:flex-none bg-red-100 text-red-700 px-4 py-2 rounded-xl text-xs font-bold hover:bg-red-200 transition-colors shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" ${isAlreadyCheckedToday ? 'disabled' : ''}>❌ ขาดทุกคน</button>
                 </div>
             </div>
             
@@ -438,8 +438,8 @@ function renderTable(students, sdqMap) {
                             { val: 'ลา', icon: '📝', color: 'peer-checked:bg-yellow-500 peer-checked:shadow-yellow-300/50' },
                             { val: 'ขาด', icon: '❌', color: 'peer-checked:bg-red-500 peer-checked:shadow-red-300/50' }
                         ].map(opt => `
-                            <label class="cursor-pointer flex-1">
-                                <input type="radio" name="att_${s.id}" value="${opt.val}" ${s.status === opt.val ? 'checked' : ''} onchange="updateAttendance(${i}, '${opt.val}')" class="hidden peer">
+                            <label class="cursor-pointer flex-1 ${isAlreadyCheckedToday ? 'opacity-50 pointer-events-none' : ''}">
+                                <input type="radio" name="att_${s.id}" value="${opt.val}" ${s.status === opt.val ? 'checked' : ''} onchange="updateAttendance(${i}, '${opt.val}')" class="hidden peer" ${isAlreadyCheckedToday ? 'disabled' : ''}>
                                 <div class="py-1.5 md:py-2.5 rounded-xl text-[10px] md:text-sm font-bold text-slate-500 bg-white border border-slate-200 peer-checked:border-transparent peer-checked:text-white shadow-sm shadow-slate-200 ${opt.color} transition-all duration-300 hover:-translate-y-0.5 active:scale-95 text-center flex flex-col xl:flex-row items-center justify-center gap-0.5 md:gap-1">
                                     <span class="text-xs md:text-base leading-none">${opt.icon}</span>
                                     <span class="leading-none">${opt.val}</span>
@@ -505,10 +505,23 @@ function renderTable(students, sdqMap) {
         try {
             const res = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'saveAttendance', payload: { records: currentStudentsData, teacherName: currentUser.name } }) });
             const result = await res.json();
-            if(result.success) Swal.fire({ icon: 'success', title: 'เช็คชื่อสำเร็จ', text: `บันทึกข้อมูล ${result.count} รายเรียบร้อย` });
-            else throw new Error(result.message);
-        } catch (e) { Swal.fire('ผิดพลาด', e.message, 'error'); } 
-        finally { btn.disabled = false; btn.innerHTML = "💾 ยืนยันบันทึกเช้าวันนี้"; }
+            if(result.success) {
+                Swal.fire({ 
+                    icon: 'success', 
+                    title: 'เช็คชื่อสำเร็จ', 
+                    text: `บันทึกข้อมูล ${result.count} รายเรียบร้อย`,
+                    timer: 2000,
+                    showConfirmButton: false
+                }).then(() => {
+                    loadStudents(); // 🔄 โหลดข้อมูลใหม่เพื่อให้ปุ่มถูกล็อกและเป็นสีเทาอัตโนมัติ
+                });
+            } else {
+                throw new Error(result.message);
+            }
+        } catch (e) { 
+            Swal.fire('ผิดพลาด', e.message, 'error'); 
+            if(btn) { btn.disabled = false; btn.innerHTML = "💾 ยืนยันบันทึกเช้าวันนี้"; }
+        } 
     }
 
     // 🟢 ระบบรายงานเข้าแถว

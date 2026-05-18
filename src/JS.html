@@ -280,16 +280,16 @@
       .withSuccessHandler(students => {
         _attendanceStudents = students;
 
-        // ตรวจสอบประวัติการเช็คชื่อของวันนี้
+// ตรวจสอบประวัติการเช็คชื่อของวันนี้
         google.script.run
           .withSuccessHandler(history => {
             const todayStr = new Date().toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' });
             const alreadyChecked = history.length > 0 && history.some(r => r[1] === todayStr);
-            renderAttendanceList(students, roomName, alreadyChecked);
+            renderAttendanceList(students, roomName, alreadyChecked, history); // 🟢 ส่ง history ต่อไปให้ฟังก์ชัน
             showLoader(false);
           })
           .withFailureHandler(() => {
-            renderAttendanceList(students, roomName, false);
+            renderAttendanceList(students, roomName, false, []); // 🟢 ส่ง array ว่างไปถ้าพัง
             showLoader(false);
           })
           .getRoomHistory(roomName);
@@ -301,13 +301,23 @@
       .getStudentsInRoom(roomName);
   }
 
-  function renderAttendanceList(students, roomName, alreadyChecked) {
+function renderAttendanceList(students, roomName, alreadyChecked, history) {
     const statusOptions = [
       { value: 'มา',  label: 'มา',  cls: 'btn-outline-success' },
       { value: 'สาย', label: 'สาย', cls: 'btn-outline-warning' },
       { value: 'ลา',  label: 'ลา',  cls: 'btn-outline-info'    },
       { value: 'ขาด', label: 'ขาด', cls: 'btn-outline-danger'  },
+      { value: 'ฝึกงาน', label: 'ฝึกงาน', cls: 'btn-outline-secondary' } // 🟢 เพิ่มปุ่มฝึกงาน
     ];
+
+    // 🧠 สมองกลอ่านประวัติ: หาระเบียนล่าสุดของเด็กแต่ละคน 
+    let latestStatusMap = {};
+    if (history && history.length > 0) {
+        students.forEach(std => {
+            const lastRecord = history.find(r => r[3] === std.id);
+            if (lastRecord) latestStatusMap[std.id] = lastRecord[5];
+        });
+    }
 
     let warningHtml = alreadyChecked
       ? `<div class="alert alert-danger py-3 mb-3 shadow-sm border-danger">
@@ -345,9 +355,16 @@
           <div class="btn-group btn-group-sm shadow-sm w-100 max-w-200" role="group">`;
 
       statusOptions.forEach(opt => {
-        const checked = opt.value === 'มา' ? 'checked' : '';
+        // 🟢 ตรวจสอบสถานะเดิม ถ้าเมื่อวานเป็น "ฝึกงาน" ให้วันนี้ Default เป็น "ฝึกงาน" ถ้าไม่ใช่ ให้เป็น "มา" ตามปกติ
+        let isChecked = false;
+        if (latestStatusMap[std.id] === 'ฝึกงาน') {
+             isChecked = (opt.value === 'ฝึกงาน');
+        } else {
+             isChecked = (opt.value === 'มา');
+        }
+
         html += `
-            <input type="radio" class="btn-check" name="status${i}" id="${opt.value}${i}" value="${opt.value}" ${checked} ${alreadyChecked ? 'disabled' : ''}
+            <input type="radio" class="btn-check" name="status${i}" id="${opt.value}${i}" value="${opt.value}" ${isChecked ? 'checked' : ''} ${alreadyChecked ? 'disabled' : ''}
               onchange="highlightRow(${i}, '${opt.value}')">
             <label class="btn ${opt.cls} px-2 py-1 ${alreadyChecked ? 'opacity-50' : ''}" for="${opt.value}${i}">${opt.label}</label>`;
       });
@@ -366,11 +383,12 @@
       </div>
 
       <div class="sticky-bottom bg-white pt-3 pb-2 border-top shadow-lg px-3 mx-n3" style="z-index: 1020;">
-        <div class="d-flex justify-content-center gap-3 mb-3">
+        <div class="d-flex justify-content-center gap-3 mb-3 flex-wrap">
           <span class="badge bg-success bg-opacity-10 text-success border border-success px-3 py-2">มา <span id="cnt-มา" class="ms-1 fs-6">0</span></span>
           <span class="badge bg-warning bg-opacity-10 text-warning border border-warning px-3 py-2">สาย <span id="cnt-สาย" class="ms-1 fs-6">0</span></span>
           <span class="badge bg-info bg-opacity-10 text-info border border-info px-3 py-2">ลา <span id="cnt-ลา" class="ms-1 fs-6">0</span></span>
           <span class="badge bg-danger bg-opacity-10 text-danger border border-danger px-3 py-2">ขาด <span id="cnt-ขาด" class="ms-1 fs-6">0</span></span>
+          <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary px-3 py-2">ฝึกงาน <span id="cnt-ฝึกงาน" class="ms-1 fs-6">0</span></span>
         </div>
         ${alreadyChecked 
           ? `<button class="btn btn-secondary w-100 py-3 fw-bold fs-5 shadow-sm rounded-3 cursor-not-allowed" disabled>
@@ -383,19 +401,26 @@
       </div>`;
 
     document.getElementById('attendance-container').innerHTML = html;
+    
+    // 🟢 วนลูปไฮไลต์สีแถวให้ถูกต้องตั้งแต่ตอนแรก (เพื่อรองรับสีเทาของคนที่ถูกแช่สถานะฝึกงานไว้)
+    students.forEach((_, i) => {
+        const checked = document.querySelector(`input[name="status${i}"]:checked`);
+        if(checked) highlightRow(i, checked.value);
+    });
+    
     updateAttSummary();
   }
 
   function highlightRow(i, status) {
     const row = document.getElementById(`att-row-${i}`);
-    row.classList.remove('table-success', 'table-warning', 'table-info', 'table-danger');
-    const map = { 'มา': 'table-success', 'สาย': 'table-warning', 'ลา': 'table-info', 'ขาด': 'table-danger' };
+    row.classList.remove('table-success', 'table-warning', 'table-info', 'table-danger', 'table-secondary');
+    const map = { 'มา': 'table-success', 'สาย': 'table-warning', 'ลา': 'table-info', 'ขาด': 'table-danger', 'ฝึกงาน': 'table-secondary' };
     if (map[status]) row.classList.add(map[status]);
     updateAttSummary();
   }
 
   function updateAttSummary() {
-    const counts = { 'มา': 0, 'สาย': 0, 'ลา': 0, 'ขาด': 0 };
+    const counts = { 'มา': 0, 'สาย': 0, 'ลา': 0, 'ขาด': 0, 'ฝึกงาน': 0 };
     _attendanceStudents.forEach((_, i) => {
       const checked = document.querySelector(`input[name="status${i}"]:checked`);
       if (checked && counts[checked.value] !== undefined) counts[checked.value]++;

@@ -381,51 +381,107 @@ function getExecutiveSummary(payload) {
   try {
     const ss = getActiveSS();
     
-    // 1. Data Aggregation - Students (ใช้ getDisplayValues ป้องกันบั๊กวันที่/ตัวเลข)
+    // 0. 🧠 ดึงข้อมูลครูเพื่อจับคู่ว่าใครประจำห้องไหน (ใช้ normalizeRoom แก้ปัญหาพิมพ์เว้นวรรคผิด)
+    const tSheet = ss.getSheetByName(CONFIG.SHEETS.TEACHERS);
+    const tData = tSheet.getDataRange().getDisplayValues();
+    let roomTeacherMap = {};
+    tData.slice(1).forEach(r => {
+      const teacherName = String(r[1]).trim();
+      const rooms = r[5] ? String(r[5]).split(',').map(x => x.trim()) : [];
+      rooms.forEach(rm => { 
+          if(rm) {
+              const searchKey = normalizeRoom(rm); // ตัดช่องว่างและจุดออก
+              roomTeacherMap[searchKey] = teacherName; 
+          }
+      });
+    });
+
+    // 1. ดึงนักเรียนและสร้างแผนผังห้องเรียน
     const sSheet = ss.getSheetByName(CONFIG.SHEETS.STUDENTS);
     const sData = sSheet.getDataRange().getDisplayValues();
     sData.shift(); 
     
     let totalStudents = sData.length;
     let roomList = new Set();
-    let studentRoomMap = {}; // สมองกลจำห้องนักเรียนแบบ O(1)
+    let studentRoomMap = {}; 
+    let roomDetails = {}; 
 
     sData.forEach(r => {
       const stuId = String(r[0]).trim();
+      const stuName = String(r[2]).trim();
       const roomName = `${r[3]} ${r[4]}/${r[5]}`.trim(); 
-      if(roomName) roomList.add(roomName);
-      if(stuId) studentRoomMap[stuId] = roomName;
+      
+      if(roomName) {
+        roomList.add(roomName);
+        if(!roomDetails[roomName]) {
+          const roomKey = normalizeRoom(roomName); // ทำคำค้นหาให้เหมือนฝั่งครู
+          roomDetails[roomName] = { 
+            isCheckedToday: false, 
+            teacher: roomTeacherMap[roomKey] || "ไม่ระบุ", // 🟢 ดึงชื่อครูได้แม่นยำ 100%
+            absentTodayList: [],
+            stats: { total: {p:0, l:0, lv:0, a:0, intern:0}, months: {} } 
+          };
+        }
+        if(stuId) studentRoomMap[stuId] = { room: roomName, name: stuName };
+      }
     });
 
-    // 2. Data Aggregation - Today's Attendance
+    // 2. ดึงประวัติเข้าแถว กวาดข้อมูลรวดเดียวจบ
     const attSheet = getTargetSheet(ATTENDANCE_SHEET_NAME);
     const attData = attSheet.getDataRange().getDisplayValues();
     attData.shift();
 
     const todayStr = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "dd/MM/yyyy");
-    
-    let attStats = { present: 0, late: 0, leave: 0, absent: 0, totalChecked: 0 };
-    let roomCheckedList = new Set();
+    let attStatsToday = { present: 0, late: 0, leave: 0, absent: 0, intern: 0, totalChecked: 0 };
+    let checkedRoomsCount = 0;
 
     attData.forEach(r => {
       const recordDate = r[1] ? String(r[1]).trim() : "";
-      if (recordDate === todayStr) {
-        const stuId = r[3] ? String(r[3]).trim() : "";
-        const status = r[5] ? String(r[5]).trim() : "";
+      if(!recordDate) return;
+
+      const parts = recordDate.split('/');
+      if(parts.length !== 3) return;
+      const monthKey = `${parts[2]}-${parts[1]}`; // YYYY-MM
+
+      const teacherName = r[2] ? String(r[2]).trim() : "";
+      const stuId = r[3] ? String(r[3]).trim() : "";
+      const status = r[5] ? String(r[5]).trim() : "";
+
+      const studentInfo = studentRoomMap[stuId];
+      if(studentInfo) {
+        const roomName = studentInfo.room;
+        const rDetail = roomDetails[roomName];
+
+        // --- เช็คเฉพาะวันนี้ (Daily Action) ---
+        if (recordDate === todayStr) {
+            if (status === 'มา') attStatsToday.present++;
+            else if (status === 'สาย') attStatsToday.late++;
+            else if (status === 'ลา') attStatsToday.leave++;
+            else if (status === 'ขาด') attStatsToday.absent++;
+            else if (status === 'ฝึกงาน') attStatsToday.intern++; // 🟢 นับคนฝึกงาน
+
+            attStatsToday.totalChecked++;
+
+            if(!rDetail.isCheckedToday) {
+                rDetail.isCheckedToday = true;
+                rDetail.teacher = teacherName;
+                checkedRoomsCount++;
+            }
+            if(status === 'ขาด') rDetail.absentTodayList.push(studentInfo.name);
+        }
+
+        // --- สะสมยอดรายเดือนและรายเทอม (Monthly & Term Aggregation) ---
+        if(!rDetail.stats.months[monthKey]) rDetail.stats.months[monthKey] = {p:0, l:0, lv:0, a:0, intern:0};
         
-        if (status === 'มา') attStats.present++;
-        else if (status === 'สาย') attStats.late++;
-        else if (status === 'ลา') attStats.leave++;
-        else if (status === 'ขาด') attStats.absent++;
-        
-        attStats.totalChecked++;
-        
-        const roomName = studentRoomMap[stuId];
-        if(roomName) roomCheckedList.add(roomName); 
+        if(status === 'มา') { rDetail.stats.total.p++; rDetail.stats.months[monthKey].p++; }
+        else if(status === 'สาย') { rDetail.stats.total.l++; rDetail.stats.months[monthKey].l++; }
+        else if(status === 'ลา') { rDetail.stats.total.lv++; rDetail.stats.months[monthKey].lv++; }
+        else if(status === 'ขาด') { rDetail.stats.total.a++; rDetail.stats.months[monthKey].a++; }
+        else if(status === 'ฝึกงาน') { rDetail.stats.total.intern++; rDetail.stats.months[monthKey].intern++; }
       }
     });
 
-    // 3. Data Aggregation - SDQ Health Check
+    // 3. ดึงผล SDQ แยกกลุ่มอัตโนมัติ
     const sdqSheet = getTargetSheet(CONFIG.SHEETS.SDQ);
     const sdqData = sdqSheet.getDataRange().getDisplayValues();
     sdqData.shift();
@@ -435,31 +491,31 @@ function getExecutiveSummary(payload) {
     
     sdqData.forEach(r => {
       const stuId = r[2] ? String(r[2]).trim() : "";
-      const status = r[5] ? String(r[5]).trim() : "";
-      if(stuId && status) {
-        latestSdqMap[stuId] = status; // Overwrite data ทับไปเรื่อยๆ เพื่อให้ได้ค่าล่าสุดเสมอ
+      if(stuId) {
+        latestSdqMap[stuId] = {
+          id: stuId, name: String(r[3]).trim(), score: String(r[4]).trim(), status: String(r[5]).trim(),
+          room: studentRoomMap[stuId] ? studentRoomMap[stuId].room : "-"
+        };
       }
     });
 
-    Object.values(latestSdqMap).forEach(status => {
-      if (status === 'ปกติ') sdqStats.normal++;
-      else if (status === 'เสี่ยง') sdqStats.risk++;
-      else if (status === 'มีปัญหา') sdqStats.problem++;
+    let sdqRiskList = [], sdqProblemList = [];
+    Object.values(latestSdqMap).forEach(s => {
+      if (s.status === 'ปกติ') sdqStats.normal++;
+      else if (s.status === 'เสี่ยง') { sdqStats.risk++; sdqRiskList.push(s); }
+      else if (s.status === 'มีปัญหา') { sdqStats.problem++; sdqProblemList.push(s); }
     });
 
     return {
       success: true,
       data: {
-        todayDate: todayStr,
-        totalStudents: totalStudents,
-        totalRooms: roomList.size,
-        checkedRoomsCount: roomCheckedList.size,
-        attendance: attStats,
-        sdq: sdqStats
+        todayDate: todayStr, totalStudents: totalStudents, totalRooms: roomList.size,
+        checkedRoomsCount: checkedRoomsCount, attendanceToday: attStatsToday, 
+        roomDetails: roomDetails, // ข้อมูลสถิติห้องส่งไปฝั่งหน้าจอทั้งหมด
+        sdq: sdqStats, sdqLists: { risk: sdqRiskList, problem: sdqProblemList }
       }
     };
   } catch (error) {
-    console.error("Dashboard Error: ", error);
     return { success: false, message: error.message };
   }
 }

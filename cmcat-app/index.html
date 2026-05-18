@@ -247,7 +247,7 @@
                     const status = row[5];
                     
                     // สถิติภาพรวม
-                    if(status === 'มา' || status === 'ฝึกงาน') present++; // 🟢 ฝึกงานถือว่ามา
+                    if(status === 'มา') present++;
                     else if(status === 'สาย') late++;
                     else if(status === 'ลา') leave++;
                     else if(status === 'ขาด') absent++;
@@ -259,7 +259,7 @@
                             const mKey = `${parts[2]}-${parts[1]}`; // YYYY-MM เพื่อให้เรียงง่าย
                             if(!monthStats[mKey]) monthStats[mKey] = { present: 0, late: 0, leave: 0, absent: 0 };
                             
-                            if(status === 'มา' || status === 'ฝึกงาน') monthStats[mKey].present++; // 🟢 ฝึกงานถือว่ามา
+                            if(status === 'มา') monthStats[mKey].present++;
                             else if(status === 'สาย') monthStats[mKey].late++;
                             else if(status === 'ลา') monthStats[mKey].leave++;
                             else if(status === 'ขาด') monthStats[mKey].absent++;

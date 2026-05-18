@@ -381,7 +381,7 @@ function getExecutiveSummary(payload) {
   try {
     const ss = getActiveSS();
     
-    // 0. 🧠 ดึงข้อมูลครูเพื่อจับคู่ว่าใครประจำห้องไหน (ใช้ normalizeRoom แก้ปัญหาพิมพ์เว้นวรรคผิด)
+    // 0. 🧠 ดึงข้อมูลครูเพื่อจับคู่ว่าใครประจำห้องไหน (ปรับปรุงระบบให้สะสมชื่อครูที่ปรึกษาทุกคนในห้อง)
     const tSheet = ss.getSheetByName(CONFIG.SHEETS.TEACHERS);
     const tData = tSheet.getDataRange().getDisplayValues();
     let roomTeacherMap = {};
@@ -390,8 +390,15 @@ function getExecutiveSummary(payload) {
       const rooms = r[5] ? String(r[5]).split(',').map(x => x.trim()) : [];
       rooms.forEach(rm => { 
           if(rm) {
-              const searchKey = normalizeRoom(rm); // ตัดช่องว่างและจุดออก
-              roomTeacherMap[searchKey] = teacherName; 
+              const searchKey = normalizeRoom(rm);
+              // สร้างกล่อง Array มารองรับถ้ายังไม่เคยมีคีย์ห้องนี้มาก่อน
+              if (!roomTeacherMap[searchKey]) {
+                  roomTeacherMap[searchKey] = [];
+              }
+              // ป้องกันการบันทึกชื่อครูคนเดิมซ้ำซ้อน
+              if (!roomTeacherMap[searchKey].includes(teacherName)) {
+                  roomTeacherMap[searchKey].push(teacherName);
+              }
           }
       });
     });
@@ -414,12 +421,16 @@ function getExecutiveSummary(payload) {
       if(roomName) {
         roomList.add(roomName);
         if(!roomDetails[roomName]) {
-          const roomKey = normalizeRoom(roomName); // ทำคำค้นหาให้เหมือนฝั่งครู
+          const roomKey = normalizeRoom(roomName);
+          // 🟢 นำรายชื่อครูในกล่องมาเชื่อมกันด้วยการขึ้นบรรทัดใหม่ (<br>)
+          const teachersArray = roomTeacherMap[roomKey] || [];
+          const teachersStr = teachersArray.length > 0 ? teachersArray.join('<br>') : "ไม่ระบุ";
+          
           roomDetails[roomName] = { 
             isCheckedToday: false, 
-            teacher: roomTeacherMap[roomKey] || "ไม่ระบุ", // 🟢 ดึงชื่อครูได้แม่นยำ 100%
+            teacher: teachersStr, 
             absentTodayList: [],
-            stats: { total: {p:0, l:0, lv:0, a:0, intern:0}, months: {} } 
+            stats: { total: {p:0, l:0, lv:0, a:0}, months: {} } 
           };
         }
         if(stuId) studentRoomMap[stuId] = { room: roomName, name: stuName };
@@ -432,7 +443,7 @@ function getExecutiveSummary(payload) {
     attData.shift();
 
     const todayStr = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "dd/MM/yyyy");
-    let attStatsToday = { present: 0, late: 0, leave: 0, absent: 0, intern: 0, totalChecked: 0 };
+    let attStatsToday = { present: 0, late: 0, leave: 0, absent: 0, totalChecked: 0 };
     let checkedRoomsCount = 0;
 
     attData.forEach(r => {
@@ -458,7 +469,6 @@ function getExecutiveSummary(payload) {
             else if (status === 'สาย') attStatsToday.late++;
             else if (status === 'ลา') attStatsToday.leave++;
             else if (status === 'ขาด') attStatsToday.absent++;
-            else if (status === 'ฝึกงาน') attStatsToday.intern++; // 🟢 นับคนฝึกงาน
 
             attStatsToday.totalChecked++;
 
@@ -471,13 +481,12 @@ function getExecutiveSummary(payload) {
         }
 
         // --- สะสมยอดรายเดือนและรายเทอม (Monthly & Term Aggregation) ---
-        if(!rDetail.stats.months[monthKey]) rDetail.stats.months[monthKey] = {p:0, l:0, lv:0, a:0, intern:0};
+        if(!rDetail.stats.months[monthKey]) rDetail.stats.months[monthKey] = {p:0, l:0, lv:0, a:0};
         
         if(status === 'มา') { rDetail.stats.total.p++; rDetail.stats.months[monthKey].p++; }
         else if(status === 'สาย') { rDetail.stats.total.l++; rDetail.stats.months[monthKey].l++; }
         else if(status === 'ลา') { rDetail.stats.total.lv++; rDetail.stats.months[monthKey].lv++; }
         else if(status === 'ขาด') { rDetail.stats.total.a++; rDetail.stats.months[monthKey].a++; }
-        else if(status === 'ฝึกงาน') { rDetail.stats.total.intern++; rDetail.stats.months[monthKey].intern++; }
       }
     });
 

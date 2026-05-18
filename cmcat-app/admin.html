@@ -174,8 +174,7 @@
                     // Update KPI Cards
                     document.getElementById('kpi-total-stu').innerText = d.totalStudents;
                     
-                    // 🟢 ใช้ d.attendanceToday ให้ตรงกับ Code.js ตัวใหม่
-                    const attTotal = d.attendanceToday.present + d.attendanceToday.late + d.attendanceToday.leave + d.attendanceToday.absent;
+const attTotal = d.attendanceToday.present + d.attendanceToday.late + d.attendanceToday.leave + d.attendanceToday.absent;
                     const activeAtt = d.attendanceToday.present + d.attendanceToday.late + d.attendanceToday.leave;
                     const attPercent = attTotal > 0 ? Math.round((activeAtt / attTotal) * 100) : 0;
                     
@@ -261,8 +260,8 @@
                 Object.keys(rooms).sort().forEach(room => {
                     const r = rooms[room];
                     const t = r.stats.total;
-                    const totalActive = t.p + t.l + t.lv + t.a + (t.intern || 0); // 🟢 นับฝึกงานด้วย
-                    const pctTerm = totalActive > 0 ? Math.round(((t.p + t.l + t.lv + (t.intern || 0)) / totalActive) * 100) : 0;
+                    const totalActive = t.p + t.l + t.lv + t.a;
+                    const pctTerm = totalActive > 0 ? Math.round(((t.p + t.l + t.lv) / totalActive) * 100) : 0;
                     const colorTerm = pctTerm >= 60 ? 'text-emerald-600 bg-emerald-50' : 'text-red-600 bg-red-50';
 
                     html += `<tr class="hover:bg-slate-50 transition-colors">
@@ -272,8 +271,8 @@
                     sortedMonths.forEach(m => {
                         if(r.stats.months[m]) {
                             const mt = r.stats.months[m];
-                            const mTotal = mt.p + mt.l + mt.lv + mt.a + (mt.intern || 0); // 🟢 นับฝึกงานด้วย
-                            const mPct = mTotal > 0 ? Math.round(((mt.p + mt.l + mt.lv + (mt.intern || 0)) / mTotal) * 100) : 0;
+                            const mTotal = mt.p + mt.l + mt.lv + mt.a;
+                            const mPct = mTotal > 0 ? Math.round(((mt.p + mt.l + mt.lv) / mTotal) * 100) : 0;
                             const color = mPct >= 60 ? 'text-emerald-600 font-medium' : 'text-red-600 font-bold';
                             html += `<td class="p-3 border-r ${color}">${mPct}%</td>`;
                         } else {
@@ -296,8 +295,8 @@
             let rows = ''; let count = 1;
             Object.keys(rooms).sort().forEach(room => {
                 if(!rooms[room].isCheckedToday) {
-                    // 🟢 ตัด ${rooms[room].teacher} ออกจากตารางพิมพ์
-                    rows += `<tr><td style="text-align:center;">${count++}</td><td>${room}</td><td style="text-align:center; color:red; font-weight:bold;">ยังไม่ดำเนินการเช็คชื่อ</td></tr>`;
+                    // 🟢 แสดงชื่อครูไว้ที่คอลัมน์สุดท้าย
+                    rows += `<tr><td style="text-align:center;">${count++}</td><td>${room}</td><td style="text-align:center; color:red; font-weight:bold;">ยังไม่ดำเนินการเช็คชื่อ</td><td>${rooms[room].teacher}</td></tr>`;
                 }
             });
 
@@ -308,8 +307,8 @@
                     <p>ประจำวันที่: ${d.todayDate}</p>
                 </div>
                 <table>
-                    <thead><tr><th style="width:15%">ลำดับ</th><th style="width:50%">ห้องเรียน</th><th>สถานะการบันทึก</th></tr></thead>
-                    <tbody>${rows || '<tr><td colspan="3" style="text-align:center;">บันทึกข้อมูลครบทุกห้องเรียบร้อยแล้ว เยี่ยมมากครับ!</td></tr>'}</tbody>
+                    <thead><tr><th style="width:10%">ลำดับ</th><th style="width:25%">ห้องเรียน</th><th style="width:30%">สถานะการบันทึก</th><th>ครูที่ปรึกษาประจำห้อง</th></tr></thead>
+                    <tbody>${rows || '<tr><td colspan="4" style="text-align:center;">บันทึกข้อมูลครบทุกห้องเรียบร้อยแล้ว เยี่ยมมากครับ!</td></tr>'}</tbody>
                 </table>
                 <div style="margin-top: 50px; text-align: right; padding-right: 50px;">
                     <p>ผู้รายงาน ...........................................................</p>
@@ -335,6 +334,7 @@
                             <td style="text-align:center;">${room}</td>
                             <td>${studentName}</td>
                             <td style="text-align:center; color:red;">ขาดกิจกรรม</td>
+                            <td>${rooms[room].teacher}</td>
                         </tr>`;
                     });
                 }
@@ -349,13 +349,14 @@
                 <table>
                     <thead>
                         <tr>
-                            <th style="width:10%">ลำดับ</th>
-                            <th style="width:25%">ห้องเรียน</th>
-                            <th style="width:40%">ชื่อ-นามสกุล</th>
-                            <th>หมายเหตุ</th>
+                            <th style="width:8%">ลำดับ</th>
+                            <th style="width:17%">ห้องเรียน</th>
+                            <th style="width:25%">ชื่อ-นามสกุล</th>
+                            <th style="width:15%">หมายเหตุ</th>
+                            <th>ครูที่ปรึกษาประจำห้อง</th>
                         </tr>
                     </thead>
-                    <tbody>${rows || '<tr><td colspan="4" style="text-align:center;">วันนี้นักเรียนมาเข้าแถวครบทุกคน เยี่ยมมากครับ!</td></tr>'}</tbody>
+                    <tbody>${rows || '<tr><td colspan="5" style="text-align:center;">วันนี้นักเรียนมาเข้าแถวครบทุกคน เยี่ยมมากครับ!</td></tr>'}</tbody>
                 </table>
                 <div style="margin-top: 50px; text-align: right; padding-right: 50px;">
                     <p>ผู้รายงาน ...........................................................</p>
@@ -391,28 +392,32 @@
 
         // --- 🖨️ ระบบออก PDF รายชื่อ SDQ ---
         function printSdqReport() {
-            const sdq = globalDashboardData.sdqLists;
+            const d = globalDashboardData;
+            const sdq = d.sdqLists;
+            const rooms = d.roomDetails;
             const allAtRisk = [...sdq.problem, ...sdq.risk].sort((a,b) => b.score - a.score);
             let rows = '';
             allAtRisk.forEach((s, i) => {
-                rows += `<tr><td style="text-align:center;">${i+1}</td><td style="text-align:center;">${s.id}</td><td>${s.name}</td><td style="text-align:center;">${s.room}</td><td style="text-align:center; font-weight:bold;">${s.score}</td><td style="text-align:center;">${s.status}</td></tr>`;
+                // 🧠 แมปหาชื่อครูประจำห้องจากรหัสนักเรียนโดยอ้างอิงฟิลด์ห้องเรียน
+                const tName = rooms[s.room] ? rooms[s.room].teacher : "ไม่ระบุ";
+                rows += `<tr><td style="text-align:center;">${i+1}</td><td style="text-align:center;">${s.id}</td><td>${s.name}</td><td style="text-align:center;">${s.room}</td><td style="text-align:center; font-weight:bold;">${s.score}</td><td style="text-align:center;">${s.status}</td><td>${tName}</td></tr>`;
             });
 
             document.getElementById('print-master-container').innerHTML = `
                 <div class="print-header">
                     <h2>วิทยาลัยเกษตรและเทคโนโลยีเชียงใหม่</h2>
                     <p><strong>บัญชีรายชื่อนักเรียน นักศึกษา กลุ่มเสี่ยงและมีปัญหา (ประเมิน SDQ)</strong></p>
-                    <p>ข้อมูล ณ วันที่: ${globalDashboardData.todayDate}</p>
+                    <p>ข้อมูล ณ วันที่: ${d.todayDate}</p>
                 </div>
                 <table>
-                    <thead><tr><th style="width:8%">ลำดับ</th><th style="width:15%">รหัส</th><th style="width:30%">ชื่อ-สกุล</th><th style="width:17%">ห้องเรียน</th><th style="width:15%">คะแนนรวม</th><th style="width:15%">สถานะ</th></tr></thead>
-                    <tbody>${rows || '<tr><td colspan="6" style="text-align:center;">ไม่พบนักเรียนกลุ่มเสี่ยง/มีปัญหา ในขณะนี้</td></tr>'}</tbody>
+                    <thead><tr><th style="width:6%">ลำดับ</th><th style="width:12%">รหัส</th><th style="width:22%">ชื่อ-สกุล</th><th style="width:15%">ห้องเรียน</th><th style="width:12%">คะแนนรวม</th><th style="width:13%">สถานะ</th><th>ครูที่ปรึกษาประจำห้อง</th></tr></thead>
+                    <tbody>${rows || '<tr><td colspan="7" style="text-align:center;">ไม่พบนักเรียนกลุ่มเสี่ยง/มีปัญหา ในขณะนี้</td></tr>'}</tbody>
                 </table>
             `;
             window.print();
         }
 
-        function renderCharts(att, sdq) {
+function renderCharts(att, sdq) {
             Chart.defaults.font.family = "'Prompt', sans-serif";
             if (attChartInstance) attChartInstance.destroy();
             attChartInstance = new Chart(document.getElementById('attendanceChart').getContext('2d'), {

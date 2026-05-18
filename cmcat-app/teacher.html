@@ -666,8 +666,7 @@ function renderTable(students, sdqMap) {
                 if (mKey === selectedMonth) statusMap[dStr] = status;
                 if(!monthStats[mKey]) monthStats[mKey] = { active:0, present:0, late:0, leave:0 };
                 monthStats[mKey].active++;
-                // 🟢 นับ 'ฝึกงาน' ให้ถือว่าเป็นการ 'มา' (อนุโลมให้ผ่านกิจกรรม)
-                if(status === 'มา' || status === 'ฝึกงาน') monthStats[mKey].present++; else if(status === 'สาย') monthStats[mKey].late++; else if(status === 'ลา') monthStats[mKey].leave++;
+                if(status === 'มา') monthStats[mKey].present++; else if(status === 'สาย') monthStats[mKey].late++; else if(status === 'ลา') monthStats[mKey].leave++;
 
                 const isTargetDate = typeSelect === 'term_summary' || mKey === selectedMonth;
                 if(isTargetDate) {

@@ -74,6 +74,7 @@ function doPost(e) {
       case 'getRoomCalendar': return output(fetchRoomAttendanceCalendar(payload.roomString));
       case 'getRoomHistory': return output(fetchRoomHistory(payload.roomString));
       case 'getExecutiveSummary': return output(getExecutiveSummary(payload));
+      case 'recordLibraryEntry': return output(recordLibraryEntry(payload.studentId || payload));
       default:
         return output({ success: false, message: `Action [${action}] is not implemented.` });
     }

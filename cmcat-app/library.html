@@ -73,12 +73,11 @@
                             msg.innerHTML = '<i class="fa-solid fa-check-circle text-3xl mb-2 block"></i> ยินดีต้อนรับ<br><span class="text-2xl">' + res.name + '</span>';
                         } else {
                             msg.className = "mt-6 p-5 rounded-2xl font-bold text-lg text-center bg-red-50 border border-red-200 text-red-700 shadow-inner";
-                            msg.innerHTML = '<i class="fa-solid fa-circle-xmark text-3xl mb-2 block"></i> ' + res.message;
+                            msg.innerHTML = '<i class="fa-solid fa-circle-xmark text-3xl mb-2 block"></i> ' + (res.message || 'ไม่สามารถบันทึกได้');
                         }
                         
                         msg.classList.remove('hidden');
 
-                        // รีเซ็ตแบบฟอร์ม
                         setTimeout(() => {
                             input.disabled = false;
                             input.value = "";
@@ -87,9 +86,10 @@
                         }, 2500);
                     })
                     .withFailureHandler(err => {
+                        console.error(err);
                         const msg = document.getElementById('result-message');
                         msg.className = "mt-6 p-5 rounded-2xl font-bold text-lg text-center bg-red-50 border border-red-200 text-red-700 shadow-inner";
-                        msg.innerHTML = '<i class="fa-solid fa-circle-xmark text-3xl mb-2 block"></i> เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง';
+                        msg.innerHTML = '<i class="fa-solid fa-circle-xmark text-3xl mb-2 block"></i> เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่อีกครั้ง';
                         msg.classList.remove('hidden');
                         
                         setTimeout(() => {

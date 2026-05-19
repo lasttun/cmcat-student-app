@@ -551,6 +551,11 @@ function recordLibraryEntry(studentId) {
   const sSheet = ss.getSheetByName(CONFIG.SHEETS.STUDENTS);
   const libSheet = getTargetSheet('Library_Logs');
   
+  // === สร้าง Header ถ้า Sheet ยังไม่มีข้อมูล ===
+  if (libSheet.getLastRow() === 0) {
+    libSheet.appendRow(['Timestamp', 'Student_ID', 'Name', 'Status']);
+  }
+  
   // ค้นหาชื่อนักเรียนจากรหัสที่ส่งมา
   const sData = sSheet.getDataRange().getValues();
   const student = sData.find(r => String(r[0]).trim() === String(studentId).trim());

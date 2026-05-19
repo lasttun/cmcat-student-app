@@ -52,59 +52,74 @@
         </div>
     </div>
 
-    <script>
-        const input = document.getElementById('studentId');
+<script>
+    const input = document.getElementById('studentId');
+    
+    input.addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') {
+            const id = input.value.trim();
+            if (!id) return;
+
+            const originalValue = input.value;
+            input.value = "กำลังบันทึก...";
+            input.disabled = true;
+
+            // เรียกผ่าน Google Apps Script Web App
+            fetch('', {  
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'recordLibraryEntry',
+                    studentId: id
+                })
+            })
+            .then(res => res.json())
+            .then(res => {
+                handleResponse(res);
+            })
+            .catch(err => {
+                console.error(err);
+                showError("เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่อีกครั้ง");
+            });
+        }
+    });
+
+    function handleResponse(res) {
+        const msg = document.getElementById('result-message');
         
-        input.addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') {
-                const id = input.value.trim();
-                if (!id) return;
+        if (res.success) {
+            msg.className = "mt-6 p-5 rounded-2xl font-bold text-lg text-center bg-emerald-50 border border-emerald-200 text-emerald-800 shadow-inner";
+            msg.innerHTML = `<i class="fa-solid fa-check-circle text-3xl mb-2 block"></i> ยินดีต้อนรับ<br><span class="text-2xl">${res.name}</span>`;
+        } else {
+            msg.className = "mt-6 p-5 rounded-2xl font-bold text-lg text-center bg-red-50 border border-red-200 text-red-700 shadow-inner";
+            msg.innerHTML = `<i class="fa-solid fa-circle-xmark text-3xl mb-2 block"></i> ${res.message || 'ไม่สามารถบันทึกได้'}`;
+        }
+        
+        msg.classList.remove('hidden');
 
-                // Visual feedback
-                input.value = "กำลังบันทึก...";
-                input.disabled = true;
+        setTimeout(() => {
+            input.disabled = false;
+            input.value = "";
+            input.focus();
+            msg.classList.add('hidden');
+        }, 2500);
+    }
 
-                google.script.run
-                    .withSuccessHandler(res => {
-                        const msg = document.getElementById('result-message');
-                        
-                        if (res.success) {
-                            msg.className = "mt-6 p-5 rounded-2xl font-bold text-lg text-center bg-emerald-50 border border-emerald-200 text-emerald-800 shadow-inner";
-                            msg.innerHTML = '<i class="fa-solid fa-check-circle text-3xl mb-2 block"></i> ยินดีต้อนรับ<br><span class="text-2xl">' + res.name + '</span>';
-                        } else {
-                            msg.className = "mt-6 p-5 rounded-2xl font-bold text-lg text-center bg-red-50 border border-red-200 text-red-700 shadow-inner";
-                            msg.innerHTML = '<i class="fa-solid fa-circle-xmark text-3xl mb-2 block"></i> ' + (res.message || 'ไม่สามารถบันทึกได้');
-                        }
-                        
-                        msg.classList.remove('hidden');
+    function showError(message) {
+        const msg = document.getElementById('result-message');
+        msg.className = "mt-6 p-5 rounded-2xl font-bold text-lg text-center bg-red-50 border border-red-200 text-red-700 shadow-inner";
+        msg.innerHTML = `<i class="fa-solid fa-circle-xmark text-3xl mb-2 block"></i> ${message}`;
+        msg.classList.remove('hidden');
+        
+        setTimeout(() => {
+            input.disabled = false;
+            input.value = "";
+            input.focus();
+            msg.classList.add('hidden');
+        }, 3000);
+    }
 
-                        setTimeout(() => {
-                            input.disabled = false;
-                            input.value = "";
-                            input.focus();
-                            msg.classList.add('hidden');
-                        }, 2500);
-                    })
-                    .withFailureHandler(err => {
-                        console.error(err);
-                        const msg = document.getElementById('result-message');
-                        msg.className = "mt-6 p-5 rounded-2xl font-bold text-lg text-center bg-red-50 border border-red-200 text-red-700 shadow-inner";
-                        msg.innerHTML = '<i class="fa-solid fa-circle-xmark text-3xl mb-2 block"></i> เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่อีกครั้ง';
-                        msg.classList.remove('hidden');
-                        
-                        setTimeout(() => {
-                            input.disabled = false;
-                            input.value = "";
-                            input.focus();
-                            msg.classList.add('hidden');
-                        }, 3000);
-                    })
-                    .recordLibraryEntry(id);
-            }
-        });
-
-        // Auto focus
-        window.onload = () => input.focus();
-    </script>
+    window.onload = () => input.focus();
+</script>
 </body>
 </html>

@@ -48,7 +48,7 @@
 
         <!-- Footer -->
         <div class="border-t border-slate-100 py-4 text-center text-xs text-slate-400">
-            ระบบจัดการห้องสมุด • วิทยาลัยเกษตรและเทคโนโลยีเชียงใหม่ &copy; 2025
+            ระบบจัดการห้องสมุด • วิทยาลัยเกษตรและเทคโนโลยีเชียงใหม่ © 2026
         </div>
     </div>
 
@@ -69,21 +69,16 @@
                         const msg = document.getElementById('result-message');
                         
                         if (res.success) {
-                            msg.className = "hidden mt-6 p-5 rounded-2xl font-bold text-lg text-center bg-emerald-50 border border-emerald-200 text-emerald-800 shadow-inner";
-                            msg.innerHTML = `
-                                <i class="fa-solid fa-check-circle text-3xl mb-2 block"></i>
-                                ยินดีต้อนรับ<br><span class="text-2xl">${res.name}</span>
-                            `;
+                            msg.className = "mt-6 p-5 rounded-2xl font-bold text-lg text-center bg-emerald-50 border border-emerald-200 text-emerald-800 shadow-inner";
+                            msg.innerHTML = '<i class="fa-solid fa-check-circle text-3xl mb-2 block"></i> ยินดีต้อนรับ<br><span class="text-2xl">' + res.name + '</span>';
                         } else {
-                            msg.className = "hidden mt-6 p-5 rounded-2xl font-bold text-lg text-center bg-red-50 border border-red-200 text-red-700 shadow-inner";
-                            msg.innerHTML = `
-                                <i class="fa-solid fa-circle-xmark text-3xl mb-2 block"></i>
-                                ${res.message}
-                            `;
+                            msg.className = "mt-6 p-5 rounded-2xl font-bold text-lg text-center bg-red-50 border border-red-200 text-red-700 shadow-inner";
+                            msg.innerHTML = '<i class="fa-solid fa-circle-xmark text-3xl mb-2 block"></i> ' + res.message;
                         }
                         
                         msg.classList.remove('hidden');
 
+                        // รีเซ็ตแบบฟอร์ม
                         setTimeout(() => {
                             input.disabled = false;
                             input.value = "";
@@ -91,11 +86,24 @@
                             msg.classList.add('hidden');
                         }, 2500);
                     })
+                    .withFailureHandler(err => {
+                        const msg = document.getElementById('result-message');
+                        msg.className = "mt-6 p-5 rounded-2xl font-bold text-lg text-center bg-red-50 border border-red-200 text-red-700 shadow-inner";
+                        msg.innerHTML = '<i class="fa-solid fa-circle-xmark text-3xl mb-2 block"></i> เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง';
+                        msg.classList.remove('hidden');
+                        
+                        setTimeout(() => {
+                            input.disabled = false;
+                            input.value = "";
+                            input.focus();
+                            msg.classList.add('hidden');
+                        }, 3000);
+                    })
                     .recordLibraryEntry(id);
             }
         });
 
-        // Auto focus when page loads
+        // Auto focus
         window.onload = () => input.focus();
     </script>
 </body>

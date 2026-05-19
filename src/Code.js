@@ -124,7 +124,9 @@ function fetchStudentsByRoom(roomString) {
 
   const students = data
     .filter(r => normalizeRoom(`${r[3]}${r[4]}/${r[5]}`) === searchKey)
-    .map(r => ({ id: String(r[0]).trim(), name: String(r[2]).trim() }));
+    .map(r => ({ id: String(r[0]).trim(), name: String(r[2]).trim() }))
+    // 🟢 เรียงรหัสประจำตัว (Student_ID จากคอลัมน์ A) จากน้อยไปหามาก
+    .sort((a, b) => a.id.localeCompare(b.id, undefined, {numeric: true}));
 
   return { success: true, data: students };
 }
@@ -477,7 +479,7 @@ function getExecutiveSummary(payload) {
                 rDetail.teacher = teacherName;
                 checkedRoomsCount++;
             }
-            if(status === 'ขาด') rDetail.absentTodayList.push(studentInfo.name);
+            if(status === 'ขาด') rDetail.absentTodayList.push({ id: stuId, name: studentInfo.name });
         }
 
         // --- สะสมยอดรายเดือนและรายเทอม (Monthly & Term Aggregation) ---
@@ -488,6 +490,12 @@ function getExecutiveSummary(payload) {
         else if(status === 'ลา') { rDetail.stats.total.lv++; rDetail.stats.months[monthKey].lv++; }
         else if(status === 'ขาด') { rDetail.stats.total.a++; rDetail.stats.months[monthKey].a++; }
       }
+    });
+
+    // 🟢 เรียงลำดับรายชื่อเด็กขาดเข้าแถว ตามรหัสประจำตัว จากน้อยไปหามาก ก่อนแปลงกลับเป็นชื่อส่งให้ UI
+    Object.values(roomDetails).forEach(rd => {
+      rd.absentTodayList.sort((a, b) => a.id.localeCompare(b.id, undefined, {numeric: true}));
+      rd.absentTodayList = rd.absentTodayList.map(s => s.name);
     });
 
     // 3. ดึงผล SDQ แยกกลุ่มอัตโนมัติ

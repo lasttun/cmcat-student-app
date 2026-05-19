@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>CMCAT Library Entry</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;600&display=swap" rel="stylesheet">
+    <style> body { font-family: 'Prompt', sans-serif; } </style>
+</head>
+<body class="bg-slate-900 min-h-screen flex items-center justify-center p-4">
+    <div class="bg-white p-8 rounded-[2rem] shadow-2xl w-full max-w-lg text-center">
+        <h1 class="text-3xl font-bold text-slate-800 mb-2">ลงทะเบียนเข้าห้องสมุด</h1>
+        <p class="text-slate-500 mb-8">สแกนบัตรหรือกรอกรหัสนักศึกษา</p>
+        
+        <input type="text" id="studentId" 
+               class="w-full text-center text-3xl py-6 bg-slate-100 border-2 border-slate-200 rounded-2xl focus:border-emerald-500 outline-none mb-6" 
+               placeholder="รหัสนักศึกษา..." autofocus>
+        
+        <div id="result-message" class="hidden p-4 rounded-xl font-bold text-lg"></div>
+    </div>
+
+    <script>
+        const input = document.getElementById('studentId');
+        input.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                const id = input.value.trim();
+                if(!id) return;
+                
+                input.value = "กำลังบันทึก...";
+                input.disabled = true;
+                
+                google.script.run
+                    .withSuccessHandler(res => {
+                        const msg = document.getElementById('result-message');
+                        msg.className = res.success ? "p-4 rounded-xl font-bold text-lg bg-emerald-100 text-emerald-800" : "p-4 rounded-xl font-bold text-lg bg-red-100 text-red-800";
+                        msg.innerText = res.success ? `ยินดีต้อนรับ ${res.name}!` : res.message;
+                        msg.classList.remove('hidden');
+                        
+                        setTimeout(() => {
+                            input.disabled = false;
+                            input.value = "";
+                            input.focus();
+                            msg.classList.add('hidden');
+                        }, 2000);
+                    })
+                    .recordLibraryEntry(id);
+            }
+        });
+    </script>
+</body>
+</html>

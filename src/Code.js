@@ -24,7 +24,14 @@ const ATTENDANCE_SHEET_NAME = `Attendance_Logs_${CONFIG.CURRENT_TERM}`;
 // ==========================================
 // 🚀 WEB APP ENTRY POINTS (CORS Optimized)
 // ==========================================
-function doGet() {
+function doGet(e) {
+  // 🟢 ตรวจสอบว่าถ้า URL เป็น /?page=library ให้เปิดหน้า library.html ถ้าไม่ใช่ให้เปิด index
+  if (e && e.parameter && e.parameter.page === 'library') {
+      return HtmlService.createTemplateFromFile('library')
+          .evaluate()
+          .setTitle('ระบบเข้าใช้ห้องสมุด CMCAT');
+  }
+  
   return HtmlService.createTemplateFromFile('index')
       .evaluate()
       .setTitle('ระบบดูแลผู้เรียน CMCAT')
@@ -536,4 +543,23 @@ function getExecutiveSummary(payload) {
   } catch (error) {
     return { success: false, message: error.message };
   }
+}
+
+/** 9. ระบบบันทึกเข้าใช้ห้องสมุด */
+function recordLibraryEntry(studentId) {
+  const ss = getActiveSS();
+  const sSheet = ss.getSheetByName(CONFIG.SHEETS.STUDENTS);
+  const libSheet = getTargetSheet('Library_Logs');
+  
+  // ค้นหาชื่อนักเรียนจากรหัสที่ส่งมา
+  const sData = sSheet.getDataRange().getValues();
+  const student = sData.find(r => String(r[0]).trim() === String(studentId).trim());
+  
+  if (!student) {
+    return { success: false, message: "ไม่พบรหัสนักศึกษานี้ในระบบ" };
+  }
+  
+  // บันทึก Log
+  libSheet.appendRow([new Date(), studentId, student[2], 'เข้าใช้งาน']);
+  return { success: true, name: student[2] };
 }

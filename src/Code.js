@@ -476,7 +476,8 @@ function getExecutiveSummary(payload) {
 
             if(!rDetail.isCheckedToday) {
                 rDetail.isCheckedToday = true;
-                rDetail.teacher = teacherName;
+                rDetail.checkedByName = teacherName;    // ชื่อครูที่เช็คชื่อวันนี้
+                // ไม่เขียนทับ rDetail.teacher (ซึ่งเก็บชื่อครูที่ปรึกษาทั้งหมด)
                 checkedRoomsCount++;
             }
             if(status === 'ขาด') rDetail.absentTodayList.push({ id: stuId, name: studentInfo.name });

@@ -329,8 +329,52 @@ function renderAttendanceList(students, roomName, alreadyChecked, history) {
            <small>ระบบทำการล็อกการบันทึก เพื่อป้องกันข้อมูลซ้ำซ้อนจากครูที่ปรึกษาหลายท่าน</small>
          </div>` : '';
 
+    // 🧠 คำนวณสถิติเพื่อสร้างแดชบอร์ดประจำห้อง
+    let p = 0, l = 0, lv = 0, a = 0;
+    students.forEach(std => {
+        const stat = alreadyChecked ? (todayStatusMap[std.id] || 'มา') : 'มา';
+        if (stat === 'มา') p++; else if (stat === 'สาย') l++; else if (stat === 'ลา') lv++; else if (stat === 'ขาด') a++;
+    });
+    const totalCount = students.length;
+    const ratePercent = totalCount > 0 ? Math.round(((p + l + lv) / totalCount) * 100) : 0;
+
     let html = `
       ${warningHtml}
+      
+      <div class="row g-2 mb-3">
+        <div class="col-6 col-md-3">
+          <div class="p-3 bg-white rounded-3 border border-start border-start-4 border-secondary text-center shadow-sm">
+            <small class="text-muted d-block fw-bold mb-1">นักเรียนทั้งหมด</small>
+            <span class="fs-4 fw-bold text-dark">${totalCount} คน</span>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="p-3 bg-white rounded-3 border border-start border-start-4 border-success text-center shadow-sm">
+            <small class="text-success d-block fw-bold mb-1">อัตราเข้าแถว</small>
+            <span class="fs-4 fw-bold text-success">${ratePercent}%</span>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="p-3 bg-white rounded-3 border border-start border-start-4 border-danger text-center shadow-sm">
+            <small class="text-danger d-block fw-bold mb-1">ขาดแถววันนี้</small>
+            <span class="fs-4 fw-bold text-danger">${a} คน</span>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="p-3 bg-dark rounded-3 text-center shadow-sm text-white">
+            <small class="text-light d-block fw-bold mb-1">มา / สาย / ลา</small>
+            <span class="fs-5 fw-bold text-info">${p}/${l}/${lv}</span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="card p-3 mb-4 border rounded-3 bg-white shadow-sm d-flex flex-column align-items-center justify-content-center">
+        <small class="text-muted fw-bold mb-2"><i class="fas fa-chart-pie me-1"></i> สัดส่วนการเข้าแถวของห้องเรียนวันนี้</small>
+        <div style="max-width: 180px; height: 110px; width: 100%;">
+          <canvas id="bootstrapRoomChart"></canvas>
+        </div>
+      </div>
+
       <div class="d-flex justify-content-between align-items-center mb-3 p-2 bg-light rounded-3 border">
         <span class="text-muted fw-bold"><i class="fas fa-users me-2"></i>รายชื่อ ${students.length} คน</span>
         <button class="btn btn-sm btn-outline-success fw-bold shadow-sm" onclick="markAllStatus('มา')" ${alreadyChecked ? 'disabled' : ''}>
@@ -360,7 +404,6 @@ function renderAttendanceList(students, roomName, alreadyChecked, history) {
           <div class="btn-group btn-group-sm shadow-sm w-100 max-w-200" role="group">`;
 
 statusOptions.forEach(opt => {
-        // 🟢 ตรวจสอบว่าถ้าถูกเช็คชื่อไปแล้ว ให้ติ๊กปุ่มตรงกับที่บันทึกไว้ในฐานข้อมูลเป๊ะๆ
         let isChecked = false;
         if (alreadyChecked && todayStatusMap[std.id]) {
             isChecked = (opt.value === todayStatusMap[std.id]);
@@ -368,8 +411,12 @@ statusOptions.forEach(opt => {
             isChecked = (opt.value === 'มา'); // ค่าเริ่มต้นถ้ายังไม่ได้เช็คชื่อ
         }
         
-        // ➔ หากเช็คชื่อเสร็จแล้วให้เปลี่ยนปุ่มสถานะทั้งหมดเป็นสีเทา (btn-outline-secondary) เพื่อป้องกันผู้ใช้สับสน
-        const labelClass = alreadyChecked ? 'btn-outline-secondary opacity-60' : opt.cls;
+        // ➔ บังคับปุ่มเลือกสุดท้ายเป็นสีดำเข้ม ส่วนปุ่มไม่ได้เลือกจางลง
+        let labelClass = opt.cls;
+        if (alreadyChecked) {
+            labelClass = isChecked ? 'btn-dark fw-bold text-white shadow-none' : 'btn-light text-muted opacity-20 border-0';
+        }
+
         html += `
             <input type="radio" class="btn-check" name="status${i}" id="${opt.value}${i}" value="${opt.value}" ${isChecked ? 'checked' : ''} ${alreadyChecked ? 'disabled' : ''}
               onchange="highlightRow(${i}, '${opt.value}')">
@@ -408,7 +455,32 @@ statusOptions.forEach(opt => {
 
     document.getElementById('attendance-container').innerHTML = html;
     
+    // 🟢 วนลูปไฮไลต์สีแถวตารางให้สอดคล้องกับปุ่มตัวเลือกที่บันทึกจริงล่าสุดทันที
+    students.forEach((std, i) => {
+        const currentStatus = alreadyChecked ? (todayStatusMap[std.id] || 'มา') : 'มา';
+        highlightRow(i, currentStatus);
+    });
+    
     updateAttSummary();
+
+    // 🟢 คำสั่งวาดกราฟวงกลมประจำห้องเรียน
+    setTimeout(() => {
+        const ctx = document.getElementById('bootstrapRoomChart');
+        if(ctx) {
+            new Chart(ctx.getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['มา', 'สาย', 'ลา', 'ขาด'],
+                    datasets: [{
+                        data: [p, l, lv, a],
+                        backgroundColor: ['#10b981', '#f97316', '#eab308', '#ef4444'],
+                        borderWidth: 0
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 10, family: "'Prompt'" } } } }, cutout: '70%' }
+            });
+        }
+    }, 150);
   }
 
   function highlightRow(i, status) {

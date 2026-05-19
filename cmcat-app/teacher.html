@@ -341,7 +341,16 @@
             }
 
             if(dataS.success) {
-                currentStudentsData = dataS.data.map(s => ({ ...s, status: 'มา' }));
+                // ใช้สถานะจริงจาก history (ถ้ามีการเช็คชื่อวันนี้แล้ว)
+                currentStudentsData = dataS.data.map(s => {
+                    const todayRecord = historyData.find(r => 
+                        r[1] === todayStr && String(r[3]).trim() === String(s.id).trim()
+                    );
+                    return { 
+                        ...s, 
+                        status: todayRecord ? String(todayRecord[5]).trim() : null   // null = ยังไม่เช็ค
+                    };
+                });
                 const latestSDQMap = {};
                 if(dataSDQ.success) {
                     dataSDQ.data.forEach(item => {
@@ -387,7 +396,45 @@
     }
 
 function renderTable(students, sdqMap) {
+// 🧠 คำนวณสถิติจากข้อมูลจริง (ไม่ใช้ default status)
+let p = 0, l = 0, lv = 0, a = 0;
+students.forEach(std => {
+    const status = std.status || 'มา';
+    if(status === 'มา') p++;
+    else if(status === 'สาย') l++;
+    else if(status === 'ลา') lv++;
+    else if(status === 'ขาด') a++;
+});
+        const totalStu = students.length;
+        const attRate = totalStu > 0 ? Math.round(((p + l + lv) / totalStu) * 100) : 0;
+
         let html = `
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+            <div class="bg-white p-4 rounded-2xl border border-slate-200 border-l-4 border-l-slate-600 shadow-sm">
+                <p class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">นักเรียนในชั้น</p>
+                <h3 class="text-2xl font-extrabold text-slate-800">${totalStu} <span class="text-xs font-normal text-slate-400">คน</span></h3>
+            </div>
+            <div class="bg-white p-4 rounded-2xl border border-slate-200 border-l-4 border-l-emerald-500 shadow-sm">
+                <p class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">อัตราเข้าแถววันนี้</p>
+                <h3 class="text-2xl font-extrabold text-emerald-600">${attRate}%</h3>
+            </div>
+            <div class="bg-white p-4 rounded-2xl border border-slate-200 border-l-4 border-l-red-500 shadow-sm">
+                <p class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">ขาดแถววันนี้</p>
+                <h3 class="text-2xl font-extrabold text-red-600">${a} <span class="text-xs font-normal text-red-400">คน</span></h3>
+            </div>
+            <div class="bg-slate-800 p-4 rounded-2xl border border-slate-700 shadow-sm text-white">
+                <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">มา / สาย / ลา</p>
+                <h3 class="text-xl font-extrabold text-blue-400">${p} / ${l} / ${lv} <span class="text-xs font-normal text-slate-400">คน</span></h3>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm mb-5 flex flex-col items-center justify-center">
+            <p class="text-xs font-bold text-slate-600 mb-3"><i class="fas fa-chart-pie me-1"></i> แผนภูมิสัดส่วนการเข้าแถวของห้องเรียนวันนี้</p>
+            <div class="relative w-full max-w-[200px] h-[120px]">
+                <canvas id="teacherRoomChart"></canvas>
+            </div>
+        </div>
+
         <div class="bg-white/90 backdrop-blur-sm rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden border border-slate-200/60">
             <div class="bg-white/50 p-3 md:p-4 flex flex-col sm:flex-row justify-between items-center gap-3 border-b border-slate-200/60">
                 <span class="font-bold text-slate-700 text-sm flex items-center gap-2"><span class="text-xl">⚡</span> กำหนดสถานะทุกคนเป็น:</span>
@@ -437,15 +484,19 @@ function renderTable(students, sdqMap) {
                             { val: 'สาย', icon: '⏰', color: 'peer-checked:bg-orange-500 peer-checked:shadow-orange-300/50' },
                             { val: 'ลา', icon: '📝', color: 'peer-checked:bg-yellow-500 peer-checked:shadow-yellow-300/50' },
                             { val: 'ขาด', icon: '❌', color: 'peer-checked:bg-red-500 peer-checked:shadow-red-300/50' }
-                        ].map(opt => `
-                            <label class="cursor-pointer flex-1 ${isAlreadyCheckedToday ? 'opacity-50 pointer-events-none' : ''}">
+                        ].map(opt => {
+                            // ➔ หากเช็คชื่อเสร็จแล้วให้เปลี่ยนปุ่มที่ถูกเลือกเป็นสีเทา (bg-slate-400) ปิดสีสันทั้งหมดป้องกันการสับสน
+                            const btnColor = isAlreadyCheckedToday ? 'peer-checked:bg-slate-400 peer-checked:shadow-none' : opt.color;
+                            return `
+                            <label class="cursor-pointer flex-1 ${isAlreadyCheckedToday ? 'opacity-60 pointer-events-none' : ''}">
                                 <input type="radio" name="att_${s.id}" value="${opt.val}" ${s.status === opt.val ? 'checked' : ''} onchange="updateAttendance(${i}, '${opt.val}')" class="hidden peer" ${isAlreadyCheckedToday ? 'disabled' : ''}>
-                                <div class="py-1.5 md:py-2.5 rounded-xl text-[10px] md:text-sm font-bold text-slate-500 bg-white border border-slate-200 peer-checked:border-transparent peer-checked:text-white shadow-sm shadow-slate-200 ${opt.color} transition-all duration-300 hover:-translate-y-0.5 active:scale-95 text-center flex flex-col xl:flex-row items-center justify-center gap-0.5 md:gap-1">
+                                <div class="py-1.5 md:py-2.5 rounded-xl text-[10px] md:text-sm font-bold text-slate-500 bg-white border border-slate-200 peer-checked:border-transparent peer-checked:text-white shadow-sm shadow-slate-200 ${btnColor} transition-all duration-300 hover:-translate-y-0.5 active:scale-95 text-center flex flex-col xl:flex-row items-center justify-center gap-0.5 md:gap-1">
                                     <span class="text-xs md:text-base leading-none">${opt.icon}</span>
                                     <span class="leading-none">${opt.val}</span>
                                 </div>
                             </label>
-                        `).join('')}
+                            `;
+                        }).join('')}
                     </div>
                 </td>
                 <td class="p-2 md:p-5 text-center border-l border-slate-100">${getBadge(sdq.student)}</td>
@@ -474,6 +525,25 @@ function renderTable(students, sdqMap) {
             </button>
         </div>`;
         document.getElementById('students-container').innerHTML = html;
+
+        // 🟢 เรียกใช้คำสั่งวาดแผนภูมิวงกลมประจำห้องเรียนทันที
+        setTimeout(() => {
+            const ctx = document.getElementById('teacherRoomChart');
+            if(ctx) {
+                new Chart(ctx.getContext('2d'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['มา', 'สาย', 'ลา', 'ขาด'],
+                        datasets: [{
+                            data: [p, l, lv, a],
+                            backgroundColor: ['#10b981', '#f97316', '#eab308', '#ef4444'],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 10, family: "'Prompt'" } } } }, cutout: '70%' }
+                });
+            }
+        }, 100);
     }
 
     // ฟังก์ชันอัปเดตสถานะรายบุคคล
@@ -594,7 +664,10 @@ function renderTable(students, sdqMap) {
                           typeSelect === 'month_summary' ? `สรุปการเข้าแถวประจำเดือน ${selectedMonthText}` :
                           `รายละเอียดการเข้าแถวรายวัน ประจำเดือน ${selectedMonthText}`;
 
-        let activeDates = new Set(); let allMonthsInTerm = new Set();
+        let activeDates = new Set(); 
+        let allMonthsInTerm = new Set();
+        const activeDaysPerMonth = {};   // ← เพิ่มตัวนี้
+
         globalAttendanceData.forEach(history => {
             history.forEach(record => {
                 const dateStr = record[1];
@@ -604,6 +677,9 @@ function renderTable(students, sdqMap) {
                         const mKey = `${parts[2]}-${parts[1]}`;
                         allMonthsInTerm.add(mKey);
                         if (typeSelect === 'term_summary' || mKey === selectedMonth) activeDates.add(dateStr);
+
+                        if(!activeDaysPerMonth[mKey]) activeDaysPerMonth[mKey] = new Set();
+                        activeDaysPerMonth[mKey].add(dateStr);
                     }
                 }
             });
@@ -689,7 +765,10 @@ function renderTable(students, sdqMap) {
             if (typeSelect === 'term_summary') {
                 sortedMonths.forEach(m => {
                     let mPct = 0;
-                    if(monthStats[m] && monthStats[m].active > 0) mPct = Math.round(((monthStats[m].present + monthStats[m].late + monthStats[m].leave) / monthStats[m].active) * 100);
+                    const daysInMonth = activeDaysPerMonth[m] ? activeDaysPerMonth[m].size : 0;
+                    if (daysInMonth > 0 && monthStats[m]) {
+                        mPct = Math.round(((monthStats[m].present + monthStats[m].late + monthStats[m].leave) / daysInMonth) * 100);
+                    }
                     rowHtml += `<td class="p-2 border text-center">${monthStats[m] ? mPct + '%' : '-'}</td>`;
                 });
                 rowHtml += `<td class="p-2 border text-center font-bold bg-slate-50 print:bg-white">${percent}%</td><td class="p-2 border text-center">${evalText}</td>`;

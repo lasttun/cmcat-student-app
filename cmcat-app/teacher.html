@@ -348,7 +348,7 @@
                     );
                     return { 
                         ...s, 
-                        status: todayRecord ? String(todayRecord[5]).trim() : null   // null = ยังไม่เช็ค
+                        status: todayRecord ? String(todayRecord[5]).trim() : 'มา'   // 🟢 แก้ไข: ตั้งค่าเริ่มต้นเป็น 'มา' เสมอ เพื่อให้บันทึกลงฐานข้อมูลได้จริง
                     };
                 });
                 const latestSDQMap = {};

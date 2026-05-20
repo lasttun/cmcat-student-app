@@ -396,44 +396,59 @@
     }
 
 function renderTable(students, sdqMap) {
-// 🧠 คำนวณสถิติจากข้อมูลจริง (ไม่ใช้ default status)
-let p = 0, l = 0, lv = 0, a = 0;
-students.forEach(std => {
-    const status = std.status || 'มา';
-    if(status === 'มา') p++;
-    else if(status === 'สาย') l++;
-    else if(status === 'ลา') lv++;
-    else if(status === 'ขาด') a++;
-});
-        const totalStu = students.length;
-        const attRate = totalStu > 0 ? Math.round(((p + l + lv) / totalStu) * 100) : 0;
+        let dashboardHtml = '';
+        let p = 0, l = 0, lv = 0, a = 0;
+        
+        // 🟢 ให้แดชบอร์ดทำงานก็ต่อเมื่อมีการบันทึกเช็คชื่อของวันนี้ไปแล้วเท่านั้น
+        if (isAlreadyCheckedToday) {
+            students.forEach(std => {
+                const status = std.status || 'มา';
+                if(status === 'มา') p++;
+                else if(status === 'สาย') l++;
+                else if(status === 'ลา') lv++;
+                else if(status === 'ขาด') a++;
+            });
+            const totalStu = students.length;
+            const attRate = totalStu > 0 ? Math.round(((p + l + lv) / totalStu) * 100) : 0;
+
+            dashboardHtml = `
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 border-l-4 border-l-slate-600 shadow-sm">
+                    <p class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">นักเรียนในชั้น</p>
+                    <h3 class="text-2xl font-extrabold text-slate-800">${totalStu} <span class="text-xs font-normal text-slate-400">คน</span></h3>
+                </div>
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 border-l-4 border-l-emerald-500 shadow-sm">
+                    <p class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">อัตราเข้าแถววันนี้</p>
+                    <h3 class="text-2xl font-extrabold text-emerald-600">${attRate}%</h3>
+                </div>
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 border-l-4 border-l-red-500 shadow-sm">
+                    <p class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">ขาดแถววันนี้</p>
+                    <h3 class="text-2xl font-extrabold text-red-600">${a} <span class="text-xs font-normal text-red-400">คน</span></h3>
+                </div>
+                <div class="bg-slate-800 p-4 rounded-2xl border border-slate-700 shadow-sm text-white">
+                    <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">มา / สาย / ลา</p>
+                    <h3 class="text-xl font-extrabold text-blue-400">${p} / ${l} / ${lv} <span class="text-xs font-normal text-slate-400">คน</span></h3>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm mb-5 flex flex-col items-center justify-center">
+                <p class="text-xs font-bold text-slate-600 mb-3"><i class="fas fa-chart-pie me-1"></i> แผนภูมิสัดส่วนการเข้าแถวของห้องเรียนวันนี้</p>
+                <div class="relative w-full max-w-[200px] h-[120px]">
+                    <canvas id="teacherRoomChart"></canvas>
+                </div>
+            </div>`;
+        } else {
+            dashboardHtml = `
+            <div class="bg-slate-50 border border-slate-200 border-dashed p-6 rounded-2xl text-center mb-6">
+                <div class="text-slate-300 mb-2">
+                    <svg class="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                </div>
+                <p class="text-slate-500 font-bold">ข้อมูลแดชบอร์ดสรุปผลประจำวัน จะแสดงผลหลังจากท่านบันทึกการเช็คชื่อแล้ว</p>
+            </div>`;
+        }
 
         let html = `
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-            <div class="bg-white p-4 rounded-2xl border border-slate-200 border-l-4 border-l-slate-600 shadow-sm">
-                <p class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">นักเรียนในชั้น</p>
-                <h3 class="text-2xl font-extrabold text-slate-800">${totalStu} <span class="text-xs font-normal text-slate-400">คน</span></h3>
-            </div>
-            <div class="bg-white p-4 rounded-2xl border border-slate-200 border-l-4 border-l-emerald-500 shadow-sm">
-                <p class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">อัตราเข้าแถววันนี้</p>
-                <h3 class="text-2xl font-extrabold text-emerald-600">${attRate}%</h3>
-            </div>
-            <div class="bg-white p-4 rounded-2xl border border-slate-200 border-l-4 border-l-red-500 shadow-sm">
-                <p class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">ขาดแถววันนี้</p>
-                <h3 class="text-2xl font-extrabold text-red-600">${a} <span class="text-xs font-normal text-red-400">คน</span></h3>
-            </div>
-            <div class="bg-slate-800 p-4 rounded-2xl border border-slate-700 shadow-sm text-white">
-                <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">มา / สาย / ลา</p>
-                <h3 class="text-xl font-extrabold text-blue-400">${p} / ${l} / ${lv} <span class="text-xs font-normal text-slate-400">คน</span></h3>
-            </div>
-        </div>
-
-        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm mb-5 flex flex-col items-center justify-center">
-            <p class="text-xs font-bold text-slate-600 mb-3"><i class="fas fa-chart-pie me-1"></i> แผนภูมิสัดส่วนการเข้าแถวของห้องเรียนวันนี้</p>
-            <div class="relative w-full max-w-[200px] h-[120px]">
-                <canvas id="teacherRoomChart"></canvas>
-            </div>
-        </div>
+        ${dashboardHtml}
 
         <div class="bg-white/90 backdrop-blur-sm rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden border border-slate-200/60">
             <div class="bg-white/50 p-3 md:p-4 flex flex-col sm:flex-row justify-between items-center gap-3 border-b border-slate-200/60">
@@ -526,24 +541,26 @@ students.forEach(std => {
         </div>`;
         document.getElementById('students-container').innerHTML = html;
 
-        // 🟢 เรียกใช้คำสั่งวาดแผนภูมิวงกลมประจำห้องเรียนทันที
-        setTimeout(() => {
-            const ctx = document.getElementById('teacherRoomChart');
-            if(ctx) {
-                new Chart(ctx.getContext('2d'), {
-                    type: 'doughnut',
-                    data: {
-                        labels: ['มา', 'สาย', 'ลา', 'ขาด'],
-                        datasets: [{
-                            data: [p, l, lv, a],
-                            backgroundColor: ['#10b981', '#f97316', '#eab308', '#ef4444'],
-                            borderWidth: 0
-                        }]
-                    },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 10, family: "'Prompt'" } } } }, cutout: '70%' }
-                });
-            }
-        }, 100);
+        // 🟢 เรียกใช้คำสั่งวาดแผนภูมิวงกลมประจำห้องเรียน (เฉพาะเมื่อเช็คชื่อแล้ว)
+        if (isAlreadyCheckedToday) {
+            setTimeout(() => {
+                const ctx = document.getElementById('teacherRoomChart');
+                if(ctx) {
+                    new Chart(ctx.getContext('2d'), {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['มา', 'สาย', 'ลา', 'ขาด'],
+                            datasets: [{
+                                data: [p, l, lv, a],
+                                backgroundColor: ['#10b981', '#f97316', '#eab308', '#ef4444'],
+                                borderWidth: 0
+                            }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 10, family: "'Prompt'" } } } }, cutout: '70%' }
+                    });
+                }
+            }, 100);
+        }
     }
 
     // ฟังก์ชันอัปเดตสถานะรายบุคคล

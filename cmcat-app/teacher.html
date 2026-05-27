@@ -529,10 +529,10 @@ function renderTable(students, sdqMap) {
                 </td>
                 <td class="p-2 md:p-5">
                     <div class="flex flex-nowrap justify-center gap-1 md:gap-1.5 bg-slate-100/80 p-1 md:p-2 rounded-2xl w-[220px] md:w-full md:max-w-[280px] mx-auto shadow-inner">
-                        ${(std.status || 'มา') === 'ฝึกงาน' 
-                            ? `<input type="hidden" name="status${index}" value="ฝึกงาน">
-                               <div class="bg-blue-50 text-blue-700 px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 border border-blue-200">
-                                   <i class="fas fa-briefcase"></i> ออกฝึกประสบการณ์วิชาชีพ
+                        ${(s.status || 'มา') === 'ฝึกงาน' 
+                            ? `<input type="hidden" name="att_${s.id}" value="ฝึกงาน">
+                               <div class="bg-blue-50 text-blue-700 px-2 py-1.5 md:px-4 md:py-2.5 rounded-xl text-[11px] md:text-sm font-bold flex items-center justify-center gap-1.5 md:gap-2 border border-blue-200 w-full shadow-sm">
+                                   <i class="fas fa-briefcase"></i> <span>ฝึกประสบการณ์วิชาชีพ</span>
                                </div>`
                             : [
                             { val: 'มา', icon: '✅', color: 'peer-checked:bg-emerald-500 peer-checked:shadow-emerald-300/50' },

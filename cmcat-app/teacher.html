@@ -218,17 +218,21 @@
         if (!targetDate) targetDate = new Date();
         const time = targetDate.getTime();
         const makeTime = (y, m, d) => new Date(y, m - 1, d).getTime();
-        const room = String(roomName).trim();
         
-        if (room.includes("ปวช.3") || room.includes("ปวช. 3")) return (time >= makeTime(2026, 6, 8) && time <= makeTime(2026, 8, 21));
+        // 🟢 ลบช่องว่างออกทั้งหมดเพื่อแก้ปัญหาชื่อห้องพิมพ์ไม่ตรงกัน
+        const room = String(roomName).replace(/\s+/g, '').trim();
+        
+        if (room.includes("ปวช.3")) return (time >= makeTime(2026, 6, 8) && time <= makeTime(2026, 8, 21));
         if (time >= makeTime(2026, 5, 25)) {
-            if (room.includes("ปวส.2/1 ") || room.includes("ปวส.2/1/") || room === "ปวส.2/1" || 
-                room.includes("ปวส.2/2") || room.includes("ปวส.2/6") || room.includes("ปวส.2/7") || 
-                room.includes("ปวส.2/12") || room.includes("ปวส.2/13")) return time <= makeTime(2026, 8, 21);
-            if (room.includes("ปวส.2/3")) return time <= makeTime(2026, 12, 18);
-            if (room.includes("ปวส.2/5") || room.includes("ปวส.2/14")) return time <= makeTime(2026, 12, 19);
-            if (room.includes("ปวส.2/10")) return time <= makeTime(2026, 12, 31);
-            if (room.includes("ปวส.2/8")) return time <= makeTime(2027, 1, 31);
+            if (room.endsWith("ปวส.2/3")) return time <= makeTime(2026, 12, 18);
+            if (room.endsWith("ปวส.2/5") || room.endsWith("ปวส.2/14")) return time <= makeTime(2026, 12, 19);
+            if (room.endsWith("ปวส.2/10")) return time <= makeTime(2026, 12, 31);
+            if (room.endsWith("ปวส.2/8")) return time <= makeTime(2027, 1, 31);
+            
+            if (room.endsWith("ปวส.2/1") || room.endsWith("ปวส.2/2") || room.endsWith("ปวส.2/6") || 
+                room.endsWith("ปวส.2/7") || room.endsWith("ปวส.2/12") || room.endsWith("ปวส.2/13")) {
+                return time <= makeTime(2026, 8, 21);
+            }
         }
         return false;
     }
@@ -472,6 +476,9 @@ function renderTable(students, sdqMap) {
 
         // ตรวจสอบสถานะฝึกงานจากข้อมูลนักเรียนคนแรกในแถว
         const isThisRoomInternship = students.length > 0 && students[0].status === 'ฝึกงาน';
+        
+        // 🛠️ ตัวแปรควบคุมปุ่มสำหรับห้องฝึกงาน
+        const isInternshipRoom = isThisRoomInternship;
         let internshipAlertHtml = '';
         if (isThisRoomInternship) {
             internshipAlertHtml = `
@@ -488,10 +495,15 @@ function renderTable(students, sdqMap) {
         <div class="bg-white/90 backdrop-blur-sm rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden border border-slate-200/60">
             <div class="bg-white/50 p-3 md:p-4 flex flex-col sm:flex-row justify-between items-center gap-3 border-b border-slate-200/60">
                 <span class="font-bold text-slate-700 text-sm flex items-center gap-2"><span class="text-xl">⚡</span> กำหนดสถานะทุกคนเป็น:</span>
-                <div class="flex gap-2 w-full sm:w-auto">
-                    <button onclick="setAllAttendance('มา')" class="flex-1 sm:flex-none bg-emerald-100 text-emerald-700 px-4 py-2 rounded-xl text-xs font-bold hover:bg-emerald-200 transition-colors shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" ${isAlreadyCheckedToday ? 'disabled' : ''}>✅ มาทุกคน</button>
-                    <button onclick="setAllAttendance('ขาด')" class="flex-1 sm:flex-none bg-red-100 text-red-700 px-4 py-2 rounded-xl text-xs font-bold hover:bg-red-200 transition-colors shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" ${isAlreadyCheckedToday ? 'disabled' : ''}>❌ ขาดทุกคน</button>
-                </div>
+                ${isInternshipRoom ? 
+                    `<div class="text-blue-600 text-sm font-medium bg-blue-50 px-4 py-2.5 rounded-2xl border border-blue-100">
+                        ห้องนี้อยู่ในช่วงฝึกงาน ระบบปิดการเช็คชื่ออัตโนมัติ
+                     </div>` : 
+                    `<div class="flex gap-2 w-full sm:w-auto">
+                        <button onclick="setAllAttendance('มา')" class="flex-1 sm:flex-none bg-emerald-100 text-emerald-700 px-4 py-2 rounded-xl text-xs font-bold hover:bg-emerald-200 transition-colors shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" ${isAlreadyCheckedToday ? 'disabled' : ''}>✅ มาทุกคน</button>
+                        <button onclick="setAllAttendance('ขาด')" class="flex-1 sm:flex-none bg-red-100 text-red-700 px-4 py-2 rounded-xl text-xs font-bold hover:bg-red-200 transition-colors shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" ${isAlreadyCheckedToday ? 'disabled' : ''}>❌ ขาดทุกคน</button>
+                    </div>`
+                }
             </div>
             
             <div class="overflow-x-auto custom-scrollbar">
@@ -564,10 +576,10 @@ function renderTable(students, sdqMap) {
 
         html += `</tbody></table></div></div>
         <div class="mt-10 flex flex-col sm:flex-row justify-center gap-4">
-            ${isAlreadyCheckedToday 
+            ${isAlreadyCheckedToday || isInternshipRoom
             ? `<button disabled class="bg-slate-200 text-slate-400 font-bold py-4 px-10 rounded-2xl flex items-center justify-center gap-3 text-base md:text-lg w-full sm:w-auto cursor-not-allowed border border-slate-300 transition-all duration-300">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
-                วันนี้บันทึกเรียบร้อยแล้ว
+                ${isInternshipRoom ? 'ห้องฝึกงาน - ไม่ต้องบันทึกเช็คชื่อ' : 'วันนี้บันทึกเรียบร้อยแล้ว'}
                </button>`
             : `<button onclick="submitAttendance()" id="btn-save-att" class="bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-700 hover:to-teal-600 text-white font-bold py-4 px-10 rounded-2xl shadow-lg shadow-emerald-200 hover:-translate-y-1 transition-all duration-300 flex items-center justify-center gap-3 text-base md:text-lg w-full sm:w-auto border border-emerald-400/50">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>

@@ -586,40 +586,28 @@ function recordLibraryEntry(studentId) {
 function checkIsInternshipRoom(roomName, targetDate) {
   if (!targetDate) targetDate = new Date();
   const time = targetDate.getTime();
-  
-  // ฟังก์ชันย่อยสำหรับสร้างตัวแปรเวลา ค.ศ. (พ.ศ. 2569 = 2026, พ.ศ. 2570 = 2027)
   const makeTime = (y, m, d) => new Date(y, m - 1, d).getTime();
   
-  const room = String(roomName).trim();
+  // 🟢 ลบช่องว่างออกทั้งหมดเพื่อแก้ปัญหาชื่อห้องพิมพ์ไม่ตรงกัน (เช่น "ปวส. 2/1" กับ "ปวส.2/1")
+  const room = String(roomName).replace(/\s+/g, '').trim();
   
-  // 1. กลุ่ม ปวช. 3 ทุกห้อง (8 มิ.ย. 69 ถึง 21 ส.ค. 69)
-  if (room.includes("ปวช.3") || room.includes("ปวช. 3")) {
+  // 1. กลุ่ม ปวช.3 ทุกห้อง (8 มิ.ย. 69 ถึง 21 ส.ค. 69)
+  if (room.includes("ปวช.3")) {
     return (time >= makeTime(2026, 6, 8) && time <= makeTime(2026, 8, 21));
   }
   
-  // 2. กลุ่ม ปวส. 2 ที่เริ่มฝึกงานพร้อมกันตั้งแต่วันที่ 25 พ.ค. 69
+  // 2. กลุ่ม ปวส.2 ที่เริ่มฝึกงานพร้อมกันตั้งแต่วันที่ 25 พ.ค. 69
   if (time >= makeTime(2026, 5, 25)) {
-    // ปวส.2/1, 2/2, 2/6, 2/7, 2/12, 2/13 (สิ้นสุด 21 ส.ค. 69)
-    if (room.includes("ปวส.2/1 ") || room.includes("ปวส.2/1/") || room === "ปวส.2/1" || 
-        room.includes("ปวส.2/2") || room.includes("ปวส.2/6") || room.includes("ปวส.2/7") || 
-        room.includes("ปวส.2/12") || room.includes("ปวส.2/13")) {
+    // 🟢 ใช้ endsWith แทน includes เพื่อป้องกันบั๊กหาคำว่า "2/1" แต่ไปโดนห้อง "2/10"
+    if (room.endsWith("ปวส.2/3")) return time <= makeTime(2026, 12, 18);
+    if (room.endsWith("ปวส.2/5") || room.endsWith("ปวส.2/14")) return time <= makeTime(2026, 12, 19);
+    if (room.endsWith("ปวส.2/10")) return time <= makeTime(2026, 12, 31);
+    if (room.endsWith("ปวส.2/8")) return time <= makeTime(2027, 1, 31);
+    
+    // ที่เหลือ ปวส.2/1, 2/2, 2/6, 2/7, 2/12, 2/13 (สิ้นสุด 21 ส.ค. 69)
+    if (room.endsWith("ปวส.2/1") || room.endsWith("ปวส.2/2") || room.endsWith("ปวส.2/6") || 
+        room.endsWith("ปวส.2/7") || room.endsWith("ปวส.2/12") || room.endsWith("ปวส.2/13")) {
       return time <= makeTime(2026, 8, 21);
-    }
-    // ปวส.2/3 พืช (สิ้นสุด 18 ธ.ค. 69)
-    if (room.includes("ปวส.2/3")) {
-      return time <= makeTime(2026, 12, 18);
-    }
-    // ปวส.2/5 ช่าง และ ปวส.2/14 เกตรนวัต (สิ้นสุด 19 ธ.ค. 69)
-    if (room.includes("ปวส.2/5") || room.includes("ปวส.2/14")) {
-      return time <= makeTime(2026, 12, 19);
-    }
-    // ปวส.2/10 อุต (สิ้นสุด 31 ธ.ค. 69)
-    if (room.includes("ปวส.2/10")) {
-      return time <= makeTime(2026, 12, 31);
-    }
-    // ปวส.2/8 สัตว์ (สิ้นสุด 31 ม.ค. 70)
-    if (room.includes("ปวส.2/8")) {
-      return time <= makeTime(2027, 1, 31);
     }
   }
   

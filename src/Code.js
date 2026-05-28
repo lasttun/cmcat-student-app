@@ -394,19 +394,19 @@ function handleLogin(payload) {
         computedRole = rawRole; 
       }
 
-      // 🟢 ดึงข้อมูลห้องเรียนจากคอลัมน์ F (Index 5) และแยกด้วยลูกน้ำอย่างปลอดภัย
-      const myRooms = teacher[5] ? String(teacher[5]).split(',').map(r => r.trim()).filter(r => r !== "") : [];
+// 🟢 ดึงข้อมูลห้องเรียนจากคอลัมน์ F (Index 5) และแยกด้วยลูกน้ำอย่างปลอดภัย
+    const myRooms = teacher[5] ? String(teacher[5]).split(',').map(r => r.trim()).filter(r => r !== "") : [];
 
-      return {
-        success: true,
-        role: computedRole, 
-        data: {
-          email: teacher[0],
-          name: teacher[1],
-          position: teacher[2],
-          rooms: myRooms // 🟢 ใช้ตัวแปร myRooms ที่ถูกต้อง 100%
-        }
-      };
+    return {
+      success: true,
+      role: computedRole, 
+      user: { // 🟢 FIX: เปลี่ยนจาก data เป็น user เพื่อให้สอดคล้องกับหน้า index.html 100%
+        email: teacher[0],
+        name: teacher[1],
+        position: teacher[2],
+        rooms: myRooms
+      }
+    };
     }
   }
 
@@ -645,33 +645,39 @@ function checkIsInternshipRoom(roomName, targetDate) {
 }
 
 /**
- * 🟢 10. ระบบบันทึกการพูดหน้าเสาธงของครู (Homeroom Speech System)
+ * 🟢 10. ระบบบันทึกการพูดหน้าเสาธงของครู (Enterprise Grade Bulk Insert & Lock)
  */
 function saveHomeroomSpeech(payload) {
-  const ss = getActiveSS();
-  let sheet = ss.getSheetByName('Homeroom_Speech_Logs');
-  
-  // ตรวจสอบหากยังไม่มีชีตนี้ ให้สร้างใหม่พร้อมหัวตาราง (Header Row)
-  if (!sheet) {
-    sheet = ss.insertSheet('Homeroom_Speech_Logs');
-    sheet.appendRow(['Timestamp', 'วันที่ทำกิจกรรม', 'ชื่อ-นามสกุลครูผู้พูด', 'หัวข้อที่พูด', 'เนื้อหา/รายละเอียดโดยย่อ']);
-    sheet.getRange(1, 1, 1, 5).setFontWeight('bold').setBackground('#f1f5f9');
-  }
-  
+  const lock = LockService.getScriptLock();
   try {
-    const timestamp = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "dd/MM/yyyy HH:mm:ss");
+    lock.waitLock(30000); // 🟢 ป้องกันครูหลายคนกดเซฟพร้อมกันแล้วข้อมูลเกิดการทับซ้อน
+    const ss = getActiveSS();
+    let sheet = ss.getSheetByName('Homeroom_Speech_Logs');
     
-sheet.appendRow([
+    if (!sheet) {
+      sheet = ss.insertSheet('Homeroom_Speech_Logs');
+      sheet.appendRow(['Timestamp', 'วันที่ทำกิจกรรม', 'ชื่อ-นามสกุลครูผู้พูด', 'หัวข้อที่พูด', 'เนื้อหา/รายละเอียดโดยย่อ']);
+      sheet.getRange(1, 1, 1, 5).setFontWeight('bold').setBackground('#f1f5f9');
+    }
+    
+    const timestamp = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "dd/MM/yyyy HH:mm:ss");
+    const newRow = [[
       timestamp,
       payload.speechDate,
       payload.teacherName,
       payload.subject,
       payload.details
-    ]);
+    ]];
+    
+    // 🟢 ใช้ Bulk Insert O(1) แทน appendRow เพื่อความเสถียรและรวดเร็ว ตัดปัญหา API Timeout
+    sheet.getRange(sheet.getLastRow() + 1, 1, 1, 5).setValues(newRow);
+    SpreadsheetApp.flush(); 
     
     return { success: true, message: "บันทึกข้อมูลสำเร็จ" };
   } catch (error) {
-    return { success: false, message: error.toString() };
+    return { success: false, message: "ระบบกำลังทำงานหนัก กรุณาลองใหม่อีกครั้ง: " + error.toString() };
+  } finally {
+    lock.releaseLock();
   }
 }
 /**

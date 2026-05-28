@@ -1151,9 +1151,11 @@ function renderTable(students, sdqMap) {
         document.getElementById('already-checked-alert').classList.add('hidden');
         document.getElementById('students-container').classList.add('hidden');
         
-        // แนบข้อมูลชื่อครูและวันเวลาปัจจุบันให้อัตโนมัติ
-        document.getElementById('speech-teacher').value = currentUser.name || "ไม่ระบุชื่อครู";
-        document.getElementById('speech-date').valueAsDate = new Date();
+        // 🟢 แนบข้อมูลชื่อครูและจัดการโซนเวลาประเทศไทยให้เสถียร 100% ป้องกันค่า Date กลายเป็น null
+        document.getElementById('speech-teacher').value = currentUser ? (currentUser.name || "ไม่ระบุชื่อครู") : "ไม่ระบุชื่อครู";
+        const d = new Date();
+        const localDate = new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+        document.getElementById('speech-date').value = localDate;
     }
 
     // 🟢 ฟังก์ชันปิดโมดูลสลับกลับไปโหมดเช็คชื่อปกติ (รักษาข้อมูลนักเรียนเดิมไว้)

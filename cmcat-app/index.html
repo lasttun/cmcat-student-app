@@ -179,6 +179,7 @@
             try {
                 const res = await fetch(API_URL, {
                     method: 'POST',
+                    redirect: 'follow', // 🟢 บังคับให้ข้ามผ่าน 302 Redirect ของ GAS ป้องกันปัญหาสายหลุดบน Cloudflare
                     headers: { "Content-Type": "text/plain;charset=utf-8" },
                     body: JSON.stringify({ action: 'login', payload: { studentId, password } })
                 });

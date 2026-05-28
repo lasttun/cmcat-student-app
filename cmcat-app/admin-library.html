@@ -132,6 +132,9 @@
     </div>
 
     <script>
+        // 🟢 กำหนด API_URL เพื่อให้เชื่อมต่อกลับไปยังฐานข้อมูลได้เมื่อโฮสต์บน Cloudflare
+        const API_URL = "https://script.google.com/macros/s/AKfycbztsC4Wng1zDAVyNmHka6N00m1os6aHGqcZV2LW1l1NBrlATIWPLzwdORzU4lP_P6_p/exec";
+
         // กำหนดวันที่เริ่มต้นให้อัตโนมัติเมื่อเว็บแอปโหลดขึ้นมาบน Cloudflare
         document.addEventListener("DOMContentLoaded", function() {
             const borrowInput = document.getElementById('borrowDate');
@@ -156,71 +159,51 @@
             const tbody = document.getElementById('borrowTableDataRows');
             if (!tbody) return;
 
-            // ยิงสิทธิ์ข้ามโดเมนผ่านคำสั่งภายในสภาพแวดล้อมที่ Google Apps Script ยอมรับ
-            google.script.run
-                .withSuccessHandler(function(response) {
-                    if (!response.success || response.data.length === 0) {
-                        tbody.innerHTML = `
-                            <tr>
-                                <td colspan="5" class="text-center py-16 text-slate-400">
-                                    <i class="fas fa-folder-open text-3xl mb-2 text-slate-300 block"></i>
-                                    ไม่พบคลังรายการค้างส่งหรือประวัติการยืมหนังสือในขณะนี้
-                                </td>
-                            </tr>`;
-                        return;
-                    }
+// 🟢 เปลี่ยนจาก google.script.run เป็น Fetch API เพื่อให้ทำงานข้ามโดเมนได้ 100%
+            fetch(API_URL, {
+                method: 'POST',
+                redirect: 'follow',
+                headers: { "Content-Type": "text/plain;charset=utf-8" },
+                body: JSON.stringify({ action: 'getLibraryBorrowLogs' })
+            })
+            .then(res => res.json())
+            .then(response => {
+                if (!response.success || response.data.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="5" class="text-center py-16 text-slate-400">
+                                <i class="fas fa-folder-open text-3xl mb-2 text-slate-300 block"></i>
+                                ไม่พบคลังรายการค้างส่งหรือประวัติการยืมหนังสือในขณะนี้
+                            </td>
+                        </tr>`;
+                    return;
+                }
 
-                    let html = '';
-                    response.data.forEach(function(row) {
-                        const isReturned = (row.status === 'คืนแล้ว');
-                        
-                        // ปรับแต่ง Badge สีตามความปลอดภัย
-                        const badgeStyle = isReturned 
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-100 font-semibold' 
-                            : 'bg-rose-50 text-rose-700 border-rose-100 font-bold';
-                        
-                        // จัดการปุ่มควบคุมสถานะ
-                        let actionCell = '';
-                        if (!isReturned) {
-                            actionCell = `
-                                <button onclick="commitReturnAction('${row.borrowId}', '${row.bookTitle}')" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-2 rounded-xl shadow-sm hover:shadow active:scale-95 transition-all flex items-center justify-center gap-1 mx-auto">
-                                    <i class="fas fa-clipboard-check text-xs"></i> รับคืนหนังสือ
-                                </button>`;
-                        } else {
-                            actionCell = `
-                                <div class="text-center text-slate-400 font-medium">
-                                    <i class="fas fa-clock mr-1"></i>${row.returnDate.split(' ')[0]}
-                                </div>`;
-                        }
+                let html = '';
+                response.data.forEach(function(row) {
+                    const isReturned = (row.status === 'คืนแล้ว');
+                    const badgeStyle = isReturned 
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-100 font-semibold' 
+                        : 'bg-rose-50 text-rose-700 border-rose-100 font-bold';
+                    
+                    let actionCell = !isReturned 
+                        ? `<button onclick="commitReturnAction('${row.borrowId}', '${row.bookTitle}')" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-2 rounded-xl shadow-sm hover:shadow active:scale-95 transition-all flex items-center justify-center gap-1 mx-auto"><i class="fas fa-clipboard-check text-xs"></i> รับคืนหนังสือ</button>`
+                        : `<div class="text-center text-slate-400 font-medium"><i class="fas fa-clock mr-1"></i>${row.returnDate.split(' ')[0]}</div>`;
 
-                        html += `
-                            <tr class="hover:bg-slate-50/80 transition-colors">
-                                <td class="py-3.5 px-4">
-                                    <div class="font-bold text-slate-800">${row.studentName}</div>
-                                    <div class="text-slate-400 text-[11px] font-mono mt-0.5">รหัส: ${row.studentId}</div>
-                                </td>
-                                <td class="py-3.5 px-4 font-semibold text-slate-700 max-w-[220px] truncate" title="${row.bookTitle}">
-                                    ${row.bookTitle}
-                                </td>
-                                <td class="py-3.5 px-4 space-y-0.5 text-slate-600 font-medium">
-                                    <div>🛫 ยืม: <span>${row.borrowDate}</span></div>
-                                    <div class="text-rose-600 font-bold">🚨 กำหนด: <span>${row.dueDate}</span></div>
-                                </td>
-                                <td class="py-3.5 px-4 text-center">
-                                    <span class="px-2.5 py-1 rounded-full border text-[10px] ${badgeStyle}">
-                                        ${row.status}
-                                    </span>
-                                </td>
-                                <td class="py-3.5 px-4">${actionCell}</td>
-                            </tr>
-                        `;
-                    });
-                    tbody.innerHTML = html;
-                })
-                .withFailureHandler(function(err) {
-                    tbody.innerHTML = `<tr><td colspan="5" class="text-center py-12 text-rose-500 font-semibold"><i class="fas fa-exclamation-triangle mr-1"></i> เชื่อมต่อฐานข้อมูลระยะไกลล้มเหลว กรุณาตรวจสอบการตั้งค่า</td></tr>`;
-                })
-                .getLibraryBorrowLogs(); // เชื่อมโยงฟังก์ชันหลังบ้านใน Code.js
+                    html += `
+                        <tr class="hover:bg-slate-50/80 transition-colors">
+                            <td class="py-3.5 px-4"><div class="font-bold text-slate-800">${row.studentName}</div><div class="text-slate-400 text-[11px] font-mono mt-0.5">รหัส: ${row.studentId}</div></td>
+                            <td class="py-3.5 px-4 font-semibold text-slate-700 max-w-[220px] truncate" title="${row.bookTitle}">${row.bookTitle}</td>
+                            <td class="py-3.5 px-4 space-y-0.5 text-slate-600 font-medium"><div>🛫 ยืม: <span>${row.borrowDate}</span></div><div class="text-rose-600 font-bold">🚨 กำหนด: <span>${row.dueDate}</span></div></td>
+                            <td class="py-3.5 px-4 text-center"><span class="px-2.5 py-1 rounded-full border text-[10px] ${badgeStyle}">${row.status}</span></td>
+                            <td class="py-3.5 px-4">${actionCell}</td>
+                        </tr>`;
+                });
+                tbody.innerHTML = html;
+            })
+            .catch(err => {
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center py-12 text-rose-500 font-semibold"><i class="fas fa-exclamation-triangle mr-1"></i> เชื่อมต่อฐานข้อมูลระยะไกลล้มเหลว กรุณาตรวจสอบการตั้งค่า</td></tr>`;
+            });
         }
 
         /**
@@ -240,37 +223,42 @@
             btn.disabled = true;
             btn.innerHTML = `<i class="fas fa-circle-notch fa-spin mr-1"></i> กำลังเขียนบันทึกลง Google Sheets...`;
 
-            google.script.run
-                .withSuccessHandler(function(res) {
-                    btn.disabled = false;
-                    btn.innerHTML = `<i class="fas fa-check-circle text-sm"></i> ยืนยันข้อมูลการยืม`;
+// 🟢 เปลี่ยนจาก google.script.run เป็น Fetch API เพื่อให้ทำงานข้ามโดเมนได้ 100%
+            fetch(API_URL, {
+                method: 'POST',
+                redirect: 'follow',
+                headers: { "Content-Type": "text/plain;charset=utf-8" },
+                body: JSON.stringify({ action: 'saveBorrowRecord', payload: payload })
+            })
+            .then(res => res.json())
+            .then(res => {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fas fa-check-circle text-sm"></i> ยืนยันข้อมูลการยืม`;
+                
+                if (res.success) {
+                    Swal.fire({
+                        title: 'บันทึกการยืมสำเร็จ',
+                        html: `ผู้ยืม: <b class="text-indigo-600">${res.studentName}</b><br>ทำรายการเปิดหนังสือเรียบร้อย`,
+                        icon: 'success',
+                        timer: 2200,
+                        showConfirmButton: false,
+                        customClass: { popup: 'rounded-[1.5rem]' }
+                    });
                     
-                    if (res.success) {
-                        Swal.fire({
-                            title: 'บันทึกการยืมสำเร็จ',
-                            html: `ผู้ยืม: <b class="text-indigo-600">${res.studentName}</b><br>ทำรายการเปิดหนังสือเรียบร้อย`,
-                            icon: 'success',
-                            timer: 2200,
-                            showConfirmButton: false,
-                            customClass: { popup: 'rounded-[1.5rem]' }
-                        });
-                        
-                        // ล้างช่องป้อนเพื่อเตรียมความพร้อมรับหนังสือเล่มต่อไปทันที
-                        document.getElementById('studentId').value = '';
-                        document.getElementById('bookTitle').value = '';
-                        document.getElementById('studentId').focus();
-                        
-                        loadBorrowRecordsTable(); // รีเฟรชตารางประวัติทันที
-                    } else {
-                        Swal.fire({ title: 'ล้มเหลว', text: res.message, icon: 'error', customClass: { popup: 'rounded-[1.5rem]' } });
-                    }
-                })
-                .withFailureHandler(function() {
-                    btn.disabled = false;
-                    btn.innerHTML = `<i class="fas fa-check-circle text-sm"></i> ยืนยันข้อมูลการยืม`;
-                    Swal.fire('ข้อผิดพลาด', 'ระบบปลายทางปฏิเสธการเชื่อมต่อชั่วคราว', 'error');
-                })
-                .saveBorrowRecord(payload);
+                    document.getElementById('studentId').value = '';
+                    document.getElementById('bookTitle').value = '';
+                    document.getElementById('studentId').focus();
+                    
+                    loadBorrowRecordsTable();
+                } else {
+                    Swal.fire({ title: 'ล้มเหลว', text: res.message, icon: 'error', customClass: { popup: 'rounded-[1.5rem]' } });
+                }
+            })
+            .catch(err => {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fas fa-check-circle text-sm"></i> ยืนยันข้อมูลการยืม`;
+                Swal.fire('ข้อผิดพลาด', 'ระบบปลายทางปฏิเสธการเชื่อมต่อชั่วคราว', 'error');
+            });
         }
 
         /**
@@ -295,27 +283,33 @@
                         didOpen: () => { Swal.showLoading(); }
                     });
                     
-                    google.script.run
-                        .withSuccessHandler(function(res) {
-                            Swal.close();
-                            if (res.success) {
-                                Swal.fire({
-                                    title: 'คืนหนังสือสำเร็จ',
-                                    icon: 'success',
-                                    timer: 1500,
-                                    showConfirmButton: false,
-                                    customClass: { popup: 'rounded-[1.5rem]' }
-                                });
-                                loadBorrowRecordsTable(); // อัปเดตการแสดงตารางใหม่
-                            } else {
-                                Swal.fire('เกิดข้อผิดพลาด', res.message, 'error');
-                            }
-                        })
-                        .withFailureHandler(function() {
-                            Swal.close();
-                            Swal.fire('Error', 'ไม่สามารถเชื่อมโยง API ไปยังฐานข้อมูลชีตได้', 'error');
-                        })
-                        .updateReturnStatus(borrowId);
+// 🟢 เปลี่ยนจาก google.script.run เป็น Fetch API เพื่อให้ทำงานข้ามโดเมนได้ 100%
+                    fetch(API_URL, {
+                        method: 'POST',
+                        redirect: 'follow',
+                        headers: { "Content-Type": "text/plain;charset=utf-8" },
+                        body: JSON.stringify({ action: 'updateReturnStatus', payload: { borrowId: borrowId } })
+                    })
+                    .then(res => res.json())
+                    .then(res => {
+                        Swal.close();
+                        if (res.success) {
+                            Swal.fire({
+                                title: 'คืนหนังสือสำเร็จ',
+                                icon: 'success',
+                                timer: 1500,
+                                showConfirmButton: false,
+                                customClass: { popup: 'rounded-[1.5rem]' }
+                            });
+                            loadBorrowRecordsTable();
+                        } else {
+                            Swal.fire('เกิดข้อผิดพลาด', res.message, 'error');
+                        }
+                    })
+                    .catch(err => {
+                        Swal.close();
+                        Swal.fire('Error', 'ไม่สามารถเชื่อมโยง API ไปยังฐานข้อมูลชีตได้', 'error');
+                    });
                 }
             });
         }

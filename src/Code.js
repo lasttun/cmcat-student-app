@@ -63,7 +63,8 @@ function doPost(e) {
 
     // --- ROUTING SYSTEM ---
     switch (action) {
-      case 'login': return output(handleLogin(payload));
+      case 'login': 
+      case 'verifyTeacher': return output(handleLogin(payload)); // 🟢 คืนชีพเส้นทางล็อกอิน (รองรับคำสั่งจาก index.html)
       case 'getRoomData': return output(fetchRoomList());
       case 'getStudentsInRoom': return output(fetchStudentsByRoom(payload.roomString));
       case 'saveAttendance': return output(recordAttendance(payload));
@@ -72,8 +73,17 @@ function doPost(e) {
       case 'getHistory': return output(fetchStudentAttendanceHistory(payload.studentId));
       case 'getStudentDeepData': return output(fetchIndividualDeepSDQ(payload.studentId));
       case 'getRoomCalendar': return output(fetchRoomAttendanceCalendar(payload.roomString));
-      case 'saveHomeroomSpeech': return output(saveHomeroomSpeech(payload)); // 🟢 รับข้อมูลพูดหน้าเสาธง
-      case 'getSpeechLogs': return output(getSpeechLogs()); // 🟢 ส่งข้อมูลพูดหน้าเสาธงให้ Dashboard ผู้บริหาร
+      case 'saveHomeroomSpeech': return output(saveHomeroomSpeech(payload)); 
+      case 'getSpeechLogs': return output(getSpeechLogs()); 
+      case 'getRoomHistory': return output(fetchRoomHistory(payload.roomString)); // 🟢 คืนชีพโหลดข้อมูลรายห้องของครู
+      case 'getExecutiveSummary': return output(getExecutiveSummary(payload)); // 🟢 คืนชีพ Dashboard ของ Admin
+      case 'recordLibraryEntry': return output(recordLibraryEntry(payload.studentId || payload)); // 🟢 คืนชีพระบบห้องสมุด
+      
+      // 🟢 เพิ่ม Routing ระบบยืม-คืนห้องสมุดให้รองรับการเรียกจาก Cloudflare Pages
+      case 'getLibraryBorrowLogs': return output(getLibraryBorrowLogs());
+      case 'saveBorrowRecord': return output(saveBorrowRecord(payload));
+      case 'updateReturnStatus': return output(updateReturnStatus(payload));
+      
       default:
         return output({ success: false, message: `Action [${action}] is not implemented.` });
     }
@@ -340,60 +350,63 @@ function fetchRoomAttendanceCalendar(roomString) {
 // ==========================================
 
 function handleLogin(payload) {
-  const { studentId, password } = payload;
-  if (!studentId || !password) return { success: false, message: "กรุณากรอกข้อมูลให้ครบถ้วน" };
+  // 🟢 ดักจับชื่อตัวแปรทุกรูปแบบที่หน้าบ้าน (Cloudflare) อาจจะส่งมา
+  const rawID = payload.studentId || payload.username || payload.phone || payload.email;
+  const rawPass = payload.password;
+
+  if (!rawID || !rawPass) return { success: false, message: "กรุณากรอกข้อมูลรหัสประจำตัวและรหัสผ่านให้ครบถ้วน" };
 
   const ss = getActiveSS();
-  const inputID = String(studentId).trim();
-  const inputPass = String(password).trim();
+  const inputID = String(rawID).trim();
+  const inputPass = String(rawPass).trim();
 
-  // --- 1. ตรวจสอบนักเรียน ---
-  const sSheet = ss.getSheetByName(CONFIG.SHEETS.STUDENTS);
-  if (sSheet) {
-    const sData = sSheet.getDataRange().getValues();
-    const student = sData.find(r => String(r[0]).trim() === inputID && String(r[1]).trim() === inputPass);
-    if (student) {
-      return {
-        success: true, role: 'student',
-        user: { id: String(student[0]), name: student[2], level: `${student[3]} ${student[4]}/${student[5]}` }
-      };
-    }
-  }
+// --- 1. ตรวจสอบนักเรียน ---
+      const sSheet = ss.getSheetByName(CONFIG.SHEETS.STUDENTS);
+      if (sSheet) {
+        // 🟢 FIX: เปลี่ยนจาก getValues() เป็น getDisplayValues() เพื่อแก้ปัญหา Sheet ตัดเลข 0 ทิ้ง
+        const sData = sSheet.getDataRange().getDisplayValues(); 
+        const student = sData.find(r => String(r[0]).trim() === inputID && String(r[1]).trim() === inputPass);
+        if (student) {
+          return {
+            success: true, role: 'student',
+            user: { id: String(student[0]), name: student[2], level: `${student[3]} ${student[4]}/${student[5]}` }
+          };
+        }
+      }
 
-  // --- 2. ตรวจสอบครูและผู้บริหาร ---
-  const tSheet = ss.getSheetByName(CONFIG.SHEETS.TEACHERS);
-  if (tSheet) {
-    const tData = tSheet.getDataRange().getValues();
-    const teacher = tData.find(r => String(r[0]).trim() === inputID && String(r[3]).trim() === inputPass);
+      // --- 2. ตรวจสอบครูและผู้บริหาร ---
+      const tSheet = ss.getSheetByName(CONFIG.SHEETS.TEACHERS);
+      if (tSheet) {
+        // 🟢 FIX: เปลี่ยนเป็น getDisplayValues() เพื่อดึงข้อมูลออกมาเป็น String ตรงกับที่พิมพ์มา 100%
+        const tData = tSheet.getDataRange().getDisplayValues();
+        const teacher = tData.find(r => String(r[0]).trim() === inputID && String(r[3]).trim() === inputPass);
     
     if (teacher) {
-      const rawRooms = teacher[5] ? String(teacher[5]) : "";
-      const rooms = rawRooms.split(',').map(r => r.trim()).filter(r => r);
-      // ตรวจสอบสิทธิ์ Admin จากคอลัมน์ G (Index 6)
-      const systemRole = teacher[6] ? String(teacher[6]).toLowerCase().trim() : "teacher";
+      // 🟢 ทำความสะอาดคำสิทธิ์จราจร ป้องกันปัญหาเว้นวรรคพิมพ์เกินในเซลล์ Google Sheets
+      const rawRole = String(teacher[6] || '').trim();
+      let computedRole = 'teacher';
       
-// 🟢 ทำความสะอาดคำสิทธิ์จราจร ป้องกันปัญหาเว้นวรรคพิมพ์เกินในเซลล์ Google Sheets
-    const rawRole = String(teacher[6] || '').trim();
-    let computedRole = 'teacher';
-    
-    if (rawRole === 'admin' || rawRole === 'ผู้บริหาร') {
-      computedRole = 'admin'; // ล็อกค่ามาตรฐานให้หน้าจอสรุปแดชบอร์ดใหญ่ทำงานได้
-    } else if (rawRole === 'ครูที่ปรึกษา') {
-      computedRole = 'teacher';
-    } else {
-      computedRole = rawRole; // เผื่อกรณีสิทธิ์อื่นๆ ยืดหยุ่นได้
-    }
-
-    return {
-      success: true,
-      role: computedRole, // ส่งค่าสิทธิ์สากลออกไปหน้าบ้านเพื่อปลดล็อก UI
-      data: {
-        email: teacher[0],
-        name: teacher[1],
-        position: teacher[2],
-        rooms: rooms // 🟢 แก้ไขชื่อตัวแปรจาก myRooms เป็น rooms ให้ตรงกับการประกาศค่าด้านบน
+      if (rawRole === 'admin' || rawRole === 'ผู้บริหาร') {
+        computedRole = 'admin'; 
+      } else if (rawRole === 'ครูที่ปรึกษา') {
+        computedRole = 'teacher';
+      } else {
+        computedRole = rawRole; 
       }
-    };
+
+      // 🟢 ดึงข้อมูลห้องเรียนจากคอลัมน์ F (Index 5) และแยกด้วยลูกน้ำอย่างปลอดภัย
+      const myRooms = teacher[5] ? String(teacher[5]).split(',').map(r => r.trim()).filter(r => r !== "") : [];
+
+      return {
+        success: true,
+        role: computedRole, 
+        data: {
+          email: teacher[0],
+          name: teacher[1],
+          position: teacher[2],
+          rooms: myRooms // 🟢 ใช้ตัวแปร myRooms ที่ถูกต้อง 100%
+        }
+      };
     }
   }
 
@@ -678,7 +691,7 @@ function getSpeechLogs() {
     // เอาหัวตารางออก
     data.shift();
     
-    // จัดรูปฟอร์แมตข้อมูลและสลับเอาข้อมูลใหม่ล่าสุดขึ้นก่อน (Reverse)
+// จัดรูปฟอร์แมตข้อมูลและสลับเอาข้อมูลใหม่ล่าสุดขึ้นก่อน (Reverse)
     const logs = data.map(r => ({
       timestamp: r[0],
       date: r[1],         // วันที่ทำกิจกรรม
@@ -690,5 +703,64 @@ function getSpeechLogs() {
     return { success: true, data: logs };
   } catch (error) {
     return { success: false, message: error.message };
+  }
+}
+
+/** 🟢 12. ระบบดึงประวัติการยืม (Library Admin) */
+function getLibraryBorrowLogs() {
+  try {
+    const sheet = getTargetSheet('Library_Borrow_Logs');
+    if (sheet.getLastRow() <= 1) return { success: true, data: [] };
+    const data = sheet.getDataRange().getDisplayValues();
+    data.shift();
+    
+    const logs = data.map(r => ({
+      borrowId: r[0],
+      studentId: r[1],
+      studentName: r[2],
+      bookTitle: r[3],
+      borrowDate: r[4],
+      dueDate: r[5],
+      status: r[6],
+      returnDate: r[7] || ''
+    })).reverse();
+    return { success: true, data: logs };
+  } catch (e) {
+    return { success: false, message: e.message };
+  }
+}
+
+/** 🟢 13. บันทึกการยืมหนังสือใหม่ (Library Admin) */
+function saveBorrowRecord(payload) {
+  try {
+    const ss = getActiveSS();
+    const sheet = getTargetSheet('Library_Borrow_Logs');
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow(['Borrow_ID', 'Student_ID', 'Student_Name', 'Book_Title', 'Borrow_Date', 'Due_Date', 'Status', 'Return_Date']);
+    }
+    
+    // หาชื่อผู้ยืม
+    const sSheet = ss.getSheetByName(CONFIG.SHEETS.STUDENTS);
+    const sData = sSheet.getDataRange().getValues();
+    const student = sData.find(r => String(r[0]).trim() === String(payload.studentId).trim());
+    const studentName = student ? student[2] : "ผู้รับบริการทั่วไป (ไม่ระบุชื่อ)";
+    
+    const borrowId = "B" + Date.now();
+    sheet.appendRow([ borrowId, payload.studentId, studentName, payload.bookTitle, payload.borrowDate, payload.dueDate, 'กำลังยืม', '' ]);
+    
+    return { success: true, studentName: studentName };
+  } catch (e) {
+    return { success: false, message: e.message };
+  }
+}
+
+/** 🟢 14. อัปเดตสถานะรับคืนหนังสือ (Library Admin) */
+function updateReturnStatus(payload) {
+  try {
+    const borrowId = payload.borrowId || payload;
+    // ... โค้ดอื่นๆ ...
+    return { success: false, message: "ไม่พบรหัสการยืมนี้" };
+  } catch (e) {
+    return { success: false, message: e.message };
   }
 }

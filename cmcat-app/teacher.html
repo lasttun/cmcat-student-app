@@ -294,14 +294,14 @@
 
     window.onload = () => {
         const role = localStorage.getItem('currentRole');
-        // 🔓 อนุญาตให้ทั้ง teacher และ admin เข้าใช้งานหน้านี้ได้
-        if(!currentUser || (role !== 'teacher' && role !== 'admin')) {
+        // 🔓 อนุญาตให้ผู้ใช้งานที่ระบุสิทธิ์ตามฐานข้อมูลวิทยาลัยเข้าใช้งานได้ทั้งหมด
+        if(!currentUser || (role !== 'teacher' && role !== 'admin' && role !== 'ครูที่ปรึกษา' && role !== 'ผู้บริหาร')) {
             Swal.fire('กรุณาล็อกอิน', 'เซสชั่นหมดอายุ กรุณาล็อกอินใหม่', 'warning').then(() => { window.location.href = "index.html"; });
             return;
         }
         
-        // ถ้าเป็น Admin ให้เสกปุ่มไปหน้า Dashboard ออกมา
-        if (role === 'admin') {
+        // ถ้าล็อกอินเข้ามาด้วยสิทธิ์ผู้บริหาร ให้ทำการเปิดแสดงผลปุ่มข้ามไปหน้าแดชบอร์ดทันที
+        if (role === 'admin' || role === 'ผู้บริหาร') {
             document.getElementById('btn-goto-admin').classList.remove('hidden');
         }
         

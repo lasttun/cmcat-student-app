@@ -72,10 +72,8 @@ function doPost(e) {
       case 'getHistory': return output(fetchStudentAttendanceHistory(payload.studentId));
       case 'getStudentDeepData': return output(fetchIndividualDeepSDQ(payload.studentId));
       case 'getRoomCalendar': return output(fetchRoomAttendanceCalendar(payload.roomString));
-      case 'getRoomHistory': return output(fetchRoomHistory(payload.roomString));
-      case 'getExecutiveSummary': return output(getExecutiveSummary(payload));
-      case 'recordLibraryEntry': return output(recordLibraryEntry(payload.studentId || payload));
-      case 'saveHomeroomSpeech': return output(saveHomeroomSpeech(payload)); // 🟢 เปิดทางเชื่อมต่อข้อมูลระบบพูดหน้าเสาธง
+      case 'saveHomeroomSpeech': return output(saveHomeroomSpeech(payload)); // 🟢 รับข้อมูลพูดหน้าเสาธง
+      case 'getSpeechLogs': return output(getSpeechLogs()); // 🟢 ส่งข้อมูลพูดหน้าเสาธงให้ Dashboard ผู้บริหาร
       default:
         return output({ success: false, message: `Action [${action}] is not implemented.` });
     }
@@ -374,10 +372,28 @@ function handleLogin(payload) {
       // ตรวจสอบสิทธิ์ Admin จากคอลัมน์ G (Index 6)
       const systemRole = teacher[6] ? String(teacher[6]).toLowerCase().trim() : "teacher";
       
-      return {
-        success: true, role: systemRole,
-        user: { id: String(teacher[0]), name: teacher[1], position: teacher[2], rooms: rooms }
-      };
+// 🟢 ทำความสะอาดคำสิทธิ์จราจร ป้องกันปัญหาเว้นวรรคพิมพ์เกินในเซลล์ Google Sheets
+    const rawRole = String(teacher[6] || '').trim();
+    let computedRole = 'teacher';
+    
+    if (rawRole === 'admin' || rawRole === 'ผู้บริหาร') {
+      computedRole = 'admin'; // ล็อกค่ามาตรฐานให้หน้าจอสรุปแดชบอร์ดใหญ่ทำงานได้
+    } else if (rawRole === 'ครูที่ปรึกษา') {
+      computedRole = 'teacher';
+    } else {
+      computedRole = rawRole; // เผื่อกรณีสิทธิ์อื่นๆ ยืดหยุ่นได้
+    }
+
+    return {
+      success: true,
+      role: computedRole, // ส่งค่าสิทธิ์สากลออกไปหน้าบ้านเพื่อปลดล็อก UI
+      data: {
+        email: teacher[0],
+        name: teacher[1],
+        position: teacher[2],
+        rooms: rooms // 🟢 แก้ไขชื่อตัวแปรจาก myRooms เป็น rooms ให้ตรงกับการประกาศค่าด้านบน
+      }
+    };
     }
   }
 
@@ -643,5 +659,36 @@ sheet.appendRow([
     return { success: true, message: "บันทึกข้อมูลสำเร็จ" };
   } catch (error) {
     return { success: false, message: error.toString() };
+  }
+}
+/**
+ * 🟢 11. ระบบดึงข้อมูลรายงานการพูดหน้าเสาธงสำหรับผู้บริหาร (Executive Speech Dashboard)
+ */
+function getSpeechLogs() {
+  try {
+    const ss = getActiveSS();
+    const sheet = ss.getSheetByName('Homeroom_Speech_Logs');
+    
+    // ถ้ายังไม่มีชีต หรือไม่มีข้อมูลให้ส่ง Array ว่างกลับไป
+    if (!sheet) return { success: true, data: [] };
+    
+    const data = sheet.getDataRange().getDisplayValues();
+    if (data.length <= 1) return { success: true, data: [] };
+
+    // เอาหัวตารางออก
+    data.shift();
+    
+    // จัดรูปฟอร์แมตข้อมูลและสลับเอาข้อมูลใหม่ล่าสุดขึ้นก่อน (Reverse)
+    const logs = data.map(r => ({
+      timestamp: r[0],
+      date: r[1],         // วันที่ทำกิจกรรม
+      teacherName: r[2],  // ชื่อครู
+      subject: r[3],      // หัวข้อ
+      details: r[4]       // เนื้อหา
+    })).reverse();
+
+    return { success: true, data: logs };
+  } catch (error) {
+    return { success: false, message: error.message };
   }
 }

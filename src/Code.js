@@ -75,6 +75,7 @@ function doPost(e) {
       case 'getRoomHistory': return output(fetchRoomHistory(payload.roomString));
       case 'getExecutiveSummary': return output(getExecutiveSummary(payload));
       case 'recordLibraryEntry': return output(recordLibraryEntry(payload.studentId || payload));
+      case 'saveHomeroomSpeech': return output(saveHomeroomSpeech(payload)); // 🟢 เปิดทางเชื่อมต่อข้อมูลระบบพูดหน้าเสาธง
       default:
         return output({ success: false, message: `Action [${action}] is not implemented.` });
     }
@@ -612,4 +613,35 @@ function checkIsInternshipRoom(roomName, targetDate) {
   }
   
   return false;
+}
+
+/**
+ * 🟢 10. ระบบบันทึกการพูดหน้าเสาธงของครู (Homeroom Speech System)
+ */
+function saveHomeroomSpeech(payload) {
+  const ss = getActiveSS();
+  let sheet = ss.getSheetByName('Homeroom_Speech_Logs');
+  
+  // ตรวจสอบหากยังไม่มีชีตนี้ ให้สร้างใหม่พร้อมหัวตาราง (Header Row)
+  if (!sheet) {
+    sheet = ss.insertSheet('Homeroom_Speech_Logs');
+    sheet.appendRow(['Timestamp', 'วันที่ทำกิจกรรม', 'ชื่อ-นามสกุลครูผู้พูด', 'หัวข้อที่พูด', 'เนื้อหา/รายละเอียดโดยย่อ']);
+    sheet.getRange(1, 1, 1, 5).setFontWeight('bold').setBackground('#f1f5f9');
+  }
+  
+  try {
+    const timestamp = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "dd/MM/yyyy HH:mm:ss");
+    
+sheet.appendRow([
+      timestamp,
+      payload.speechDate,
+      payload.teacherName,
+      payload.subject,
+      payload.details
+    ]);
+    
+    return { success: true, message: "บันทึกข้อมูลสำเร็จ" };
+  } catch (error) {
+    return { success: false, message: error.toString() };
+  }
 }

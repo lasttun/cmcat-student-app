@@ -89,6 +89,9 @@
             </div>
         </div>
         <div class="flex items-center gap-2">
+            <button onclick="openSpeechModule()" class="bg-indigo-600 text-white hover:bg-indigo-700 px-3 py-2 md:px-4 md:py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all shadow-sm flex items-center gap-1.5 shrink-0 border border-indigo-500">
+                📢 <span class="hidden sm:inline">บันทึกอบรมหน้าเสาธง</span>
+            </button>
             <a href="admin.html" id="btn-goto-admin" class="hidden bg-slate-800 text-white hover:bg-slate-900 px-3 py-2 md:px-4 md:py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all shadow-sm flex items-center gap-1.5 shrink-0 border border-slate-700">
                 📊 <span class="hidden sm:inline">Dashboard</span>
             </a>
@@ -99,9 +102,45 @@
         </div>
     </nav>
 
-    <div class="max-w-7xl mx-auto p-4 md:p-6 mt-4">
-        <!-- 🎯 แผงควบคุมห้องเรียน (Room Cards) -->
-        <div class="bg-white/80 backdrop-blur-xl p-6 md:p-8 rounded-[2.5rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white mb-6">
+<div class="max-w-7xl mx-auto p-4 md:p-6 mt-4">
+        <div id="module-speech" class="hidden bg-white/80 backdrop-blur-xl p-6 md:p-8 rounded-[2.5rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white mb-6 space-y-6 animate-in fade-in duration-200">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 text-lg">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"></path></svg>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-bold text-slate-800">บันทึกการพูดอบรมหน้าเสาธง</h2>
+                        <p class="text-xs text-slate-400 mt-0.5">กรอกข้อมูลเนื้อหาหัวข้อโฮมรูมหน้าเสาธงประจำวันเพื่อออกบันทึกข้อความราชการ</p>
+                    </div>
+                </div>
+                <button onclick="closeSpeechModule()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-colors">✕ ปิดหน้าต่าง</button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="space-y-1.5">
+                    <label class="text-xs font-bold text-slate-500 uppercase tracking-wider block">ครูผู้ให้การอบรม</label>
+                    <input type="text" id="speech-teacher" readonly class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 cursor-not-allowed">
+                </div>
+                <div class="space-y-1.5">
+                    <label class="text-xs font-bold text-slate-500 uppercase tracking-wider block">วันที่จัดกิจกรรมหน้าเสาธง</label>
+                    <input type="date" id="speech-date" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all">
+                </div>
+            </div>
+            <div class="space-y-1.5">
+                <label class="text-xs font-bold text-slate-500 uppercase tracking-wider block">หัวข้อเรื่องที่พูดอบรม</label>
+                <input type="text" id="speech-subject" placeholder="ระบุเรื่อง เช่น ระเบียบวินัยการแต่งกาย, การเข้าร่วมกิจกรรมนวัตกรรม" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all">
+            </div>
+            <div class="space-y-1.5">
+                <label class="text-xs font-bold text-slate-500 uppercase tracking-wider block">เนื้อหา / รายละเอียดความสำคัญโดยย่อ</label>
+                <textarea id="speech-details" rows="5" placeholder="กรอกสาระสำคัญที่ได้สื่อสารและอบรมแก่นักเรียน นักศึกษา..." class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all custom-scrollbar"></textarea>
+            </div>
+            <div class="flex flex-col sm:flex-row gap-3 pt-2">
+                <button onclick="submitSpeechData()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-emerald-600/10 transition-all flex items-center justify-center gap-2"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg> บันทึกข้อมูล</button>
+                <button onclick="previewOfficialSpeechMemo()" class="flex-1 bg-slate-800 hover:bg-slate-900 text-white font-bold py-3.5 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2">🖨️ เปิดพรีวิวบันทึกข้อความ (พิมพ์ A4)</button>
+            </div>
+        </div>
+
+        <div id="main-attendance-panel" class="bg-white/80 backdrop-blur-xl p-6 md:p-8 rounded-[2.5rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white mb-6">
             <div class="flex flex-col gap-2 mb-6 border-b border-slate-100 pb-5">
                 <h2 class="text-2xl font-extrabold bg-gradient-to-r from-emerald-800 to-teal-600 bg-clip-text text-transparent">ห้องเรียนในที่ปรึกษาของคุณ</h2>
                 <p class="text-sm text-slate-500 font-medium">กดเลือกห้องเรียนด้านล่าง เพื่อดูข้อมูลนักเรียนและจัดการการเข้าแถว</p>
@@ -1104,6 +1143,148 @@ function renderTable(students, sdqMap) {
     }
 
     function closeDeepData() { document.getElementById('deep-data-modal').classList.add('hidden'); }
+
+    // 🟢 ฟังก์ชันเปิดใช้หน้าต่างบันทึกกิจกรรมโฮมรูม/พูดหน้าเสาธง
+    function openSpeechModule() {
+        document.getElementById('module-speech').classList.remove('hidden');
+        document.getElementById('main-attendance-panel').classList.add('hidden');
+        document.getElementById('already-checked-alert').classList.add('hidden');
+        document.getElementById('students-container').classList.add('hidden');
+        
+        // แนบข้อมูลชื่อครูและวันเวลาปัจจุบันให้อัตโนมัติ
+        document.getElementById('speech-teacher').value = currentUser.name || "ไม่ระบุชื่อครู";
+        document.getElementById('speech-date').valueAsDate = new Date();
+    }
+
+    // 🟢 ฟังก์ชันปิดโมดูลสลับกลับไปโหมดเช็คชื่อปกติ (รักษาข้อมูลนักเรียนเดิมไว้)
+    function closeSpeechModule() {
+        document.getElementById('module-speech').classList.add('hidden');
+        document.getElementById('main-attendance-panel').classList.remove('hidden');
+        
+        // หากมีการเลือกห้องเรียนค้างไว้ก่อนหน้านี้ ให้เปิดแผงข้อมูลนักเรียนและป้ายแจ้งเตือนกลับมา
+        const roomSelectVal = document.getElementById('room-select').value;
+        if (roomSelectVal) {
+            document.getElementById('students-container').classList.remove('hidden');
+            if (isAlreadyCheckedToday) {
+                document.getElementById('already-checked-alert').classList.remove('hidden');
+            }
+        }
+    }
+
+    // 🟢 บันทึกข้อมูลรายงานไปเก็บที่ Google Sheets หลังบ้าน
+    async function submitSpeechData() {
+        const subject = document.getElementById('speech-subject').value.trim();
+        const details = document.getElementById('speech-details').value.trim();
+        const speechDate = document.getElementById('speech-date').value;
+        const teacherName = document.getElementById('speech-teacher').value;
+
+        if(!subject || !details || !speechDate) {
+            Swal.fire('คำเตือน', 'กรุณากรอกข้อมูลวันที่ หัวข้อ และรายละเอียดให้ครบถ้วน', 'warning');
+            return;
+        }
+
+        Swal.fire({ title: 'กำลังบันทึกข้อมูล...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { "Content-Type": "text/plain;charset=utf-8" },
+                body: JSON.stringify({
+                    action: 'saveHomeroomSpeech',
+                    payload: { teacherName, speechDate, subject, details }
+                })
+            });
+            const res = await response.json();
+            Swal.close();
+            if(res.success) {
+                Swal.fire('สำเร็จ', 'บันทึกการพูดอบรมหน้าเสาธงเรียบร้อยแล้ว', 'success');
+                document.getElementById('speech-subject').value = '';
+                document.getElementById('speech-details').value = '';
+            } else {
+                Swal.fire('ข้อผิดพลาด', res.message, 'error');
+            }
+        } catch (err) {
+            Swal.close();
+            Swal.fire('ข้อผิดพลาด', 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error');
+        }
+    }
+
+// 🟢 จัดรูปฟอร์แทตกระดาษพิมพ์ "บันทึกข้อความ" มาตรฐานสารบรรณ (แก้ไขปัญหา 2 หน้า และครุฑไม่ขึ้นใน VSCode)
+    function previewOfficialSpeechMemo() {
+        const tName = document.getElementById('speech-teacher').value;
+        const sDate = document.getElementById('speech-date').value;
+        const subj = document.getElementById('speech-subject').value || "...............................................................";
+        const det = document.getElementById('speech-details').value || "..................................................................................................................................................................................................";
+
+        const dateObj = new Date(sDate);
+        const monthsTH = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+        const thaiDateStr = isNaN(dateObj.getTime()) ? "..................................................." : `${dateObj.getDate()} ${monthsTH[dateObj.getMonth()]} พ.ศ. ${dateObj.getFullYear() + 543}`;
+
+        const printArea = document.getElementById('print-master-container');
+        printArea.innerHTML = `
+            <style>
+                @media print {
+                    @page { size: A4 portrait !important; margin: 0 !important; }
+                    body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
+                    body > *:not(#print-master-container) { display: none !important; }
+                    #print-master-container { display: block !important; margin: 0 !important; padding: 0 !important; }
+                    
+                    /* 🟢 แก้ปัญหาหน้ากระดาษเด้งเป็น 2 หน้า: ลดความสูงลง 1mm และซ่อนส่วนที่ล้น */
+                    .print-doc { 
+                        width: 210mm !important; 
+                        height: 296mm !important; 
+                        padding: 2.5cm 2cm 2.5cm 3cm !important; 
+                        box-sizing: border-box !important; 
+                        line-height: 1.15 !important;
+                        overflow: hidden !important;
+                        page-break-after: avoid !important;
+                    }
+                }
+            </style>
+            <div class="print-doc text-black bg-white relative mx-auto" style="width: 210mm; height: 296mm; font-size: 16px; line-height: 1.15; box-sizing: border-box; padding: 2.5cm 2cm 2.5cm 3cm; font-family: 'Sarabun', 'TH Sarabun New', sans-serif; text-align: justify; overflow: hidden;">
+                
+                <div style="position: relative; width: 100%; height: 1.5cm; margin-bottom: 25px; display: flex; align-items: center; justify-content: center;">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c9/Thai_government_Garuda_emblem_%28Version_2%29.svg/960px-Thai_government_Garuda_emblem_%28Version_2%29.svg.png" style="position: absolute; left: 0; top: 0; width: 1.5cm; height: 1.5cm; object-fit: contain;">
+                    <div style="font-weight: bold; font-size: 29px; font-family: 'Sarabun', sans-serif; letter-spacing: -0.5px; padding-top: 5px;">บันทึกข้อความ</div>
+                </div>
+                
+                <div style="margin-bottom: 8px; font-size: 16px;"><strong>ส่วนราชการ:</strong> ฝ่ายกิจการนักเรียน นักศึกษา วิทยาลัยเกษตรและเทคโนโลยีเชียงใหม่</div>
+                
+                <div style="display: flex; margin-bottom: 8px; font-size: 16px;">
+                    <div style="width: 55%;"><strong>ที่:</strong> ................................................................</div>
+                    <div style="width: 45%;"><strong>วันที่:</strong> ${thaiDateStr}</div>
+                </div>
+                
+                <div style="margin-bottom: 12px; font-size: 16px;"><strong>เรื่อง:</strong> รายงานการปฏิบัติหน้าที่กิจกรรมโฮมรูมและการอบรมหน้าเสาธง</div>
+                
+                <div style="border-bottom: 3px double black; margin-bottom: 16px;"></div>
+                
+                <div style="margin-bottom: 16px; font-size: 16px;"><strong>เรียน:</strong> ผู้อำนวยการวิทยาลัยเกษตรและเทคโนโลยีเชียงใหม่</div>
+                
+                <div style="text-indent: 1.5cm; margin-bottom: 12px; font-size: 16px;">
+                    ด้วยข้าพเจ้า <strong>${tName}</strong> ได้ปฏิบัติหน้าที่จัดกิจกรรมพูดหน้าแถวให้แก่นักเรียน นักศึกษา ณ บริเวณหน้าเสาธง ประจำวันดังกล่าว ข้าพเจ้าจึงขอส่งสรุปรายงานรายละเอียดและหัวข้อสำคัญที่ใช้ในการอบรม เพื่อเป็นข้อมูลสารสนเทศการดำเนินงานสถานศึกษา ดังมีรายละเอียดข้อความต่อไปนี้
+                </div>
+                
+                <div style="margin-bottom: 12px; font-size: 16px;"><strong>หัวข้อเรื่องอบรม:</strong> <span style="font-weight: bold;">${subj}</span></div>
+                
+                <div style="text-indent: 1.5cm; margin-bottom: 24px; white-space: pre-line; font-size: 16px;">${det}</div>
+                
+                <div style="text-indent: 1.5cm; margin-bottom: 60px; font-size: 16px;">จึงเรียนมาเพื่อโปรดทราบ</div>
+                
+                <div style="width: 300px; margin-left: auto; text-align: center; font-size: 16px;">
+                    <p style="margin-bottom: 12px;">(ลงชื่อ)........................................................</p>
+                    <p style="margin-bottom: 6px; font-weight: bold;">( ${tName} )</p>
+                    <p style="margin-top: 0px;">ครูผู้ให้การอบรม</p>
+                </div>
+            </div>
+        `;
+        
+        // 🟢 หน่วงเวลา 800ms ให้เบราว์เซอร์ดึงภาพตราครุฑให้เสร็จก่อนเปิดหน้าต่าง Print
+        setTimeout(() => {
+            window.print();
+        }, 800);
+    }
+
     function logout() { localStorage.clear(); window.location.href = "index.html"; }
 </script>
 </body>

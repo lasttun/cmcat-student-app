@@ -32,9 +32,13 @@
                     <p class="text-slate-300 text-xs md:text-sm mt-0.5 font-light">ศูนย์ควบคุมการจัดสรรทรัพยากรห้องสมุด สำหรับเจ้าหน้าที่บรรณารักษ์ CMCAT</p>
                 </div>
             </div>
-            <div class="flex gap-2 w-full md:w-auto relative z-10">
+            <!-- 🟢 เพิ่มปุ่มสถิติห้องสมุด และจัดเรียงปุ่มใหม่ -->
+            <div class="flex flex-wrap gap-2 w-full md:w-auto relative z-10">
+                <button onclick="openLibraryDashboard()" class="flex-1 md:flex-none bg-amber-500/90 hover:bg-amber-600 active:scale-[0.98] transition-all px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold flex items-center justify-center gap-2 border border-white/10 text-white backdrop-blur-md shadow-lg shadow-amber-500/20">
+                    <i class="fas fa-chart-pie"></i> สถิติห้องสมุด
+                </button>
                 <button onclick="loadBorrowRecordsTable()" class="flex-1 md:flex-none bg-white/10 hover:bg-white/20 active:scale-[0.98] transition-all px-4 py-2.5 rounded-xl text-xs md:text-sm font-semibold flex items-center justify-center gap-2 border border-white/10 backdrop-blur-md">
-                    <i class="fas fa-sync-alt animate-short-spin"></i> รีเฟรชข้อมูลล่าสุด
+                    <i class="fas fa-sync-alt"></i> รีเฟรช
                 </button>
                 <button onclick="logout()" class="flex-1 md:flex-none bg-rose-500/80 hover:bg-rose-600 active:scale-[0.98] transition-all px-4 py-2.5 rounded-xl text-xs md:text-sm font-semibold flex items-center justify-center gap-2 border border-white/10 text-white backdrop-blur-md">
                     <i class="fas fa-sign-out-alt"></i> ออกจากระบบ
@@ -101,7 +105,7 @@
                         <p class="text-xs text-slate-400 mt-0.5">ค้นหาข้อมูลผู้ยืม และกดเปลี่ยนสถานะเมื่อนำหนังสือมาส่งคืนคลัง</p>
                     </div>
                     <div class="w-full sm:w-64 relative">
-                        <input type="text" id="tableSearch" window.onload onkeyup="filterLibraryTable()" class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-500 focus:bg-white transition-all font-medium" placeholder="พิมพ์ชื่อ, รหัส หรือชื่อหนังสือ เพื่อค้นหา...">
+                        <input type="text" id="tableSearch" onkeyup="filterLibraryTable()" class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-500 focus:bg-white transition-all font-medium" placeholder="พิมพ์ชื่อ, รหัส หรือชื่อหนังสือ เพื่อค้นหา...">
                         <span class="absolute left-3 top-2.5 text-slate-400 text-xs">
                             <i class="fas fa-search"></i>
                         </span>
@@ -129,8 +133,84 @@
                         </tbody>
                     </table>
                 </div>
-            </div>
+                
+                <!-- 🟢 ส่วนแบ่งหน้า (Pagination) รองรับข้อมูลนับพันรายการ -->
+                <div class="flex flex-col sm:flex-row justify-between items-center gap-3 pt-2">
+                    <div id="pageInfo" class="text-xs font-bold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+                        กำลังคำนวณข้อมูล...
+                    </div>
+                    <div class="flex gap-2">
+                        <button id="btnPrev" onclick="changePage(-1)" class="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 hover:text-indigo-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm">
+                            <i class="fas fa-chevron-left mr-1"></i> ก่อนหน้า
+                        </button>
+                        <button id="btnNext" onclick="changePage(1)" class="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 hover:text-indigo-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm">
+                            ถัดไป <i class="fas fa-chevron-right ml-1"></i>
+                        </button>
+                    </div>
+                </div>
 
+            </div>
+        </div>
+    </div>
+
+    <!-- 🟢 Modal Dashboard สถิติห้องสมุด -->
+    <div id="lib-dash-modal" class="hidden fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-all opacity-0">
+        <div class="bg-white rounded-[2rem] w-full max-w-4xl shadow-2xl overflow-hidden transform scale-95 transition-all duration-300" id="lib-dash-content">
+            <div class="p-6 md:p-8 border-b border-slate-100 flex justify-between items-center bg-gradient-to-r from-slate-50 to-blue-50/50">
+                <div class="flex items-center gap-3">
+                    <div class="bg-amber-100 p-2.5 rounded-xl text-amber-600 shadow-inner">
+                        <i class="fas fa-chart-pie text-xl"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-xl md:text-2xl font-bold text-slate-800 tracking-tight">Dashboard สถิติห้องสมุด</h2>
+                        <p class="text-xs text-slate-500 mt-1 font-medium" id="dash-date">ข้อมูลล่าสุด ณ ปัจจุบัน</p>
+                    </div>
+                </div>
+                <button onclick="closeLibraryDashboard()" class="bg-white text-slate-400 hover:text-rose-500 hover:bg-rose-50 w-10 h-10 rounded-full shadow-sm border border-slate-100 flex items-center justify-center transition-all font-bold text-lg">&times;</button>
+            </div>
+            
+            <div class="p-6 md:p-8 bg-slate-50/50">
+                <div id="dash-loading" class="text-center py-12 hidden">
+                    <div class="inline-block animate-spin rounded-full h-10 w-10 border-4 border-indigo-200 border-t-indigo-600 mb-4"></div>
+                    <p class="font-bold text-indigo-800">กำลังประมวลผลข้อมูลสถิติ...</p>
+                </div>
+
+                <div id="dash-data" class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/60 border-l-4 border-l-emerald-500 flex items-center gap-4 hover:shadow-md transition-shadow">
+                        <div class="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600 text-2xl"><i class="fas fa-walking"></i></div>
+                        <div>
+                            <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">เข้าใช้งานวันนี้</p>
+                            <h3 class="text-3xl font-extrabold text-slate-800" id="stat-visits">0 <span class="text-sm font-medium text-slate-400">ครั้ง</span></h3>
+                        </div>
+                    </div>
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/60 border-l-4 border-l-blue-500 flex items-center gap-4 hover:shadow-md transition-shadow">
+                        <div class="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 text-2xl"><i class="fas fa-users"></i></div>
+                        <div>
+                            <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">กำลังอยู่ในห้องสมุด</p>
+                            <h3 class="text-3xl font-extrabold text-blue-600" id="stat-current">0 <span class="text-sm font-medium text-blue-400">คน</span></h3>
+                        </div>
+                    </div>
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/60 border-l-4 border-l-indigo-500 flex items-center gap-4 hover:shadow-md transition-shadow">
+                        <div class="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 text-2xl"><i class="fas fa-book-reader"></i></div>
+                        <div>
+                            <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">ยอดหนังสือที่กำลังถูกยืม</p>
+                            <h3 class="text-3xl font-extrabold text-slate-800" id="stat-borrows">0 <span class="text-sm font-medium text-slate-400">เล่ม</span></h3>
+                        </div>
+                    </div>
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/60 border-l-4 border-l-rose-500 flex items-center gap-4 hover:shadow-md transition-shadow">
+                        <div class="w-14 h-14 bg-rose-50 rounded-2xl flex items-center justify-center text-rose-600 text-2xl"><i class="fas fa-exclamation-triangle"></i></div>
+                        <div>
+                            <p class="text-[11px] font-bold text-rose-500 uppercase tracking-wider mb-0.5">ค้างส่ง / เลยกำหนด</p>
+                            <h3 class="text-3xl font-extrabold text-rose-600" id="stat-overdue">0 <span class="text-sm font-medium text-rose-400">เล่ม</span></h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-slate-100/50 p-4 text-center border-t border-slate-100">
+                <button onclick="closeLibraryDashboard()" class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 px-8 rounded-xl shadow-sm transition-all text-sm">
+                    รับทราบและปิดหน้าต่าง
+                </button>
+            </div>
         </div>
     </div>
 
@@ -151,10 +231,15 @@
             window.location.href = "index.html"; 
         }
 
-        // 🟢 กำหนด API_URL เพื่อให้เชื่อมต่อกลับไปยังฐานข้อมูลได้เมื่อโฮสต์บน Cloudflare
+        // 🟢 กำหนด API_URL
         const API_URL = "https://script.google.com/macros/s/AKfycbztsC4Wng1zDAVyNmHka6N00m1os6aHGqcZV2LW1l1NBrlATIWPLzwdORzU4lP_P6_p/exec";
 
-        // กำหนดวันที่เริ่มต้นให้อัตโนมัติเมื่อเว็บแอปโหลดขึ้นมาบน Cloudflare
+        // ตัวแปร Pagination และ Search
+        let allBorrowData = []; 
+        let filteredBorrowData = [];
+        let currentPage = 1;
+        const rowsPerPage = 10;
+
         document.addEventListener("DOMContentLoaded", function() {
             const borrowInput = document.getElementById('borrowDate');
             const dueInput = document.getElementById('dueDate');
@@ -162,23 +247,17 @@
                 const today = new Date();
                 borrowInput.valueAsDate = today;
                 
-                // กำหนดเวลาคืนมาตรฐานคือ 7 วันถัดไป
                 const nextWeek = new Date();
                 nextWeek.setDate(today.getDate() + 7);
                 dueInput.valueAsDate = nextWeek;
             }
-            // เรียกโหลดข้อมูลตารางทันทีเมื่อเปิดหน้าจอ
             loadBorrowRecordsTable();
         });
 
-        /**
-         * 1. ดึงข้อมูลประวัติการยืมจากเซิร์ฟเวอร์ GAS มาแสดงผลบนหน้าจอ
-         */
         function loadBorrowRecordsTable() {
             const tbody = document.getElementById('borrowTableDataRows');
             if (!tbody) return;
 
-// 🟢 เปลี่ยนจาก google.script.run เป็น Fetch API เพื่อให้ทำงานข้ามโดเมนได้ 100%
             fetch(API_URL, {
                 method: 'POST',
                 redirect: 'follow',
@@ -188,46 +267,80 @@
             .then(res => res.json())
             .then(response => {
                 if (!response.success || response.data.length === 0) {
-                    tbody.innerHTML = `
-                        <tr>
-                            <td colspan="5" class="text-center py-16 text-slate-400">
-                                <i class="fas fa-folder-open text-3xl mb-2 text-slate-300 block"></i>
-                                ไม่พบคลังรายการค้างส่งหรือประวัติการยืมหนังสือในขณะนี้
-                            </td>
-                        </tr>`;
+                    allBorrowData = [];
+                    filteredBorrowData = [];
+                    renderTablePage();
                     return;
                 }
-
-                let html = '';
-                response.data.forEach(function(row) {
-                    const isReturned = (row.status === 'คืนแล้ว');
-                    const badgeStyle = isReturned 
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-100 font-semibold' 
-                        : 'bg-rose-50 text-rose-700 border-rose-100 font-bold';
-                    
-                    let actionCell = !isReturned 
-                        ? `<button onclick="commitReturnAction('${row.borrowId}', '${row.bookTitle}')" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-2 rounded-xl shadow-sm hover:shadow active:scale-95 transition-all flex items-center justify-center gap-1 mx-auto"><i class="fas fa-clipboard-check text-xs"></i> รับคืนหนังสือ</button>`
-                        : `<div class="text-center text-slate-400 font-medium"><i class="fas fa-clock mr-1"></i>${row.returnDate.split(' ')[0]}</div>`;
-
-                    html += `
-                        <tr class="hover:bg-slate-50/80 transition-colors">
-                            <td class="py-3.5 px-4"><div class="font-bold text-slate-800">${row.studentName}</div><div class="text-slate-400 text-[11px] font-mono mt-0.5">รหัส: ${row.studentId}</div></td>
-                            <td class="py-3.5 px-4 font-semibold text-slate-700 max-w-[220px] truncate" title="${row.bookTitle}">${row.bookTitle}</td>
-                            <td class="py-3.5 px-4 space-y-0.5 text-slate-600 font-medium"><div>🛫 ยืม: <span>${row.borrowDate}</span></div><div class="text-rose-600 font-bold">🚨 กำหนด: <span>${row.dueDate}</span></div></td>
-                            <td class="py-3.5 px-4 text-center"><span class="px-2.5 py-1 rounded-full border text-[10px] ${badgeStyle}">${row.status}</span></td>
-                            <td class="py-3.5 px-4">${actionCell}</td>
-                        </tr>`;
-                });
-                tbody.innerHTML = html;
+                allBorrowData = response.data;
+                filteredBorrowData = [...allBorrowData];
+                currentPage = 1;
+                renderTablePage();
             })
             .catch(err => {
                 tbody.innerHTML = `<tr><td colspan="5" class="text-center py-12 text-rose-500 font-semibold"><i class="fas fa-exclamation-triangle mr-1"></i> เชื่อมต่อฐานข้อมูลระยะไกลล้มเหลว กรุณาตรวจสอบการตั้งค่า</td></tr>`;
             });
         }
 
-        /**
-         * 2. ประมวลผลและส่งข้อมูลเมื่อกดฟอร์มบันทึกการยืม
-         */
+        function renderTablePage() {
+            const tbody = document.getElementById('borrowTableDataRows');
+            
+            if (filteredBorrowData.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="text-center py-16 text-slate-400">
+                            <i class="fas fa-folder-open text-3xl mb-2 text-slate-300 block"></i>
+                            ไม่พบคลังรายการค้างส่งหรือประวัติการยืมหนังสือในขณะนี้
+                        </td>
+                    </tr>`;
+                updatePaginationUI();
+                return;
+            }
+
+            const startIndex = (currentPage - 1) * rowsPerPage;
+            const endIndex = startIndex + rowsPerPage;
+            const pageData = filteredBorrowData.slice(startIndex, endIndex);
+
+            let html = '';
+            pageData.forEach(function(row) {
+                const isReturned = (row.status === 'คืนแล้ว');
+                const badgeStyle = isReturned 
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-100 font-semibold' 
+                    : 'bg-rose-50 text-rose-700 border-rose-100 font-bold';
+                
+                let actionCell = !isReturned 
+                    ? `<button onclick="commitReturnAction('${row.borrowId}', '${row.bookTitle}')" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-2 rounded-xl shadow-sm hover:shadow active:scale-95 transition-all flex items-center justify-center gap-1 mx-auto"><i class="fas fa-clipboard-check text-xs"></i> รับคืนหนังสือ</button>`
+                    : `<div class="text-center text-slate-400 font-medium"><i class="fas fa-clock mr-1"></i>${row.returnDate.split(' ')[0]}</div>`;
+
+                html += `
+                    <tr class="hover:bg-slate-50/80 transition-colors">
+                        <td class="py-3.5 px-4"><div class="font-bold text-slate-800">${row.studentName}</div><div class="text-slate-400 text-[11px] font-mono mt-0.5">รหัส: ${row.studentId}</div></td>
+                        <td class="py-3.5 px-4 font-semibold text-slate-700 max-w-[220px] truncate" title="${row.bookTitle}">${row.bookTitle}</td>
+                        <td class="py-3.5 px-4 space-y-0.5 text-slate-600 font-medium"><div>🛫 ยืม: <span>${row.borrowDate}</span></div><div class="text-rose-600 font-bold">🚨 กำหนด: <span>${row.dueDate}</span></div></td>
+                        <td class="py-3.5 px-4 text-center"><span class="px-2.5 py-1 rounded-full border text-[10px] ${badgeStyle}">${row.status}</span></td>
+                        <td class="py-3.5 px-4">${actionCell}</td>
+                    </tr>`;
+            });
+            tbody.innerHTML = html;
+            updatePaginationUI();
+        }
+
+        function updatePaginationUI() {
+            const totalPages = Math.ceil(filteredBorrowData.length / rowsPerPage) || 1;
+            document.getElementById('pageInfo').innerHTML = `หน้า <span class="text-indigo-600">${currentPage}</span> จาก ${totalPages} <span class="text-[10px] text-slate-400 ml-1">(รวม ${filteredBorrowData.length} รายการ)</span>`;
+            
+            document.getElementById('btnPrev').disabled = (currentPage === 1);
+            document.getElementById('btnNext').disabled = (currentPage === totalPages || filteredBorrowData.length === 0);
+        }
+
+        function changePage(direction) {
+            const totalPages = Math.ceil(filteredBorrowData.length / rowsPerPage);
+            currentPage += direction;
+            if (currentPage < 1) currentPage = 1;
+            if (currentPage > totalPages) currentPage = totalPages;
+            renderTablePage();
+        }
+
         function executeBorrowSubmit(e) {
             e.preventDefault();
             const btn = document.getElementById('btnBorrowSubmit');
@@ -242,7 +355,6 @@
             btn.disabled = true;
             btn.innerHTML = `<i class="fas fa-circle-notch fa-spin mr-1"></i> กำลังเขียนบันทึกลง Google Sheets...`;
 
-// 🟢 เปลี่ยนจาก google.script.run เป็น Fetch API เพื่อให้ทำงานข้ามโดเมนได้ 100%
             fetch(API_URL, {
                 method: 'POST',
                 redirect: 'follow',
@@ -280,9 +392,6 @@
             });
         }
 
-        /**
-         * 3. อัปเดตสถานะการรับส่งคืนหนังสือค้างส่ง
-         */
         function commitReturnAction(borrowId, bookTitle) {
             Swal.fire({
                 title: 'ยืนยันการคืนทรัพยากร?',
@@ -302,7 +411,6 @@
                         didOpen: () => { Swal.showLoading(); }
                     });
                     
-// 🟢 เปลี่ยนจาก google.script.run เป็น Fetch API เพื่อให้ทำงานข้ามโดเมนได้ 100%
                     fetch(API_URL, {
                         method: 'POST',
                         redirect: 'follow',
@@ -333,28 +441,93 @@
             });
         }
 
-        /**
-         * 4. ตัวกรองการค้นหาข้อมูลในตารางแบบ Client-Side (ทำงานได้ไวมาก ไม่สร้างภาระให้คลาวด์)
-         */
         function filterLibraryTable() {
             const filter = document.getElementById('tableSearch').value.toUpperCase();
-            const rows = document.getElementById('borrowTableDataRows').getElementsByTagName('tr');
+            filteredBorrowData = allBorrowData.filter(row => {
+                const searchString = `${row.studentName} ${row.studentId} ${row.bookTitle} ${row.status}`.toUpperCase();
+                return searchString.includes(filter);
+            });
+            currentPage = 1;
+            renderTablePage();
+        }
 
-            for (let i = 0; i < rows.length; i++) {
-                let isMatch = false;
-                const cells = rows[i].getElementsByTagName('td');
-                
-                for (let j = 0; j < cells.length; j++) {
-                    if (cells[j]) {
-                        const content = cells[j].textContent || cells[j].innerText;
-                        if (content.toUpperCase().indexOf(filter) > -1) {
-                            isMatch = true;
-                            break;
-                        }
-                    }
+        function openLibraryDashboard() {
+            const modal = document.getElementById('lib-dash-modal');
+            const content = document.getElementById('lib-dash-content');
+            const loading = document.getElementById('dash-loading');
+            const dataContainer = document.getElementById('dash-data');
+            
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                content.classList.remove('scale-95');
+            }, 10);
+
+            document.getElementById('dash-date').innerText = `ข้อมูลล่าสุด ณ ${new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })} น.`;
+
+            loading.classList.remove('hidden');
+            dataContainer.classList.add('hidden');
+
+            fetch(API_URL, {
+                method: 'POST',
+                redirect: 'follow',
+                headers: { "Content-Type": "text/plain;charset=utf-8" },
+                body: JSON.stringify({ action: 'getLibraryStats' })
+            })
+            .then(res => res.json())
+            .then(res => {
+                if (res.success) {
+                    animateValue("stat-visits", 0, res.data.todayVisits, 1000);
+                    animateValue("stat-current", 0, res.data.currentlyInLibrary, 1000);
+                    animateValue("stat-borrows", 0, res.data.activeBorrows, 1000);
+                    animateValue("stat-overdue", 0, res.data.overdueBorrows, 1000);
+                } else {
+                    Swal.fire('ข้อผิดพลาด', 'ไม่สามารถดึงข้อมูลสถิติได้', 'error');
                 }
-                rows[i].style.display = isMatch ? "" : "none";
+            })
+            .catch(err => {
+                Swal.fire('ข้อผิดพลาด', 'การเชื่อมต่อขัดข้อง', 'error');
+            })
+            .finally(() => {
+                loading.classList.add('hidden');
+                dataContainer.classList.remove('hidden');
+            });
+        }
+
+        function closeLibraryDashboard() {
+            const modal = document.getElementById('lib-dash-modal');
+            const content = document.getElementById('lib-dash-content');
+            
+            modal.classList.add('opacity-0');
+            content.classList.add('scale-95');
+            
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+        }
+
+        function animateValue(id, start, end, duration) {
+            let obj = document.getElementById(id);
+            if (!obj) return;
+            let unitSpan = obj.querySelector('span');
+            let unit = unitSpan ? unitSpan.innerText : '';
+
+            if (start === end) {
+                obj.innerHTML = `${end} <span class="text-sm font-medium opacity-70">${unit}</span>`;
+                return;
             }
+            let range = end - start;
+            let current = start;
+            let increment = end > start ? 1 : -1;
+            let stepTime = Math.abs(Math.floor(duration / range));
+            
+            let timer = setInterval(function() {
+                current += increment;
+                obj.innerHTML = `${current} <span class="text-sm font-medium opacity-70">${unit}</span>`;
+                if (current == end) {
+                    clearInterval(timer);
+                }
+            }, stepTime);
         }
     </script>
 </body>

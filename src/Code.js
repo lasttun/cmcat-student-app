@@ -83,6 +83,7 @@ function doPost(e) {
       case 'getLibraryBorrowLogs': return output(getLibraryBorrowLogs());
       case 'saveBorrowRecord': return output(saveBorrowRecord(payload));
       case 'updateReturnStatus': return output(updateReturnStatus(payload));
+      case 'getLibraryStats': return output(getLibraryStats()); // 🟢 API สำหรับ Dashboard ห้องสมุด
       
       default:
         return output({ success: false, message: `Action [${action}] is not implemented.` });
@@ -794,5 +795,91 @@ function updateReturnStatus(payload) {
     return { success: false, message: e.message };
   } finally {
     lock.releaseLock();
+  }
+}
+
+/** 🟢 15. ดึงข้อมูลสถิติสำหรับ Dashboard ห้องสมุด (Library Admin) */
+function getLibraryStats() {
+  try {
+    const ss = getActiveSS();
+    
+    // --- 1. สถิติการเข้าใช้ (Library_Logs) ---
+    const logSheet = ss.getSheetByName('Library_Logs');
+    let todayVisits = 0;
+    let currentlyInLibrary = 0;
+    
+if (logSheet && logSheet.getLastRow() > 1) {
+  const logData = logSheet.getDataRange().getValues();  // 🔧 FIX: เปลี่ยนเป็น getValues()
+  logData.shift();
+  
+  const todayStr = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "dd/MM/yyyy");
+  const todayRecords = [];
+  
+  logData.forEach(r => {
+     try {
+         // 🔧 FIX: ตรวจสอบว่า r[0] เป็น Date object จริง
+         if (r[0] instanceof Date) {
+             const logDate = Utilities.formatDate(r[0], CONFIG.TIMEZONE, "dd/MM/yyyy");
+             if (logDate === todayStr) {
+                 todayRecords.push(r);
+             }
+         }
+     } catch(e) {}
+  });
+      
+      // นับผู้เข้าใช้ทั้งหมดของวันนี้
+      todayVisits = todayRecords.filter(r => r[3] === 'เข้าใช้งาน').length;
+      
+// คำนวณผู้ที่กำลังอยู่ในห้องสมุด (เช็คสถานะล่าสุดของนักศึกษาแต่ละคน)
+      let latestStatusMap = {};
+      todayRecords.forEach(r => {
+         if (r[1] && r[3]) {  // 🔧 FIX: เช็คให้แน่ใจว่า r[1] (Student_ID) และ r[3] (Status) มีค่า
+           latestStatusMap[r[1]] = r[3];
+         }
+      });
+      currentlyInLibrary = Object.values(latestStatusMap).filter(status => status === 'เข้าใช้งาน').length;
+    }
+
+    // --- 2. สถิติการยืมหนังสือ (Library_Borrow_Logs) ---
+    const borrowSheet = ss.getSheetByName('Library_Borrow_Logs');
+    let activeBorrows = 0;
+    let overdueBorrows = 0;
+    
+    if (borrowSheet && borrowSheet.getLastRow() > 1) {
+      const borrowData = borrowSheet.getDataRange().getDisplayValues();
+      borrowData.shift();
+      
+      const now = new Date();
+      now.setHours(0,0,0,0); // รีเซ็ตเวลาเป็นเที่ยงคืนเพื่อเทียบวันที่
+      
+borrowData.forEach(r => {
+  if (r[6] === 'กำลังยืม') {
+    activeBorrows++;
+    const dueStr = r[5];
+    if (dueStr) {
+       // 🔧 FIX: แปลง dd/MM/yyyy เป็น Date object ให้ถูกต้อง
+       const parts = String(dueStr).split('/');
+       if (parts.length === 3) {
+         const dueDate = new Date(parts[2], parts[1] - 1, parts[0]);
+         if (dueDate < now) {
+            overdueBorrows++;
+         }
+       }
+    }
+  }
+});
+    }
+
+    return {
+      success: true,
+      data: {
+        todayVisits: todayVisits,
+        currentlyInLibrary: currentlyInLibrary,
+        activeBorrows: activeBorrows,
+        overdueBorrows: overdueBorrows
+      }
+    };
+  } catch (error) {
+    return { success: false, message: error.message };
   }
 }

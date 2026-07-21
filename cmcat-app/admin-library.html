@@ -36,6 +36,9 @@
                 <button onclick="loadBorrowRecordsTable()" class="flex-1 md:flex-none bg-white/10 hover:bg-white/20 active:scale-[0.98] transition-all px-4 py-2.5 rounded-xl text-xs md:text-sm font-semibold flex items-center justify-center gap-2 border border-white/10 backdrop-blur-md">
                     <i class="fas fa-sync-alt animate-short-spin"></i> รีเฟรชข้อมูลล่าสุด
                 </button>
+                <button onclick="logout()" class="flex-1 md:flex-none bg-rose-500/80 hover:bg-rose-600 active:scale-[0.98] transition-all px-4 py-2.5 rounded-xl text-xs md:text-sm font-semibold flex items-center justify-center gap-2 border border-white/10 text-white backdrop-blur-md">
+                    <i class="fas fa-sign-out-alt"></i> ออกจากระบบ
+                </button>
             </div>
         </div>
 
@@ -132,6 +135,22 @@
     </div>
 
     <script>
+        // ตรวจสอบสิทธิ์การเข้าใช้งาน
+        const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+        const currentRole = localStorage.getItem('currentRole');
+
+        // อนุญาตเฉพาะบรรณารักษ์ หรือ admin (ผู้บริหาร) เท่านั้น
+        if(!currentUser || (currentRole !== 'บรรณารักษ์' && currentRole !== 'admin' && currentRole !== 'ผู้บริหาร')) {
+            Swal.fire('ปฏิเสธการเข้าถึง', 'พื้นที่นี้สำหรับเจ้าหน้าที่ห้องสมุดเท่านั้นครับ', 'error').then(() => { 
+                window.location.href = "index.html"; 
+            });
+        }
+
+        function logout() { 
+            localStorage.clear(); 
+            window.location.href = "index.html"; 
+        }
+
         // 🟢 กำหนด API_URL เพื่อให้เชื่อมต่อกลับไปยังฐานข้อมูลได้เมื่อโฮสต์บน Cloudflare
         const API_URL = "https://script.google.com/macros/s/AKfycbztsC4Wng1zDAVyNmHka6N00m1os6aHGqcZV2LW1l1NBrlATIWPLzwdORzU4lP_P6_p/exec";
 

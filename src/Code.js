@@ -762,11 +762,33 @@ function saveBorrowRecord(payload) {
 
 /** 🟢 14. อัปเดตสถานะรับคืนหนังสือ (Library Admin) */
 function updateReturnStatus(payload) {
+  const lock = LockService.getScriptLock();
   try {
+    lock.waitLock(10000); 
     const borrowId = payload.borrowId || payload;
-    // ... โค้ดอื่นๆ ...
+    const sheet = getTargetSheet('Library_Borrow_Logs');
+    const data = sheet.getDataRange().getValues();
+    
+    // ข้ามแถวที่ 1 ซึ่งเป็น Header (i เริ่มที่ 1)
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim() === String(borrowId).trim()) {
+        const rowIndex = i + 1; // ตำแหน่งแถวใน Google Sheets เริ่มที่ 1
+        
+        // สร้าง Timestamp เวลาปัจจุบัน
+        const returnDate = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "dd/MM/yyyy HH:mm:ss");
+        
+        // อัปเดตคอลัมน์ G (7) เป็น "คืนแล้ว" และ คอลัมน์ H (8) เป็นเวลาที่คืน
+        sheet.getRange(rowIndex, 7).setValue('คืนแล้ว');
+        sheet.getRange(rowIndex, 8).setValue(returnDate);
+        
+        SpreadsheetApp.flush();
+        return { success: true, message: "บันทึกการคืนหนังสือเรียบร้อยแล้ว" };
+      }
+    }
     return { success: false, message: "ไม่พบรหัสการยืมนี้" };
   } catch (e) {
     return { success: false, message: e.message };
+  } finally {
+    lock.releaseLock();
   }
 }

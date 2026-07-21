@@ -211,6 +211,14 @@
                             window.location.href = "teacher.html"; 
                         });
                     }
+                    else if (data.role === 'บรรณารักษ์') {
+                        Swal.fire({
+                            icon: 'success', title: 'ยินดีต้อนรับบรรณารักษ์', text: `เข้าสู่ระบบในชื่อ: ${data.user.name}`,
+                            timer: 1500, showConfirmButton: false
+                        }).then(() => {
+                            window.location.href = "admin-library.html"; 
+                        });
+                    }
                 } else {
                     Swal.fire('ผิดพลาด', 'รหัสนักเรียน หรือ เลขบัตรประชาชนไม่ถูกต้อง', 'error');
                 }

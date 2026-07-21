@@ -39,8 +39,24 @@
         </div>
 
         <div class="p-8">
-            <p class="text-center text-slate-500 mb-8 text-sm font-medium">
-                กรอกรหัสนักเรียน นักศึกษาเพื่อเข้าใช้งานศูนย์วิทยบริการฯ
+            <!-- 🟢 เพิ่มระบบเลือกสถานะ เข้า-ออก -->
+            <div class="flex gap-3 mb-6">
+                <label class="flex-1 cursor-pointer">
+                    <input type="radio" name="entryStatus" value="เข้าใช้งาน" class="peer hidden" checked>
+                    <div class="py-3 rounded-xl text-center font-bold text-sm text-slate-500 bg-slate-50 border-2 border-slate-200 peer-checked:border-emerald-500 peer-checked:text-emerald-700 peer-checked:bg-emerald-50 transition-all shadow-sm">
+                        📥 เข้าห้องสมุด
+                    </div>
+                </label>
+                <label class="flex-1 cursor-pointer">
+                    <input type="radio" name="entryStatus" value="ออกจากห้องสมุด" class="peer hidden">
+                    <div class="py-3 rounded-xl text-center font-bold text-sm text-slate-500 bg-slate-50 border-2 border-slate-200 peer-checked:border-blue-500 peer-checked:text-blue-700 peer-checked:bg-blue-50 transition-all shadow-sm">
+                        📤 ออกจากห้องสมุด
+                    </div>
+                </label>
+            </div>
+
+            <p class="text-center text-slate-500 mb-4 text-sm font-medium">
+                กรอกรหัสนักเรียน นักศึกษาเพื่อบันทึกรายการ
             </p>
             
             <input type="text" id="studentId" 
@@ -63,13 +79,19 @@
     const input = document.getElementById('studentId');
     const messageDiv = document.getElementById('result-message');
 
-    function showMessage(success, text) {
+    function showMessage(success, text, status) {
         if (success) {
-            messageDiv.className = "mt-6 p-5 rounded-2xl font-bold text-lg text-center bg-emerald-50 border border-emerald-200 text-emerald-800 shadow-inner";
-            messageDiv.innerHTML = `<i class="fa-solid fa-check-circle text-3xl mb-2 block"></i> ยินดีต้อนรับ<br><span class="text-2xl">${text}</span>`;
+            // 🟢 เปลี่ยนสีและข้อความให้สอดคล้องกับสถานะ
+            if (status === 'เข้าใช้งาน') {
+                messageDiv.className = "mt-6 p-5 rounded-2xl font-bold text-lg text-center bg-emerald-50 border border-emerald-200 text-emerald-800 shadow-inner animate-in zoom-in duration-200";
+                messageDiv.innerHTML = `<i class="fa-solid fa-check-circle text-3xl mb-2 block text-emerald-600"></i> ยินดีต้อนรับ<br><span class="text-2xl">${text}</span>`;
+            } else {
+                messageDiv.className = "mt-6 p-5 rounded-2xl font-bold text-lg text-center bg-blue-50 border border-blue-200 text-blue-800 shadow-inner animate-in zoom-in duration-200";
+                messageDiv.innerHTML = `<i class="fa-solid fa-sign-out-alt text-3xl mb-2 block text-blue-600"></i> ขอบคุณที่ใช้บริการ<br><span class="text-2xl">${text}</span>`;
+            }
         } else {
-            messageDiv.className = "mt-6 p-5 rounded-2xl font-bold text-lg text-center bg-red-50 border border-red-200 text-red-700 shadow-inner";
-            messageDiv.innerHTML = `<i class="fa-solid fa-circle-xmark text-3xl mb-2 block"></i> ${text}`;
+            messageDiv.className = "mt-6 p-5 rounded-2xl font-bold text-lg text-center bg-red-50 border border-red-200 text-red-700 shadow-inner animate-in zoom-in duration-200";
+            messageDiv.innerHTML = `<i class="fa-solid fa-circle-xmark text-3xl mb-2 block text-red-600"></i> ${text}`;
         }
         messageDiv.classList.remove('hidden');
     }
@@ -86,6 +108,9 @@
     input.addEventListener('keypress', function (e) {
         if (e.key === 'Enter') {
             const studentId = input.value.trim();
+            // 🟢 ดึงสถานะที่ผู้ใช้เลือก (เข้า/ออก)
+            const status = document.querySelector('input[name="entryStatus"]:checked').value;
+            
             if (!studentId) return;
 
             input.value = "กำลังบันทึก...";
@@ -98,20 +123,20 @@
                 },
                 body: JSON.stringify({
                     action: 'recordLibraryEntry',
-                    studentId: studentId
+                    payload: { studentId: studentId, status: status }
                 })
             })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    showMessage(true, data.name);
+                    showMessage(true, data.name, status);
                 } else {
-                    showMessage(false, data.message || "ไม่สามารถบันทึกได้");
+                    showMessage(false, data.message || "ไม่สามารถบันทึกได้", status);
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                showMessage(false, "เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่อีกครั้ง");
+                showMessage(false, "เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่อีกครั้ง", status);
             })
             .finally(() => {
                 resetInput();

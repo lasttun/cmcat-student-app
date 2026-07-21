@@ -77,7 +77,7 @@ function doPost(e) {
       case 'getSpeechLogs': return output(getSpeechLogs()); 
       case 'getRoomHistory': return output(fetchRoomHistory(payload.roomString)); // 🟢 คืนชีพโหลดข้อมูลรายห้องของครู
       case 'getExecutiveSummary': return output(getExecutiveSummary(payload)); // 🟢 คืนชีพ Dashboard ของ Admin
-      case 'recordLibraryEntry': return output(recordLibraryEntry(payload.studentId || payload)); // 🟢 คืนชีพระบบห้องสมุด
+      case 'recordLibraryEntry': return output(recordLibraryEntry(payload)); // 🟢 อัปเดตรองรับ payload แบบ Object // 🟢 คืนชีพระบบห้องสมุด
       
       // 🟢 เพิ่ม Routing ระบบยืม-คืนห้องสมุดให้รองรับการเรียกจาก Cloudflare Pages
       case 'getLibraryBorrowLogs': return output(getLibraryBorrowLogs());
@@ -586,11 +586,15 @@ function getExecutiveSummary(payload) {
   }
 }
 
-/** 9. ระบบบันทึกเข้าใช้ห้องสมุด */
-function recordLibraryEntry(studentId) {
+/** 9. ระบบบันทึกเข้าใช้ห้องสมุด (รองรับ เข้า-ออก) */
+function recordLibraryEntry(payload) {
   const ss = getActiveSS();
   const sSheet = ss.getSheetByName(CONFIG.SHEETS.STUDENTS);
   const libSheet = getTargetSheet('Library_Logs');
+  
+  // 🟢 แยกตัวแปรมารองรับการส่งค่าแบบ Object (มีสถานะ) และแบบ String (แบบเดิม)
+  const studentId = payload.studentId ? payload.studentId : payload;
+  const status = payload.status ? payload.status : 'เข้าใช้งาน';
   
   // === สร้าง Header ถ้า Sheet ยังไม่มีข้อมูล ===
   if (libSheet.getLastRow() === 0) {
@@ -605,8 +609,8 @@ function recordLibraryEntry(studentId) {
     return { success: false, message: "ไม่พบรหัสนักศึกษานี้ในระบบ" };
   }
   
-  // บันทึก Log
-  libSheet.appendRow([new Date(), studentId, student[2], 'เข้าใช้งาน']);
+  // บันทึก Log ลงชีต
+  libSheet.appendRow([new Date(), studentId, student[2], status]);
   return { success: true, name: student[2] };
 }
 

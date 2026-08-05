@@ -265,7 +265,12 @@
                     if(dateStr) {
                         const parts = dateStr.split('/');
                         if(parts.length === 3) {
-                            const mKey = `${parts[2]}-${parts[1]}`; // YYYY-MM เพื่อให้เรียงง่าย
+                            // 🟢 FIX: ป้องกันปัญหาเลข 0 หาย และแปลง พ.ศ. กลับเป็น ค.ศ. เพื่อการเรียงลำดับที่ถูกต้อง
+                            const m = parts[1].padStart(2, '0');
+                            let y = parts[2];
+                            if (parseInt(y) > 2500) y = (parseInt(y) - 543).toString();
+
+                            const mKey = `${y}-${m}`; // YYYY-MM เพื่อให้เรียงได้ถูกต้อง 100%
                             if(!monthStats[mKey]) monthStats[mKey] = { present: 0, late: 0, leave: 0, absent: 0 };
                             
                             if(status === 'มา') monthStats[mKey].present++;

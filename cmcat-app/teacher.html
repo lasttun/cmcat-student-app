@@ -391,7 +391,22 @@
             // เช็คว่า วันนี้ (Today) มีประวัติการเช็คชื่อของห้องนี้ไหม
             const todayRecord = historyData.find(record => {
                 // คอลัมน์ Date_TH (Index 1 จาก Database)
-                return record[1] === todayStr;
+                let recordDate = record[1] ? String(record[1]).trim() : "";
+                if(recordDate) {
+                    const parts = recordDate.split('/');
+                    if(parts.length === 3) {
+                        const d = parts[0].padStart(2, '0');
+                        const m = parts[1].padStart(2, '0');
+                        let y = parts[2];
+                        
+                        // 🟢 FIX: ป้องกันปัญหา Google Sheets แปลงปี ค.ศ. เป็น พ.ศ. อัตโนมัติ
+                        if (parseInt(y) > 2500) y = (parseInt(y) - 543).toString();
+                        
+                        recordDate = `${d}/${m}/${y}`;
+                    }
+                }
+                
+                return recordDate === todayStr;
             });
 
             if (todayRecord) {
@@ -407,9 +422,18 @@
                 const isInternship = checkIsInternshipRoom(roomString, new Date()); // 🟢 เช็คชื่อห้องว่าเป็นฝึกงานไหม
                 // ใช้สถานะจริงจาก history (ถ้ามีการเช็คชื่อวันนี้แล้ว)
                 currentStudentsData = dataS.data.map(s => {
-                    const todayRecord = historyData.find(r => 
-                        r[1] === todayStr && String(r[3]).trim() === String(s.id).trim()
-                    );
+                    const todayRecord = historyData.find(r => {
+                        let rDate = r[1] ? String(r[1]).trim() : "";
+                        if(rDate) {
+                            const p = rDate.split('/');
+                            if(p.length === 3) {
+                                let y = p[2];
+                                if (parseInt(y) > 2500) y = (parseInt(y) - 543).toString();
+                                rDate = `${p[0].padStart(2, '0')}/${p[1].padStart(2, '0')}/${y}`;
+                            }
+                        }
+                        return rDate === todayStr && String(r[3]).trim() === String(s.id).trim();
+                    });
                     return { 
                         ...s, 
                         status: todayRecord ? String(todayRecord[5]).trim() : (isInternship ? 'ฝึกงาน' : 'มา')

@@ -528,12 +528,23 @@
 
                 let details = "-";
                 let evidenceLink = "";
+                let internalBadge = ""; // 🟢 กล่องเก็บป้ายสถานะเรียนต่อที่เดิม
                 
                 if (item.isResponded && item.response) {
-                    details = `<span class="font-bold text-slate-700">${item.response.status}</span>: ${item.response.targetName || ''} (${item.response.targetRole || ''})`;
-                    // เช็คว่ามีลิงก์อัปโหลดรูปไหม (สมมติหลังบ้านส่งมาชื่อ evidenceUrl หรือเราเช็คจาก data.response)
-                    if(item.response.evidenceUrl && item.response.evidenceUrl.startsWith('http')) {
-                         evidenceLink = `<a href="${item.response.evidenceUrl}" target="_blank" class="text-[10px] text-blue-600 hover:underline block mt-1"><i class="fas fa-image"></i> ดูหลักฐาน</a>`;
+                    const r = item.response;
+                    details = `<span class="font-bold text-slate-700">${r.status}</span>: ${r.targetName || ''} (${r.targetRole || ''})`;
+                    
+                    // 🟢 ตรวจสอบว่าเป็นการเรียนต่อที่วิทยาลัยเดิมหรือไม่
+                    if (r.status === 'ศึกษาต่อ' && r.targetName) {
+                        const tName = r.targetName.toLowerCase().replace(/\s+/g, '');
+                        // จับคู่คำว่า cmcat หรือชื่อวิทยาลัย
+                        if (tName === 'cmcat' || tName.includes('เกษตรเชียงใหม่') || tName.includes('เกษตรและเทคโนโลยี')) {
+                            internalBadge = `<div class="mt-1.5"><span class="bg-indigo-50 text-indigo-700 px-2 py-1 rounded-md text-[10px] font-bold border border-indigo-200 inline-block"><i class="fas fa-university"></i> เรียนต่อที่เดิม (ปวส. CMCAT)</span></div>`;
+                        }
+                    }
+
+                    if(r.evidenceUrl && r.evidenceUrl.startsWith('http')) {
+                         evidenceLink = `<a href="${r.evidenceUrl}" target="_blank" class="text-[10px] text-blue-600 hover:underline block mt-1"><i class="fas fa-image"></i> ดูหลักฐาน</a>`;
                     }
                 }
 
@@ -555,6 +566,7 @@
                         <td class="p-3 text-center border-x border-slate-200">${badge}<br>${actionBtn}</td>
                         <td class="p-3 text-slate-600 border-x border-slate-200 text-[11px] leading-tight">
                             ${details}
+                            ${internalBadge}
                             ${evidenceLink}
                         </td>
                     </tr>
@@ -605,8 +617,19 @@
             if (student.isResponded && student.response) {
                 const r = student.response;
                 const statusColor = r.status === 'ว่างงาน/รองาน' ? 'text-orange-600' : 'text-teal-600';
+                
+                // 🟢 ตรวจสอบและสร้างป้ายกำกับเรียนต่อที่เดิม
+                let internalNote = "";
+                if (r.status === 'ศึกษาต่อ' && r.targetName) {
+                    const tName = r.targetName.toLowerCase().replace(/\s+/g, '');
+                    if (tName.includes('เกษตรและเทคโนโลยีเชียงใหม่') || tName.includes('เกษตรเชียงใหม่') || tName.includes('cmcat')) {
+                        internalNote = `<div class="mb-3 p-2 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-lg text-xs font-bold text-center shadow-sm"><i class="fas fa-award"></i> นักศึกษาเรียนต่อ ปวส. ที่วิทยาลัยฯ (โควตาภายใน)</div>`;
+                    }
+                }
+
                 detailsHtml += `
                     <div class="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200">
+                        ${internalNote}
                         <p class="mb-1"><span class="text-slate-500 text-xs">สถานภาพปัจจุบัน:</span> <strong class="${statusColor}">${r.status}</strong></p>
                         <p class="mb-1"><span class="text-slate-500 text-xs">รอบการติดตาม สอศ.:</span> <strong>${r.round || '-'}</strong></p>
                         <p class="mb-1"><span class="text-slate-500 text-xs">เบอร์โทร:</span> <strong>${r.phone || '-'}</strong></p>
@@ -654,6 +677,7 @@
                     "รอบติดตาม (V-COP)": r.round || "-",
                     "สถานภาพ": r.status || "-",
                     "ชื่อหน่วยงาน/สถานศึกษา": r.targetName || "-",
+                    "เรียนต่อที่เดิม (CMCAT)": (r.status === 'ศึกษาต่อ' && r.targetName && (r.targetName.replace(/\s+/g, '').includes('เกษตรและเทคโนโลยีเชียงใหม่') || r.targetName.replace(/\s+/g, '').includes('เกษตรเชียงใหม่') || r.targetName.toLowerCase().includes('cmcat'))) ? "ใช่" : "-",
                     "ตำแหน่ง/คณะ": r.targetRole || "-",
                     "รายได้เฉลี่ย": r.income || "-",
                     "ความสอดคล้อง": r.isAligned || "-",

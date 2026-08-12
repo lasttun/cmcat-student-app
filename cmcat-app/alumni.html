@@ -117,9 +117,11 @@
                 <div id="dynamic-fields-container" class="hidden bg-white p-5 rounded-2xl border border-slate-100 shadow-inner space-y-4">
                     
                     <!-- ยุบรวม: ชื่อสถานศึกษา / ชื่อหน่วยงาน / ชื่อร้าน -->
-                    <div class="space-y-1">
+                    <div class="space-y-1 relative">
                         <label id="label-target-name" class="text-sm font-bold text-slate-600">ชื่อหน่วยงาน/สถานศึกษา <span class="text-red-500">*</span></label>
                         <input type="text" id="input-target-name" placeholder="ระบุข้อมูล..." class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-200 outline-none">
+                        <!-- 🟢 เพิ่มข้อความแนะนำกรณีเรียนต่อที่วิทยาลัยเรา -->
+                        <p id="hint-internal-study" class="hidden text-[10px] font-bold text-indigo-600 mt-1 pl-1"><i class="fas fa-lightbulb text-agri-gold"></i> หากเรียนต่อที่วิทยาลัยฯ ของเรา กรุณาพิมพ์คำว่า <span class="bg-indigo-100 px-1 rounded border border-indigo-200">"cmcat"</span></p>
                     </div>
 
                     <!-- ยุบรวม: คณะสาขา / ตำแหน่ง / ลักษณะงาน -->
@@ -265,41 +267,33 @@
                     }
 
                     const records = result.data;
-                    let selectedAlumni = null;
 
-                    if (records.length === 1) {
-                        selectedAlumni = records[0]; 
-                    } else {
-                        const options = {};
-                        records.forEach((r, index) => {
-                            options[index] = `ระดับ ${r.level} (จบปี ${r.year}) - สาขา${r.major}`;
-                        });
+                    // 🟢 [แก้ไขใหม่] ระบบ Auto-select วุฒิการศึกษาสูงสุดโดยอัตโนมัติ
+                    // ลำดับความสำคัญ: ปริญญาตรี > ปวส. > ปวช. และเรียงตามปีที่จบล่าสุด
+                    records.sort((a, b) => {
+                        // 1. เทียบระดับชั้น
+                        const levelScore = (lvl) => {
+                            if (lvl.includes('ป.ตรี') || lvl.includes('ปริญญา')) return 3;
+                            if (lvl.includes('ปวส')) return 2;
+                            if (lvl.includes('ปวช')) return 1;
+                            return 0;
+                        };
                         
-                        const { value: selectedIndex } = await Swal.fire({
-                            title: 'พบประวัติการศึกษาหลายระดับ',
-                            text: 'กรุณาเลือกระดับชั้นที่ท่านต้องการรายงานสถานะการมีงานทำในครั้งนี้',
-                            input: 'radio',
-                            inputOptions: options,
-                            inputValidator: (value) => {
-                                if (!value) return 'กรุณาเลือกรายการที่ต้องการ'
-                            },
-                            confirmButtonText: 'ยืนยัน',
-                            confirmButtonColor: '#059669',
-                            allowOutsideClick: false,
-                            showCancelButton: true,
-                            cancelButtonText: 'ยกเลิก'
-                        });
-
-                        if (selectedIndex !== undefined) {
-                            selectedAlumni = records[selectedIndex];
-                        } else {
-                            btn.innerHTML = 'ตรวจสอบข้อมูล <i class="fas fa-arrow-right"></i>';
-                            btn.disabled = false;
-                            return; 
+                        const scoreA = levelScore(a.level);
+                        const scoreB = levelScore(b.level);
+                        
+                        if (scoreA !== scoreB) {
+                            return scoreB - scoreA; // เอาคะแนนมาก (วุฒิสูง) ขึ้นก่อน
                         }
-                    }
+                        
+                        // 2. ถ้าระดับชั้นเท่ากัน ให้เทียบจากปีการศึกษาที่จบล่าสุด
+                        const yearA = parseInt(a.year) || 0;
+                        const yearB = parseInt(b.year) || 0;
+                        return yearB - yearA; 
+                    });
 
-                    currentAlumni = selectedAlumni;
+                    // ดึงเรคคอร์ดแรก (ซึ่งถูกเรียงให้เป็นวุฒิสูงสุดและปีล่าสุดแล้ว) มาใช้ทันที
+                    currentAlumni = records[0];
                     
                     // เติมข้อมูลลงหน้าจออย่างรวดเร็ว
                     document.getElementById('display-name').innerText = `${currentAlumni.prefix} ${currentAlumni.name}`;
@@ -355,10 +349,17 @@
             wrapperEvidence.classList.remove('hidden');
 
             // เปลี่ยน Label ตามสถานะ
+// ซ่อนคำแนะนำไว้ก่อนเป็นค่าเริ่มต้น
+            const hintInternal = document.getElementById('hint-internal-study');
+            if (hintInternal) hintInternal.classList.add('hidden');
+
             if (status === 'study') {
                 labelTargetName.innerHTML = 'ชื่อสถานศึกษาที่เข้าศึกษาต่อ <span class="text-red-500">*</span>';
                 document.getElementById('input-target-name').placeholder = "เช่น มหาวิทยาลัยแม่โจ้...";
                 
+                // 🟢 โชว์คำแนะนำเมื่อเด็กเลือก "ศึกษาต่อ"
+                if (hintInternal) hintInternal.classList.remove('hidden');
+
                 labelTargetRole.innerHTML = 'คณะ / สาขาวิชาที่เรียน <span class="text-red-500">*</span>';
                 document.getElementById('input-target-role').placeholder = "เช่น คณะบริหารธุรกิจ สาขาระบบสารสนเทศ...";
                 
@@ -485,9 +486,6 @@
                 const result = await res.json();
 
                 if (result.success) {
-                    // 🟢 [เพิ่มใหม่] บันทึกประวัติการส่งฟอร์มลงเครื่อง เพื่อบล็อกการส่งซ้ำในปีนี้
-                    const currentYear = new Date().getFullYear();
-                    localStorage.setItem(`alumni_submitted_${currentAlumni.nationalId}_${currentYear}`, 'true');
 
                     // 🟢 เด้งกลับไปด้านบนสุดของหน้าจอทันที
                     window.scrollTo({ top: 0, behavior: 'smooth' });

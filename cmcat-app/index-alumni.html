@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบรายงานภาวะการมีงานทำ | CMCAT</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Prompt', sans-serif; }
+        
+        /* Animation สำหรับพื้นหลังเคลื่อนไหวช้าๆ */
+        @keyframes blob {
+            0% { transform: translate(0px, 0px) scale(1); }
+            33% { transform: translate(30px, -50px) scale(1.1); }
+            66% { transform: translate(-20px, 20px) scale(0.9); }
+            100% { transform: translate(0px, 0px) scale(1); }
+        }
+        .animate-blob {
+            animation: blob 7s infinite;
+        }
+        .animation-delay-2000 {
+            animation-delay: 2s;
+        }
+        .animation-delay-4000 {
+            animation-delay: 4s;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen relative overflow-hidden flex items-center justify-center selection:bg-emerald-200">
+
+    <!-- 🌟 พื้นหลังตกแต่ง (Background Blobs) -->
+    <div class="fixed inset-0 w-full h-full pointer-events-none z-0 flex justify-center items-center opacity-40">
+        <div class="absolute top-[-10%] left-[-10%] w-96 h-96 bg-emerald-300 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob"></div>
+        <div class="absolute top-[-10%] right-[-10%] w-96 h-96 bg-teal-300 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-2000"></div>
+        <div class="absolute bottom-[-20%] left-[20%] w-96 h-96 bg-indigo-300 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-4000"></div>
+    </div>
+
+    <!-- 📦 Main Container -->
+    <div class="relative z-10 w-full max-w-5xl px-4 py-12 mx-auto">
+        
+        <!-- 🏷️ Header ส่วนหัว -->
+        <div class="text-center mb-12">
+            <div class="inline-flex items-center justify-center w-20 h-20 bg-white rounded-3xl shadow-lg mb-6 border border-slate-100">
+                <i class="fas fa-university text-4xl text-emerald-700"></i>
+            </div>
+            <h1 class="text-3xl md:text-4xl font-extrabold text-slate-800 tracking-tight mb-3">
+                ระบบติดตามภาวะการมีงานทำ
+            </h1>
+            <p class="text-slate-500 text-sm md:text-base max-w-2xl mx-auto leading-relaxed">
+                ศูนย์เครือข่ายกำลังคนอาชีวศึกษา (V-COP)<br>
+                <span class="font-semibold text-emerald-700">วิทยาลัยเกษตรและเทคโนโลยีเชียงใหม่</span>
+            </p>
+        </div>
+
+        <!-- 🃏 เลือกเมนูเข้าใช้งาน (Cards) -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-10 max-w-4xl mx-auto">
+            
+            <!-- 🎓 Card 1: สำหรับศิษย์เก่า (Student Form) -->
+            <div class="group bg-white rounded-[2rem] p-8 shadow-sm hover:shadow-2xl border border-slate-100 transition-all duration-300 transform hover:-translate-y-2 relative overflow-hidden flex flex-col justify-between h-full">
+                <!-- วงกลมตกแต่งมุมขวาบน -->
+                <div class="absolute -right-12 -top-12 w-32 h-32 bg-emerald-50 rounded-full blur-2xl group-hover:bg-emerald-100 transition-colors duration-500"></div>
+                
+                <div class="relative z-10">
+                    <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center text-3xl mb-6 shadow-inner">
+                        <i class="fas fa-user-graduate"></i>
+                    </div>
+                    <div class="inline-block bg-emerald-100 text-emerald-700 text-[10px] font-bold px-3 py-1 rounded-full mb-3 uppercase tracking-wider">
+                        สำหรับผู้สำเร็จการศึกษา
+                    </div>
+                    <h2 class="text-2xl font-bold text-slate-800 mb-3">แบบสำรวจการมีงานทำ</h2>
+                    <p class="text-slate-500 text-sm leading-relaxed mb-8">
+                        เข้าสู่ระบบเพื่อยืนยันตัวตน อัปเดตข้อมูลการติดต่อ และรายงานสถานภาพการทำงานหรือการศึกษาต่อในปัจจุบันของท่าน
+                    </p>
+                </div>
+                
+                <!-- ปุ่มเชื่อมไปไฟล์ alumni.html -->
+                <a href="alumni.html" class="relative z-10 w-full inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 px-6 rounded-2xl transition-all shadow-md hover:shadow-lg group-hover:gap-4">
+                    เข้าสู่แบบสำรวจ <i class="fas fa-arrow-right transition-all"></i>
+                </a>
+            </div>
+
+            <!-- 📊 Card 2: สำหรับผู้บริหาร (Admin Dashboard) -->
+            <div class="group bg-white rounded-[2rem] p-8 shadow-sm hover:shadow-2xl border border-slate-100 transition-all duration-300 transform hover:-translate-y-2 relative overflow-hidden flex flex-col justify-between h-full">
+                <!-- วงกลมตกแต่งมุมขวาบน -->
+                <div class="absolute -right-12 -top-12 w-32 h-32 bg-indigo-50 rounded-full blur-2xl group-hover:bg-indigo-100 transition-colors duration-500"></div>
+                
+                <div class="relative z-10">
+                    <div class="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center text-3xl mb-6 shadow-inner">
+                        <i class="fas fa-chart-pie"></i>
+                    </div>
+                    <div class="inline-block bg-indigo-100 text-indigo-700 text-[10px] font-bold px-3 py-1 rounded-full mb-3 uppercase tracking-wider">
+                        สำหรับแอดมินและผู้บริหาร
+                    </div>
+                    <h2 class="text-2xl font-bold text-slate-800 mb-3">Dashboard รายงานผล</h2>
+                    <p class="text-slate-500 text-sm leading-relaxed mb-8">
+                        เข้าสู่ระบบเพื่อดูสถิติสรุปภาพรวม ติดตามการตอบแบบสอบถามรายบุคคล และส่งออกข้อมูล (Export Excel) สำหรับระบบ V-COP
+                    </p>
+                </div>
+                
+                <!-- ปุ่มเชื่อมไปไฟล์ admin-alumni.html -->
+                <a href="admin-alumni.html" class="relative z-10 w-full inline-flex items-center justify-center gap-2 bg-slate-800 hover:bg-indigo-700 text-white font-bold py-4 px-6 rounded-2xl transition-all shadow-md hover:shadow-lg group-hover:gap-4">
+                    เข้าสู่ระบบผู้บริหาร <i class="fas fa-arrow-right transition-all"></i>
+                </a>
+            </div>
+
+        </div>
+
+        <!-- 📌 Footer -->
+        <div class="text-center mt-12 text-slate-400 text-xs font-medium">
+            &copy; 2026 CMCAT Information System. All rights reserved.
+        </div>
+
+    </div>
+
+</body>
+</html>

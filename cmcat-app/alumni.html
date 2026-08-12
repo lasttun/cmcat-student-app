@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>แบบสำรวจภาวะการมีงานทำ | CMCAT</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Prompt', sans-serif; }
+        .glass-panel { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); }
+        .hidden-transition { opacity: 0; transform: translateY(10px); pointer-events: none; position: absolute; visibility: hidden; }
+        .show-transition { opacity: 1; transform: translateY(0); transition: all 0.4s ease-out; position: relative; visibility: visible; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen pb-12 relative bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]">
+    
+    <!-- Background Gradient -->
+    <div class="fixed inset-0 bg-gradient-to-br from-emerald-100/40 via-teal-50/40 to-blue-50/40 pointer-events-none -z-10"></div>
+
+    <!-- Header -->
+    <div class="bg-emerald-800 text-white p-6 shadow-lg rounded-b-[2rem] mb-8 max-w-4xl mx-auto relative overflow-hidden">
+        <div class="absolute -right-10 -top-10 w-40 h-40 bg-white opacity-10 rounded-full blur-2xl"></div>
+        <div class="relative z-10 flex flex-col md:flex-row items-center gap-4 text-center md:text-left">
+            <div class="w-16 h-16 bg-white p-2 rounded-2xl shadow-md flex items-center justify-center shrink-0">
+                <i class="fas fa-graduation-cap text-3xl text-emerald-700"></i>
+            </div>
+            <div>
+                <h1 class="text-2xl md:text-3xl font-bold tracking-tight">ระบบติดตามภาวะการมีงานทำและการศึกษาต่อ</h1>
+                <p class="text-emerald-100 text-sm md:text-base mt-1">วิทยาลัยเกษตรและเทคโนโลยีเชียงใหม่ (สำหรับผู้สำเร็จการศึกษา)</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-3xl mx-auto px-4">
+        
+        <!-- STEP 1: ค้นหาข้อมูลนักศึกษา -->
+        <div id="step-1" class="glass-panel p-6 md:p-8 rounded-[2rem] shadow-sm border border-white mb-6 transition-all duration-300">
+            <h2 class="text-lg font-bold text-slate-700 mb-4 border-b border-slate-100 pb-2"><i class="fas fa-search text-emerald-500 mr-2"></i>1. ยืนยันตัวตนผู้สำเร็จการศึกษา</h2>
+            <div class="flex flex-col md:flex-row gap-3">
+                <div class="relative flex-1">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <i class="fas fa-id-card text-slate-400"></i>
+                    </div>
+                    <!-- 🟢 เปลี่ยน id, placeholder และบังคับกรอกสูงสุด 13 หลัก -->
+                    <input type="text" id="search-national-id" placeholder="กรอกเลขประจำตัวประชาชน 13 หลัก" maxlength="13" class="w-full py-3.5 pl-12 pr-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 outline-none transition-all text-slate-700 font-bold tracking-wider text-center md:text-left">
+                </div>
+                <button onclick="verifyStudent()" id="btn-search" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 px-8 rounded-2xl shadow-md transition-all flex items-center justify-center gap-2">
+                    ตรวจสอบข้อมูล <i class="fas fa-arrow-right"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- ฟอร์มข้อมูลหลัก (ซ่อนไว้จนกว่าจะค้นหาเจอ) -->
+        <div id="main-form-container" class="hidden-transition">
+            
+            <!-- STEP 2: ข้อมูลส่วนตัว (Read-only + Contact Update) -->
+            <div class="glass-panel p-6 md:p-8 rounded-[2rem] shadow-sm border border-white mb-6">
+                <h2 class="text-lg font-bold text-slate-700 mb-4 border-b border-slate-100 pb-2"><i class="fas fa-user-check text-emerald-500 mr-2"></i>2. ตรวจสอบและอัปเดตข้อมูลการติดต่อ</h2>
+                
+                <!-- ข้อมูลที่ดึงมาจากฐานข้อมูล (ล็อกไว้ แก้ไขไม่ได้) -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <div>
+                        <p class="text-xs font-bold text-slate-400 uppercase">ชื่อ-นามสกุล</p>
+                        <p id="display-name" class="font-bold text-slate-800">-</p>
+                    </div>
+                    <div>
+                        <p class="text-xs font-bold text-slate-400 uppercase">ระดับชั้นที่จบ</p>
+                        <p id="display-level" class="font-bold text-slate-800">-</p>
+                    </div>
+                    <div>
+                        <p class="text-xs font-bold text-slate-400 uppercase">สาขาวิชา</p>
+                        <p id="display-major" class="font-bold text-slate-800">-</p>
+                    </div>
+                    <div>
+                        <p class="text-xs font-bold text-slate-400 uppercase">ครูที่ปรึกษา</p>
+                        <p id="display-advisor" class="font-bold text-slate-800">-</p>
+                    </div>
+                </div>
+
+                <!-- ข้อมูลที่ต้องอัปเดตใหม่ -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="space-y-1">
+                        <label class="text-sm font-bold text-slate-600">เบอร์โทรศัพท์ติดต่อได้ (ปัจจุบัน) <span class="text-red-500">*</span></label>
+                        <input type="tel" id="input-phone" placeholder="08xxxxxxxx" class="w-full p-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-200 outline-none">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-sm font-bold text-slate-600">ID Line (ถ้ามี)</label>
+                        <input type="text" id="input-line" placeholder="Line ID สำหรับการติดต่อ" class="w-full p-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-200 outline-none">
+                    </div>
+                    <div class="space-y-1 md:col-span-2">
+                        <label class="text-sm font-bold text-slate-600">ที่อยู่ปัจจุบัน (ที่สามารถติดต่อได้) <span class="text-red-500">*</span></label>
+                        <textarea id="input-address" rows="2" placeholder="บ้านเลขที่ หมู่ ซอย ถนน ตำบล อำเภอ จังหวัด รหัสไปรษณีย์" class="w-full p-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-200 outline-none"></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- STEP 3: สถานะปัจจุบัน (Dynamic UI) -->
+            <div class="glass-panel p-6 md:p-8 rounded-[2rem] shadow-sm border border-emerald-200 mb-6 bg-emerald-50/30">
+                <h2 class="text-lg font-bold text-emerald-800 mb-4 border-b border-emerald-100 pb-2"><i class="fas fa-briefcase text-emerald-600 mr-2"></i>3. สถานภาพปัจจุบันของท่าน</h2>
+                
+                <div class="space-y-4 mb-6">
+                    <label class="text-sm font-bold text-slate-700">ในปัจจุบันท่านกำลังทำอะไรอยู่? <span class="text-red-500">*</span></label>
+                    <select id="select-status" onchange="handleStatusChange()" class="w-full p-3.5 bg-white border border-emerald-300 rounded-xl focus:ring-4 focus:ring-emerald-100 outline-none text-slate-800 font-bold shadow-sm">
+                        <option value="" disabled selected>-- กรุณาเลือกสถานะปัจจุบัน --</option>
+                        <option value="study">🎓 ศึกษาต่อ (เรียนต่อในระดับที่สูงขึ้น)</option>
+                        <option value="work">💼 มีงานทำ (ทำงานบริษัท/รับราชการ/ลูกจ้าง)</option>
+                        <option value="freelance">🏪 ประกอบอาชีพอิสระ (ธุรกิจส่วนตัว/ฟรีแลนซ์/เกษตรกรรม)</option>
+                        <option value="unemployed">⏳ ว่างงาน / กำลังรองาน</option>
+                        <option value="other">🚩 อื่นๆ (เช่น เกณฑ์ทหาร, อุปสมบท)</option>
+                    </select>
+                </div>
+
+                <!-- Dynamic Form Container -->
+                <div id="dynamic-fields-container" class="hidden bg-white p-5 rounded-2xl border border-slate-100 shadow-inner space-y-4">
+                    
+                    <!-- ยุบรวม: ชื่อสถานศึกษา / ชื่อหน่วยงาน / ชื่อร้าน -->
+                    <div class="space-y-1">
+                        <label id="label-target-name" class="text-sm font-bold text-slate-600">ชื่อหน่วยงาน/สถานศึกษา <span class="text-red-500">*</span></label>
+                        <input type="text" id="input-target-name" placeholder="ระบุข้อมูล..." class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-200 outline-none">
+                    </div>
+
+                    <!-- ยุบรวม: คณะสาขา / ตำแหน่ง / ลักษณะงาน -->
+                    <div class="space-y-1">
+                        <label id="label-target-role" class="text-sm font-bold text-slate-600">ตำแหน่ง/คณะที่เรียน <span class="text-red-500">*</span></label>
+                        <input type="text" id="input-target-role" placeholder="ระบุข้อมูล..." class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-200 outline-none">
+                    </div>
+
+                    <!-- ยุบรวม: เงินเดือน / รายได้ -->
+                    <div id="wrapper-income" class="space-y-1">
+                        <label id="label-income" class="text-sm font-bold text-slate-600">รายได้เฉลี่ยต่อเดือน <span class="text-red-500">*</span></label>
+                        <select id="input-income" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none">
+                            <option value="">-- เลือกระดับรายได้ --</option>
+                            <option value="ต่ำกว่า 9,000 บาท">ต่ำกว่า 9,000 บาท</option>
+                            <option value="9,000 - 12,000 บาท">9,000 - 12,000 บาท</option>
+                            <option value="12,001 - 15,000 บาท">12,001 - 15,000 บาท</option>
+                            <option value="15,001 - 20,000 บาท">15,001 - 20,000 บาท</option>
+                            <option value="มากกว่า 20,000 บาท">มากกว่า 20,000 บาท</option>
+                        </select>
+                    </div>
+
+                    <!-- คำถาม: ตรงตามสาขาที่จบไหม? -->
+                    <div id="wrapper-aligned" class="space-y-2 pt-2 border-t border-slate-100 mt-2">
+                        <label id="label-aligned" class="text-sm font-bold text-slate-600">งาน/การศึกษาต่อนี้ ตรงกับสาขาที่ท่านสำเร็จการศึกษาหรือไม่? <span class="text-red-500">*</span></label>
+                        <div class="flex gap-4">
+                            <label class="flex-1 text-center cursor-pointer">
+                                <input type="radio" name="is_aligned" value="ตรงสาขา" class="hidden peer">
+                                <div class="p-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-500 font-bold peer-checked:bg-emerald-100 peer-checked:text-emerald-700 peer-checked:border-emerald-500 transition-all">✅ ตรงสาขา</div>
+                            </label>
+                            <label class="flex-1 text-center cursor-pointer">
+                                <input type="radio" name="is_aligned" value="ไม่ตรงสาขา" class="hidden peer">
+                                <div class="p-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-500 font-bold peer-checked:bg-red-100 peer-checked:text-red-700 peer-checked:border-red-500 transition-all">❌ ไม่ตรงสาขา</div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- อัปโหลดหลักฐาน (ใช้ Input แบบ File เพื่อรองรับอนาคต) -->
+                    <div id="wrapper-evidence" class="space-y-1 pt-2">
+                        <label class="text-sm font-bold text-slate-600"><i class="fas fa-image text-slate-400 mr-1"></i> แนบรูปภาพหลักฐาน (เช่น บัตรพนักงาน/บัตรนักศึกษา/รูปร้านค้า) <span class="text-xs text-slate-400 font-normal">ถ้ามี</span></label>
+                        <input type="file" id="input-evidence" accept="image/*" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer">
+                    </div>
+
+                </div>
+                
+                <!-- กล่องข้อความสำหรับ ว่างงาน หรือ อื่นๆ -->
+                <div id="other-note-container" class="hidden space-y-1 mt-4">
+                    <label class="text-sm font-bold text-slate-600">ระบุรายละเอียดเพิ่มเติม / หมายเหตุ</label>
+                    <input type="text" id="input-other-note" placeholder="เช่น เตรียมสอบราชการ, รอเกณฑ์ทหาร..." class="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-200">
+                </div>
+            </div>
+
+            <!-- Submit Button -->
+            <button onclick="submitAlumniData()" id="btn-submit" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-4 rounded-2xl shadow-xl transition-all hover:-translate-y-1 flex items-center justify-center gap-2 text-lg">
+                <i class="fas fa-save"></i> บันทึกข้อมูลการติดตาม
+            </button>
+
+        </div>
+    </div>
+
+<script>
+        // ⚠️ API_URL ของคุณ (นำ Web App URL อันใหม่ที่เพิ่ง Deploy มาวางตรงนี้)
+        const API_URL = "https://script.google.com/macros/s/AKfycbztsC4Wng1zDAVyNmHka6N00m1os6aHGqcZV2LW1l1NBrlATIWPLzwdORzU4lP_P6_p/exec"; 
+
+// --- ⚙️ ตัวแปรเก็บข้อมูลชั่วคราว และ Cache ---
+        let currentAlumni = null;
+        const searchCache = new Map(); // 🟢 [เพิ่มใหม่] สร้างหน่วยความจำช่วยค้นหาให้เร็วขึ้น (Caching)
+
+        // --- 🔍 1. ฟังก์ชันค้นหานักศึกษา (ยิง API ไปยัง GAS + ระบบ Cache) ---
+        async function verifyStudent() {
+            const inputField = document.getElementById('search-national-id');
+            // กรองเอาเฉพาะตัวเลข เผื่อผู้ใช้เผลอกดสเปซบาร์หรือขีดขวาง
+            const nationalId = inputField.value.replace(/[^0-9]/g, ''); 
+            const btn = document.getElementById('btn-search');
+
+            // 🟢 Smart Toggle: โหมดรีเซ็ตเพื่อหาคนใหม่
+            if (inputField.disabled) {
+                inputField.disabled = false;
+                inputField.value = '';
+                inputField.classList.remove('bg-slate-100', 'text-slate-400');
+                inputField.focus(); 
+                
+                btn.innerHTML = 'ตรวจสอบข้อมูล <i class="fas fa-arrow-right"></i>';
+                btn.classList.replace('bg-slate-300', 'bg-emerald-600');
+                btn.classList.replace('hover:bg-slate-400', 'hover:bg-emerald-700');
+                
+                // ซ่อนและล้างฟอร์มทั้งหมดอย่างนุ่มนวล
+                document.getElementById('main-form-container').classList.replace('show-transition', 'hidden-transition');
+                document.getElementById('input-phone').value = '';
+                document.getElementById('input-line').value = '';
+                document.getElementById('input-address').value = '';
+                document.getElementById('select-status').value = '';
+                document.getElementById('input-other-note').value = '';
+                if(document.getElementById('input-evidence')) document.getElementById('input-evidence').value = '';
+                
+                document.querySelectorAll('input[name="is_aligned"]').forEach(radio => radio.checked = false);
+                
+                handleStatusChange(); 
+                currentAlumni = null;
+                return;
+            }
+
+            // 🟢 ตรวจสอบความถูกต้องขั้นสูง (ต้องเป็นตัวเลข 13 หลักเท่านั้น)
+            if (nationalId.length !== 13) {
+                return Swal.fire('ข้อมูลไม่ถูกต้อง', 'กรุณากรอกเลขประจำตัวประชาชนเฉพาะตัวเลขให้ครบ 13 หลัก', 'warning');
+            }
+
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> กำลังค้นหา...';
+            btn.disabled = true;
+
+            try {
+                let result;
+
+                // 🟢 [เพิ่มใหม่] ระบบ Caching: ตรวจสอบว่าเคยค้นหาเลขบัตรนี้ไปแล้วหรือยัง?
+                if (searchCache.has(nationalId)) {
+                    // ดึงจากหน่วยความจำหน้าเว็บ โหลดเสร็จในเสี้ยววินาที
+                    result = searchCache.get(nationalId);
+                } else {
+                    // หากไม่เคยค้นหา ค่อยยิง API ไปหา Google Sheets
+                    const res = await fetch(API_URL, {
+                        method: 'POST',
+                        redirect: 'follow',
+                        headers: { "Content-Type": "text/plain;charset=utf-8" },
+                        body: JSON.stringify({ action: 'getAlumniMaster', payload: { nationalId: nationalId } })
+                    });
+                    result = await res.json();
+                    
+                    // บันทึกผลลัพธ์ลง Cache หากค้นหาสำเร็จ
+                    if (result.success) {
+                        searchCache.set(nationalId, result);
+                    }
+                }
+
+                if (result.success) {
+                    if (result.alreadySubmitted) {
+                        btn.innerHTML = 'ตรวจสอบข้อมูล <i class="fas fa-arrow-right"></i>';
+                        btn.disabled = false;
+                        return Swal.fire({
+                            title: 'ท่านกรอกข้อมูลแล้ว',
+                            text: 'ท่านได้ทำการบันทึกแบบสำรวจภาวะการมีงานทำประจำปีนี้เรียบร้อยแล้ว ขอบคุณที่ให้ความร่วมมือครับ',
+                            icon: 'info',
+                            confirmButtonColor: '#059669'
+                        });
+                    }
+
+                    const records = result.data;
+                    let selectedAlumni = null;
+
+                    if (records.length === 1) {
+                        selectedAlumni = records[0]; 
+                    } else {
+                        const options = {};
+                        records.forEach((r, index) => {
+                            options[index] = `ระดับ ${r.level} (จบปี ${r.year}) - สาขา${r.major}`;
+                        });
+                        
+                        const { value: selectedIndex } = await Swal.fire({
+                            title: 'พบประวัติการศึกษาหลายระดับ',
+                            text: 'กรุณาเลือกระดับชั้นที่ท่านต้องการรายงานสถานะการมีงานทำในครั้งนี้',
+                            input: 'radio',
+                            inputOptions: options,
+                            inputValidator: (value) => {
+                                if (!value) return 'กรุณาเลือกรายการที่ต้องการ'
+                            },
+                            confirmButtonText: 'ยืนยัน',
+                            confirmButtonColor: '#059669',
+                            allowOutsideClick: false,
+                            showCancelButton: true,
+                            cancelButtonText: 'ยกเลิก'
+                        });
+
+                        if (selectedIndex !== undefined) {
+                            selectedAlumni = records[selectedIndex];
+                        } else {
+                            btn.innerHTML = 'ตรวจสอบข้อมูล <i class="fas fa-arrow-right"></i>';
+                            btn.disabled = false;
+                            return; 
+                        }
+                    }
+
+                    currentAlumni = selectedAlumni;
+                    
+                    // เติมข้อมูลลงหน้าจออย่างรวดเร็ว
+                    document.getElementById('display-name').innerText = `${currentAlumni.prefix} ${currentAlumni.name}`;
+                    document.getElementById('display-level').innerText = `จบปีการศึกษา ${currentAlumni.year} (${currentAlumni.level})`;
+                    document.getElementById('display-major').innerText = currentAlumni.major;
+                    document.getElementById('display-advisor').innerText = currentAlumni.advisor;
+
+                    // ปรับ UI เข้าสู่โหมด "ค้นหาใหม่"
+                    inputField.disabled = true;
+                    inputField.classList.add('bg-slate-100', 'text-slate-400');
+                    btn.innerHTML = '<i class="fas fa-sync-alt"></i> ค้นหาคนใหม่';
+                    btn.classList.replace('bg-emerald-600', 'bg-slate-300');
+                    btn.classList.replace('hover:bg-emerald-700', 'hover:bg-slate-400');
+
+                    const formContainer = document.getElementById('main-form-container');
+                    formContainer.classList.remove('hidden-transition');
+                    formContainer.classList.add('show-transition');
+
+                    Swal.fire({
+                        toast: true, position: 'top-end', icon: 'success',
+                        title: 'พบข้อมูลผู้สำเร็จการศึกษา', showConfirmButton: false, timer: 1500
+                    });
+
+                } else {
+                    throw new Error(result.message);
+                }
+            } catch (error) {
+                Swal.fire('ไม่พบข้อมูล', error.message || 'ไม่พบรหัสประจำตัวนี้ในระบบศิษย์เก่า กรุณาตรวจสอบอีกครั้ง', 'error');
+                btn.innerHTML = 'ตรวจสอบข้อมูล <i class="fas fa-arrow-right"></i>';
+                btn.disabled = false;
+            }
+        }
+
+        // --- 🔄 2. ฟังก์ชันจัดการ Dynamic UI เปลี่ยน Label และการแสดงผล ---
+        function handleStatusChange() {
+            const status = document.getElementById('select-status').value;
+            const container = document.getElementById('dynamic-fields-container');
+            const otherNote = document.getElementById('other-note-container');
+            
+            // Elements ที่ต้องเปลี่ยนชื่อ
+            const labelTargetName = document.getElementById('label-target-name');
+            const labelTargetRole = document.getElementById('label-target-role');
+            const wrapperIncome = document.getElementById('wrapper-income');
+            const labelAligned = document.getElementById('label-aligned');
+            const wrapperAligned = document.getElementById('wrapper-aligned');
+            const wrapperEvidence = document.getElementById('wrapper-evidence');
+
+            // Reset ค่าการแสดงผลก่อน
+            container.classList.remove('hidden');
+            otherNote.classList.add('hidden');
+            wrapperIncome.classList.remove('hidden');
+            wrapperAligned.classList.remove('hidden');
+            wrapperEvidence.classList.remove('hidden');
+
+            // เปลี่ยน Label ตามสถานะ
+            if (status === 'study') {
+                labelTargetName.innerHTML = 'ชื่อสถานศึกษาที่เข้าศึกษาต่อ <span class="text-red-500">*</span>';
+                document.getElementById('input-target-name').placeholder = "เช่น มหาวิทยาลัยแม่โจ้...";
+                
+                labelTargetRole.innerHTML = 'คณะ / สาขาวิชาที่เรียน <span class="text-red-500">*</span>';
+                document.getElementById('input-target-role').placeholder = "เช่น คณะบริหารธุรกิจ สาขาระบบสารสนเทศ...";
+                
+                labelAligned.innerHTML = 'สาขาที่ศึกษาต่อ ตรงกับสาขาที่ท่านสำเร็จการศึกษาจากวิทยาลัยฯ หรือไม่? <span class="text-red-500">*</span>';
+                
+                wrapperIncome.classList.add('hidden'); 
+                
+            } else if (status === 'work') {
+                labelTargetName.innerHTML = 'ชื่อหน่วยงาน / บริษัท / ห้างร้าน <span class="text-red-500">*</span>';
+                document.getElementById('input-target-name').placeholder = "เช่น บริษัท โทรคมนาคม จำกัด...";
+                
+                labelTargetRole.innerHTML = 'ตำแหน่งงาน / ลักษณะงานที่ทำ <span class="text-red-500">*</span>';
+                document.getElementById('input-target-role').placeholder = "เช่น พนักงานไอที, เสมียน, ช่างเทคนิค...";
+                
+                labelAligned.innerHTML = 'ลักษณะงานที่ทำ ตรงกับสาขาที่ท่านสำเร็จการศึกษาจากวิทยาลัยฯ หรือไม่? <span class="text-red-500">*</span>';
+                
+            } else if (status === 'freelance') {
+                labelTargetName.innerHTML = 'ชื่อธุรกิจส่วนตัว / ชื่อร้าน (ถ้าไม่มีให้ใส่ "ธุรกิจส่วนตัว") <span class="text-red-500">*</span>';
+                document.getElementById('input-target-name').placeholder = "เช่น ร้านกาแฟน้องนาย, รับจ้างทั่วไป...";
+                
+                labelTargetRole.innerHTML = 'ลักษณะอาชีพ / สินค้าที่ขาย <span class="text-red-500">*</span>';
+                document.getElementById('input-target-role').placeholder = "เช่น ขายของออนไลน์, ทำสวนเกษตร...";
+                
+                labelAligned.innerHTML = 'อาชีพอิสระนี้ ตรงกับสาขาที่ท่านสำเร็จการศึกษาจากวิทยาลัยฯ หรือไม่? <span class="text-red-500">*</span>';
+                
+            } else if (status === 'unemployed' || status === 'other') {
+                container.classList.add('hidden');
+                otherNote.classList.remove('hidden');
+            }
+        }
+
+        // --- 💾 3. ฟังก์ชันบันทึกข้อมูล (ยิง API ไปยัง GAS) ---
+        async function submitAlumniData() {
+            // เช็คข้อมูลส่วนตัว
+            const phone = document.getElementById('input-phone').value.trim();
+            const address = document.getElementById('input-address').value.trim();
+            const status = document.getElementById('select-status').value;
+
+            if (!phone || !address || !status) {
+                return Swal.fire('ข้อมูลไม่ครบถ้วน', 'กรุณากรอกข้อมูลในช่องที่มีเครื่องหมายดอกจัน (*) สีแดงให้ครบถ้วน', 'warning');
+            }
+
+// เช็คฟิลด์ Dynamic
+            if (['study', 'work', 'freelance'].includes(status)) {
+                const targetName = document.getElementById('input-target-name').value.trim();
+                const targetRole = document.getElementById('input-target-role').value.trim();
+                const isAligned = document.querySelector('input[name="is_aligned"]:checked');
+                
+                if (!targetName || !targetRole || !isAligned) {
+                    return Swal.fire('ข้อมูลไม่ครบถ้วน', 'กรุณาระบุรายละเอียดสถานที่ และเลือกความสอดคล้องกับสาขาที่จบ', 'warning');
+                }
+                
+                if (['work', 'freelance'].includes(status) && !document.getElementById('input-income').value) {
+                    return Swal.fire('ข้อมูลไม่ครบถ้วน', 'กรุณาเลือกระดับรายได้เฉลี่ยต่อเดือน', 'warning');
+                }
+            }
+
+            const btn = document.getElementById('btn-submit');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> กำลังประมวลผล (หากมีรูปภาพอาจใช้เวลาสักครู่)...';
+            btn.disabled = true;
+
+            try {
+                // 🟢 1. จัดการระบบแปลงไฟล์รูปภาพเป็น Base64
+                let fileData = null;
+                const fileInput = document.getElementById('input-evidence');
+                
+                if (fileInput.files && fileInput.files.length > 0) {
+                    const file = fileInput.files[0];
+                    
+                    // เช็คขนาดไฟล์ (จำกัดไว้ที่ไม่เกิน 5MB เพื่อไม่ให้ระบบ Timeout)
+                    if (file.size > 5 * 1024 * 1024) {
+                        throw new Error("ขนาดไฟล์รูปภาพใหญ่เกินไป (จำกัดไม่เกิน 5 MB)");
+                    }
+
+                    // แปลงไฟล์ด้วย FileReader
+                    fileData = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve({
+                            filename: `${currentAlumni.id}_evidence_${Date.now()}.${file.name.split('.').pop()}`,
+                            mimeType: file.type,
+                            base64: reader.result
+                        });
+                        reader.onerror = error => reject(error);
+                        reader.readAsDataURL(file);
+                    });
+                }
+
+                // แปลงสถานะเป็นภาษาไทยเพื่อให้เซฟลงชีตอ่านง่าย
+                const statusMap = {
+                    'study': 'ศึกษาต่อ', 'work': 'มีงานทำ', 'freelance': 'ประกอบอาชีพอิสระ',
+                    'unemployed': 'ว่างงาน/รองาน', 'other': 'อื่นๆ'
+                };
+
+                // สร้าง Payload เพื่อส่งไป GAS Backend
+                const payload = {
+                    studentId: currentAlumni.id,
+                    prefix: currentAlumni.prefix,
+                    name: currentAlumni.name,
+                    level: currentAlumni.level,
+                    year: currentAlumni.year,
+                    major: currentAlumni.major,
+                    advisor: currentAlumni.advisor,
+                    
+                    phone: phone,
+                    lineId: document.getElementById('input-line').value.trim(),
+                    address: address,
+                    status: statusMap[status],
+                    targetName: document.getElementById('input-target-name').value.trim(),
+                    targetRole: document.getElementById('input-target-role').value.trim(),
+                    income: document.getElementById('input-income').value,
+                    isAligned: document.querySelector('input[name="is_aligned"]:checked') ? document.querySelector('input[name="is_aligned"]:checked').value : '',
+                    otherNote: document.getElementById('input-other-note').value.trim(),
+                    evidenceFile: fileData // 🟢 ส่งไฟล์ภาพที่แปลงแล้วไปให้เซิร์ฟเวอร์
+                };
+
+                // ยิง API 
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    redirect: 'follow', // 🟢 บังคับให้ข้ามผ่าน 302 Redirect ของ GAS
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: JSON.stringify({ action: 'saveAlumniTracking', payload: payload })
+                });
+
+                const result = await res.json();
+
+                if (result.success) {
+                    // 🟢 [เพิ่มใหม่] บันทึกประวัติการส่งฟอร์มลงเครื่อง เพื่อบล็อกการส่งซ้ำในปีนี้
+                    const currentYear = new Date().getFullYear();
+                    localStorage.setItem(`alumni_submitted_${currentAlumni.nationalId}_${currentYear}`, 'true');
+
+                    // 🟢 เด้งกลับไปด้านบนสุดของหน้าจอทันที
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+                    Swal.fire({
+                        title: 'บันทึกสำเร็จ!',
+                        text: 'ขอบคุณที่ให้ความร่วมมือในการแจ้งสถานะปัจจุบัน ข้อมูลของท่านจะเป็นประโยชน์อย่างยิ่งต่อวิทยาลัยเกษตรและเทคโนโลยีเชียงใหม่',
+                        icon: 'success',
+                        confirmButtonText: 'รับทราบ',
+                        confirmButtonColor: '#059669',
+                        allowOutsideClick: false
+                    }).then(() => {
+                        // แทนที่จะ Reload หน้าเว็บจนขาวไปเลย เราใช้วิธีซ่อนฟอร์มและรีเซ็ตค่ากลับจุดเริ่มต้นแทน (สมูทกว่า)
+                        document.getElementById('main-form-container').classList.replace('show-transition', 'hidden-transition');
+                        document.getElementById('search-national-id').value = '';
+                        document.getElementById('search-national-id').disabled = false;
+                        document.getElementById('search-national-id').classList.remove('bg-slate-100', 'text-slate-400');
+                        
+                        const btn = document.getElementById('btn-search');
+                        btn.innerHTML = 'ตรวจสอบข้อมูล <i class="fas fa-arrow-right"></i>';
+                        btn.disabled = false;
+                        btn.classList.replace('bg-slate-300', 'bg-emerald-600');
+                        btn.classList.replace('hover:bg-slate-400', 'hover:bg-emerald-700');
+                    });
+                } else {
+                    throw new Error(result.message);
+                }
+
+            } catch (error) {
+                Swal.fire('ข้อผิดพลาด', error.message || 'ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่อีกครั้ง', 'error');
+                btn.innerHTML = '<i class="fas fa-save"></i> บันทึกข้อมูลการติดตาม';
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>

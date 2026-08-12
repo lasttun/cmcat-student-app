@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Executive Alumni Dashboard | CMCAT</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- 🟢 ไลบรารี SheetJS สำหรับสร้างไฟล์ Excel -->
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Prompt', sans-serif; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #10b981; border-radius: 10px; }
+        
+        /* 🖨️ CSS สำหรับควบคุมการ Print/Save PDF */
+        @media print {
+            body { background: white !important; }
+            nav, .no-print, #search-audit, #filter-status, #filter-panel { display: none !important; }
+            .shadow-sm, .shadow-lg { box-shadow: none !important; border: 1px solid #ddd !important; }
+            .bg-emerald-700 { background-color: #047857 !important; color: white !important; -webkit-print-color-adjust: exact; }
+            .bg-teal-700 { background-color: #0f766e !important; color: white !important; -webkit-print-color-adjust: exact; }
+            .bg-blue-700 { background-color: #1d4ed8 !important; color: white !important; -webkit-print-color-adjust: exact; }
+            .bg-orange-700 { background-color: #c2410c !important; color: white !important; -webkit-print-color-adjust: exact; }
+            .bg-slate-700 { background-color: #334155 !important; color: white !important; -webkit-print-color-adjust: exact; }
+            .bg-indigo-700 { background-color: #4338ca !important; color: white !important; -webkit-print-color-adjust: exact; }
+            .overflow-x-auto { overflow: visible !important; }
+            table { width: 100% !important; border-collapse: collapse !important; }
+            th, td { border: 1px solid #000 !important; color: #000 !important; }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen pb-12">
+
+    <!-- Top Navbar -->
+    <nav class="bg-emerald-800 text-white p-4 shadow-lg sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div class="bg-white p-2 rounded-xl text-emerald-800">
+                    <i class="fas fa-chart-line text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg leading-tight">ระบบรายงานภาวะการมีงานทำผู้สำเร็จการศึกษา (สอศ.)</h1>
+                    <p class="text-xs text-emerald-200">วิทยาลัยเกษตรและเทคโนโลยีเชียงใหม่</p>
+                </div>
+            </div>
+            <button onclick="loadDashboardData()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2">
+                <i class="fas fa-sync-alt" id="refresh-icon"></i> ดึงข้อมูลล่าสุด
+            </button>
+        </div>
+    </nav>
+
+    <div id="main-dashboard-content" class="hidden max-w-7xl mx-auto px-4 mt-6 space-y-6">
+
+        <!-- 🎛️ Filter Panel (แผงควบคุมการคัดกรองข้อมูล) -->
+        <div id="filter-panel" class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 items-end md:items-center justify-between">
+            <div class="flex items-center gap-2">
+                <i class="fas fa-filter text-emerald-600 text-lg"></i>
+                <h3 class="font-bold text-slate-800">คัดกรองรายงาน:</h3>
+            </div>
+            <div class="flex flex-wrap gap-3 w-full md:w-auto">
+                <div class="flex-1 md:flex-none">
+                    <label class="text-[10px] font-bold text-slate-400 uppercase mb-1 block">ปีการศึกษาที่จบ</label>
+                    <select id="global-filter-year" onchange="applyGlobalFilters()" class="w-full p-2 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                        <option value="all">-- ทุกปีการศึกษา --</option>
+                    </select>
+                </div>
+                <div class="flex-1 md:flex-none">
+                    <label class="text-[10px] font-bold text-slate-400 uppercase mb-1 block">สาขาวิชา</label>
+                    <select id="global-filter-major" onchange="applyGlobalFilters()" class="w-full p-2 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                        <option value="all">-- ทุกสาขาวิชา --</option>
+                    </select>
+                </div>
+                <div class="flex-1 md:flex-none">
+                    <label class="text-[10px] font-bold text-slate-400 uppercase mb-1 block">รอบการติดตาม สอศ.</label>
+                    <select id="global-filter-round" onchange="applyGlobalFilters()" class="w-full p-2 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                        <option value="all">-- รวมทุกรอบ --</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- 📊 KPI Cards Section -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm border-l-4 border-l-blue-500">
+                <p class="text-xs font-bold text-slate-400 uppercase">เป้าหมายผู้จบการศึกษา</p>
+                <h3 id="kpi-total" class="text-2xl md:text-3xl font-extrabold text-slate-800 mt-1">0 <span class="text-xs font-normal text-slate-400">คน</span></h3>
+                <p id="kpi-responded-sub" class="text-[11px] text-blue-600 mt-1 font-semibold">ตอบแล้ว 0 คน</p>
+            </div>
+
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm border-l-4 border-l-emerald-500">
+                <p class="text-xs font-bold text-slate-400 uppercase">อัตราการติดตามได้ (% Tracking)</p>
+                <h3 id="kpi-tracking-rate" class="text-2xl md:text-3xl font-extrabold text-emerald-600 mt-1">0%</h3>
+                <p class="text-[11px] text-slate-400 mt-1">เกณฑ์ สอศ. ครอบคลุม 3 รอบ</p>
+            </div>
+
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm border-l-4 border-l-teal-500">
+                <p class="text-xs font-bold text-slate-400 uppercase">อัตรามีงานทำ & เรียนต่อ</p>
+                <h3 id="kpi-employment-rate" class="text-2xl md:text-3xl font-extrabold text-teal-600 mt-1">0%</h3>
+                <p id="kpi-employed-sub" class="text-[11px] text-teal-600 mt-1 font-semibold">มีงานทำ/เรียนต่อ 0 คน</p>
+            </div>
+
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm border-l-4 border-l-indigo-500">
+                <p class="text-xs font-bold text-slate-400 uppercase">ตรงตามสาขาที่จบ (% Aligned)</p>
+                <h3 id="kpi-aligned-rate" class="text-2xl md:text-3xl font-extrabold text-indigo-600 mt-1">0%</h3>
+                <p id="kpi-aligned-sub" class="text-[11px] text-indigo-600 mt-1 font-semibold">ตรงสายงาน 0 คน</p>
+            </div>
+        </div>
+
+        <!-- 📈 Charts Row -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Pie Chart: สถานะปัจจุบัน -->
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm lg:col-span-1 flex flex-col justify-between">
+                <h3 class="font-bold text-slate-700 text-sm mb-3 flex items-center gap-2">
+                    <i class="fas fa-chart-pie text-emerald-600"></i> สัดส่วนสถานภาพปัจจุบัน
+                </h3>
+                <div class="relative h-[220px] w-full flex items-center justify-center">
+                    <canvas id="statusChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Bar Chart: สถิติรายได้ -->
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm lg:col-span-2">
+                <h3 class="font-bold text-slate-700 text-sm mb-3 flex items-center gap-2">
+                    <i class="fas fa-wallet text-teal-600"></i> สถิติตามช่วงรายได้เฉลี่ยต่อเดือน (บาท)
+                </h3>
+                <div class="relative h-[220px] w-full">
+                    <canvas id="incomeChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- 📋 Major Summary Table (สำหรับระบบ v-cop) -->
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+                <div>
+                    <h3 class="font-bold text-slate-800 text-base flex items-center gap-2">
+                        <i class="fas fa-table text-indigo-600"></i> ตารางสรุปจำแนกตามสาขาวิชา
+                    </h3>
+                    <p class="text-xs text-slate-400 no-print">ใช้ตัวเลขในตารางนี้บันทึกลงระบบศูนย์เครือข่ายกำลังคนอาชีวศึกษา (v-cop)</p>
+                </div>
+                <div class="flex gap-2 no-print">
+                    <button onclick="exportToExcel()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm">
+                        <i class="fas fa-file-excel"></i> ส่งออก Excel (V-COP)
+                    </button>
+                    <button onclick="exportToPDF()" class="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm">
+                        <i class="fas fa-file-pdf"></i> พิมพ์ / PDF
+                    </button>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto custom-scrollbar">
+                <table id="major-summary-table" class="w-full text-xs text-left border-collapse border border-slate-200">
+                    <thead>
+                        <tr class="bg-slate-800 text-white text-center">
+                            <th class="p-3 border border-slate-700">สาขาวิชา</th>
+                            <th class="p-3 border border-slate-700">ผู้จบทั้งหมด</th>
+                            <th class="p-3 border border-slate-700">ตอบแล้ว</th>
+                            <th class="p-3 border border-slate-700 bg-emerald-700">ศึกษาต่อ</th>
+                            <th class="p-3 border border-slate-700 bg-teal-700">มีงานทำ</th>
+                            <th class="p-3 border border-slate-700 bg-blue-700">อาชีพอิสระ</th>
+                            <th class="p-3 border border-slate-700 bg-orange-700">ว่างงาน</th>
+                            <th class="p-3 border border-slate-700 bg-slate-700">อื่นๆ</th>
+                            <th class="p-3 border border-slate-700 bg-indigo-700">ตรงสาขา</th>
+                        </tr>
+                    </thead>
+                    <tbody id="major-table-body" class="text-center divide-y divide-slate-200">
+                        <!-- Data rows injected by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 🔍 Student Audit Table (ตารางติดตามรายคน) -->
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
+                <div>
+                    <h3 class="font-bold text-slate-800 text-base flex items-center gap-2">
+                        <i class="fas fa-user-check text-emerald-600"></i> รายชื่อตรวจสอบการตอบแบบสำรวจรายบุคคล
+                    </h3>
+                    <p class="text-xs text-slate-400">กรองดูรายชื่อนักศึกษาที่ยังไม่ได้ตอบ เพื่อส่งให้ครูที่ปรึกษาติดตาม</p>
+                </div>
+
+                <div class="flex flex-wrap gap-2 w-full md:w-auto no-print">
+                    <!-- 🟢 ปุ่มส่งออกรายบุคคล -->
+                    <button onclick="exportIndividualToExcel()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm">
+                        <i class="fas fa-file-export"></i> ส่งออกข้อมูลรายคน
+                    </button>
+                    <select id="filter-status" onchange="renderAuditTable()" class="p-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-emerald-500">
+                        <option value="all">-- ทุกสถานะการตอบ --</option>
+                        <option value="unresponded">❌ ยังไม่ตอบแบบสำรวจ</option>
+                        <option value="responded">✅ ตอบแล้ว</option>
+                    </select>
+                    <input type="text" id="search-audit" onkeyup="renderAuditTable()" placeholder="ค้นหาชื่อ / รหัส / ครู..." class="p-2 border border-slate-200 rounded-xl text-xs outline-none w-full sm:w-48 focus:border-emerald-500">
+                </div>
+            </div>
+
+            <div class="overflow-x-auto custom-scrollbar max-h-[500px]">
+                <table class="w-full text-xs text-left border-collapse">
+                    <thead class="sticky top-0 bg-slate-100 text-slate-600 font-bold border-b border-slate-200 shadow-sm z-10">
+                        <tr>
+                            <th class="p-3 text-center w-12 border-x border-slate-200">#</th>
+                            <th class="p-3 border-x border-slate-200">รหัส / ชื่อ-สกุล</th>
+                            <th class="p-3 border-x border-slate-200">ระดับ / สาขาวิชา</th>
+                            <th class="p-3 border-x border-slate-200">ครูที่ปรึกษา</th>
+                            <th class="p-3 text-center border-x border-slate-200">สถานะตอบ</th>
+                            <th class="p-3 border-x border-slate-200">รายละเอียดสถานภาพ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="audit-table-body" class="divide-y divide-slate-200 border-x border-slate-200">
+                        <!-- Audit rows injected by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const API_URL = "https://script.google.com/macros/s/AKfycbztsC4Wng1zDAVyNmHka6N00m1os6aHGqcZV2LW1l1NBrlATIWPLzwdORzU4lP_P6_p/exec"; 
+
+        let rawAuditList = []; // เก็บข้อมูลดิบทั้งหมดที่โหลดมาจาก Backend
+        let filteredAuditList = []; // เก็บข้อมูลที่ผ่านการคัดกรองแล้ว
+        
+        let statusChartInstance = null;
+        let incomeChartInstance = null;
+
+        window.onload = () => {
+            requirePassword();
+        };
+
+        function requirePassword() {
+            const mainContent = document.getElementById('main-dashboard-content');
+            
+            if (sessionStorage.getItem('alumniAdminAuth') === 'true') {
+                mainContent.classList.remove('hidden');
+                loadDashboardData();
+                return;
+            }
+
+            Swal.fire({
+                title: '🔒 การเข้าถึงข้อมูลผู้บริหาร',
+                text: 'กรุณากรอกรหัสผ่านเพื่อเข้าสู่ระบบรายงานภาวะการมีงานทำ',
+                input: 'password',
+                inputPlaceholder: 'รหัสผ่าน',
+                inputAttributes: { autocapitalize: 'off', autocorrect: 'off' },
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                showClass: { popup: 'animate__animated animate__fadeInDown' },
+                hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+                confirmButtonText: 'เข้าสู่ระบบ',
+                confirmButtonColor: '#059669',
+                preConfirm: (password) => {
+                    if (password !== 'cmcatalumni') {
+                        Swal.showValidationMessage('❌ รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่');
+                        return false;
+                    }
+                    return true;
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    sessionStorage.setItem('alumniAdminAuth', 'true');
+                    mainContent.classList.remove('hidden');
+                    Swal.fire({
+                        toast: true, position: 'top-end', icon: 'success',
+                        title: 'เข้าสู่ระบบสำเร็จ', showConfirmButton: false, timer: 1500
+                    });
+                    loadDashboardData();
+                }
+            });
+        }
+
+        async function loadDashboardData() {
+            const icon = document.getElementById('refresh-icon');
+            icon.classList.add('fa-spin');
+
+            try {
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    redirect: 'follow',
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: JSON.stringify({ action: 'getAlumniDashboardData', payload: {} })
+                });
+
+                const rawText = await res.text();
+                let result;
+                try {
+                    result = JSON.parse(rawText);
+                } catch (parseError) {
+                    throw new Error("เซิร์ฟเวอร์ไม่ได้ส่งข้อมูลแบบ JSON กลับมา (อาจเกิดจากลิงก์ API ผิด)");
+                }
+
+                if (result.success) {
+                    // 🟢 โหลดข้อมูลดิบทั้งหมดเก็บไว้ในตัวแปร
+                    rawAuditList = result.data.auditList;
+                    
+                    // 🟢 อัปเดตตัวเลือกใน Dropdown คัดกรอง
+                    populateFilterDropdowns(rawAuditList);
+                    
+                    // 🟢 คำนวณและวาดกราฟทั้งหมดตามตัวเลือกคัดกรอง
+                    applyGlobalFilters();
+                    
+                    Swal.fire({
+                        toast: true, position: 'top-end', icon: 'success',
+                        title: 'ดึงข้อมูลล่าสุดสำเร็จ', showConfirmButton: false, timer: 1500
+                    });
+                } else {
+                    Swal.fire('ข้อผิดพลาดจากฐานข้อมูล', result.message, 'error');
+                }
+            } catch (e) {
+                console.error("ระบบทำงานผิดพลาด:", e);
+                Swal.fire('Connection Error', e.message, 'error');
+            } finally {
+                icon.classList.remove('fa-spin');
+            }
+        }
+
+        // --- 🟢 สร้างตัวเลือกใน Dropdown อัตโนมัติจากข้อมูลที่มี ---
+        function populateFilterDropdowns(list) {
+            const yearSelect = document.getElementById('global-filter-year');
+            const majorSelect = document.getElementById('global-filter-major');
+            const roundSelect = document.getElementById('global-filter-round');
+
+            // ดึงค่าที่ไม่ซ้ำกัน
+            const years = [...new Set(list.map(item => item.year))].filter(Boolean).sort().reverse();
+            const majors = [...new Set(list.map(item => item.major))].filter(Boolean).sort();
+            
+            // ดึงรอบประเมิน (เฉพาะคนที่ตอบแล้ว)
+            let roundsSet = new Set();
+            list.forEach(item => {
+                if (item.response && item.response.round) roundsSet.add(item.response.round);
+            });
+            const rounds = [...roundsSet].sort().reverse();
+
+            // เติมลง Dropdown
+            yearSelect.innerHTML = '<option value="all">-- ทุกปีการศึกษา --</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+            majorSelect.innerHTML = '<option value="all">-- ทุกสาขาวิชา --</option>' + majors.map(m => `<option value="${m}">${m}</option>`).join('');
+            roundSelect.innerHTML = '<option value="all">-- รวมทุกรอบ --</option>' + rounds.map(r => `<option value="${r}">${r}</option>`).join('');
+
+            // ค่าเริ่มต้นให้เลือกปีการศึกษาล่าสุดเพื่อลดภาระการแสดงผล
+            if (years.length > 0) yearSelect.value = years[0];
+        }
+
+        // --- 🟢 คัดกรองข้อมูลดิบตามตัวเลือกที่ Admin เลือก ---
+        function applyGlobalFilters() {
+            const filterYear = document.getElementById('global-filter-year').value;
+            const filterMajor = document.getElementById('global-filter-major').value;
+            const filterRound = document.getElementById('global-filter-round').value;
+
+            filteredAuditList = rawAuditList.filter(item => {
+                let matchYear = (filterYear === 'all') || (item.year === filterYear);
+                let matchMajor = (filterMajor === 'all') || (item.major === filterMajor);
+                let matchRound = true; // สมมติว่าตรงไว้ก่อน
+                
+                if (filterRound !== 'all') {
+                    // ถ้าระบุรอบ จะต้องแสดงเฉพาะคนที่ตอบในรอบนั้นเท่านั้น
+                    matchRound = (item.response && item.response.round === filterRound);
+                }
+                
+                return matchYear && matchMajor && matchRound;
+            });
+
+            // เมื่อคัดกรองเสร็จ ให้ส่งไปคำนวณและวาดกราฟใหม่
+            computeAndRenderDashboard(filteredAuditList);
+            renderAuditTable(); // วาดตารางรายคน
+        }
+
+        // --- 🟢 ระบบคำนวณสถิติแบบ Real-time บนฝั่ง Frontend ---
+        function computeAndRenderDashboard(list) {
+            let total = list.length;
+            let respondedCount = 0;
+            let counts = { study: 0, work: 0, freelance: 0, unemployed: 0, other: 0, aligned: 0 };
+            let majorStats = {};
+            let incomeDist = {
+                'ต่ำกว่า 9,000 บาท': 0, '9,000 - 12,000 บาท': 0, '12,001 - 15,000 บาท': 0,
+                '15,001 - 20,000 บาท': 0, 'มากกว่า 20,000 บาท': 0, 'ไม่ระบุ/ศึกษาต่อ': 0
+            };
+
+            list.forEach(item => {
+                // เตรียมกล่องใส่สถิติรายสาขา
+                if (!majorStats[item.major]) {
+                    majorStats[item.major] = { total: 0, responded: 0, study: 0, work: 0, freelance: 0, unemployed: 0, other: 0, aligned: 0 };
+                }
+                majorStats[item.major].total++;
+
+                // ถ้าคนนี้ตอบแบบสอบถาม
+                if (item.isResponded && item.response) {
+                    // ถ้าระบุตัวกรอง "รอบ" แต่ข้อมูลคนนี้ไม่ได้ตอบในรอบที่เลือก เราจะไม่นับว่าตอบแล้วในการคัดกรองนี้
+                    // (แต่เรากรอง list มาก่อนหน้านี้แล้ว ดังนั้นคนที่เหลือรอดใน list คือคนที่ผ่านเงื่อนไข)
+                    respondedCount++;
+                    majorStats[item.major].responded++;
+
+                    const st = item.response.status;
+                    if (st === 'ศึกษาต่อ') { counts.study++; majorStats[item.major].study++; }
+                    else if (st === 'มีงานทำ') { counts.work++; majorStats[item.major].work++; }
+                    else if (st === 'ประกอบอาชีพอิสระ') { counts.freelance++; majorStats[item.major].freelance++; }
+                    else if (st.includes('ว่างงาน') || st.includes('รองาน')) { counts.unemployed++; majorStats[item.major].unemployed++; }
+                    else { counts.other++; majorStats[item.major].other++; }
+
+                    if (item.response.isAligned === 'ตรงสาขา') {
+                        counts.aligned++;
+                        majorStats[item.major].aligned++;
+                    }
+
+                    const inc = item.response.income;
+                    if (inc && incomeDist[inc] !== undefined) {
+                        incomeDist[inc]++;
+                    } else {
+                        incomeDist['ไม่ระบุ/ศึกษาต่อ']++;
+                    }
+                }
+            });
+
+            // คำนวณเปอร์เซ็นต์ KPI
+            const trackingRate = total > 0 ? Math.round((respondedCount / total) * 100) : 0;
+            const activeEmployed = counts.work + counts.freelance + counts.study;
+            const employmentRate = respondedCount > 0 ? Math.round((activeEmployed / respondedCount) * 100) : 0;
+            const alignmentRate = activeEmployed > 0 ? Math.round((counts.aligned / activeEmployed) * 100) : 0;
+
+            // --- อัปเดตตัวเลข KPI บนจอ ---
+            document.getElementById('kpi-total').innerText = total;
+            document.getElementById('kpi-responded-sub').innerText = `ตอบแล้ว ${respondedCount} คน (คงเหลือ ${total - respondedCount} คน)`;
+            document.getElementById('kpi-tracking-rate').innerText = trackingRate + '%';
+            document.getElementById('kpi-employment-rate').innerText = employmentRate + '%';
+            document.getElementById('kpi-employed-sub').innerText = `มีงานทำ/เรียนต่อรวม ${activeEmployed} คน`;
+            document.getElementById('kpi-aligned-rate').innerText = alignmentRate + '%';
+            document.getElementById('kpi-aligned-sub').innerText = `ตรงสายงาน ${counts.aligned} คน`;
+
+            // --- อัปเดตกราฟและตาราง ---
+            renderCharts(counts, incomeDist);
+            renderMajorTable(majorStats);
+        }
+
+        // --- 🟢 วาดกราฟ ---
+        function renderCharts(c, inc) {
+            // 1. Status Pie Chart
+            if (statusChartInstance) statusChartInstance.destroy();
+            const ctx1 = document.getElementById('statusChart').getContext('2d');
+            statusChartInstance = new Chart(ctx1, {
+                type: 'doughnut',
+                data: {
+                    labels: ['ศึกษาต่อ', 'มีงานทำ', 'อาชีพอิสระ', 'ว่างงาน', 'อื่นๆ'],
+                    datasets: [{
+                        data: [c.study, c.work, c.freelance, c.unemployed, c.other],
+                        backgroundColor: ['#10b981', '#14b8a6', '#3b82f6', '#f97316', '#64748b']
+                    }]
+                },
+                options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10, family: "'Prompt'" } } } } }
+            });
+
+            // 2. Income Bar Chart
+            if (incomeChartInstance) incomeChartInstance.destroy();
+            const ctx2 = document.getElementById('incomeChart').getContext('2d');
+            incomeChartInstance = new Chart(ctx2, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(inc),
+                    datasets: [{
+                        label: 'จำนวน (คน)',
+                        data: Object.values(inc),
+                        backgroundColor: '#0d9488',
+                        borderRadius: 8
+                    }]
+                },
+                options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+            });
+        }
+
+        // --- 🟢 วาดตารางสรุปสาขาวิชา (V-COP) ---
+        function renderMajorTable(majorStats) {
+            const tbody = document.getElementById('major-table-body');
+            let rowsHtml = ''; 
+
+            Object.keys(majorStats).forEach(mName => {
+                const m = majorStats[mName];
+                rowsHtml += `
+                    <tr class="hover:bg-slate-50 transition-colors border-b border-slate-200">
+                        <td class="p-2.5 border-x border-slate-200 font-bold text-left">${mName}</td>
+                        <td class="p-2.5 border-x border-slate-200">${m.total}</td>
+                        <td class="p-2.5 border-x border-slate-200 font-bold text-emerald-600 bg-emerald-50/50">${m.responded}</td>
+                        <td class="p-2.5 border-x border-slate-200 text-emerald-700 font-semibold">${m.study}</td>
+                        <td class="p-2.5 border-x border-slate-200 text-teal-700 font-semibold">${m.work}</td>
+                        <td class="p-2.5 border-x border-slate-200 text-blue-700 font-semibold">${m.freelance}</td>
+                        <td class="p-2.5 border-x border-slate-200 text-orange-700 font-semibold">${m.unemployed}</td>
+                        <td class="p-2.5 border-x border-slate-200 text-slate-600">${m.other}</td>
+                        <td class="p-2.5 border-x border-slate-200 font-bold text-indigo-600 bg-indigo-50/50">${m.aligned}</td>
+                    </tr>
+                `;
+            });
+            
+            tbody.innerHTML = rowsHtml;
+        }
+
+        // --- 🟢 วาดตารางตรวจสอบรายบุคคล (Audit) ตามฟิลเตอร์ ---
+        function renderAuditTable() {
+            const filter = document.getElementById('filter-status').value;
+            const search = document.getElementById('search-audit').value.toLowerCase().trim();
+            const tbody = document.getElementById('audit-table-body');
+            
+            let list = filteredAuditList; // ใช้ข้อมูลที่ผ่านการกรอง ปี/สาขา/รอบ มาแล้ว
+
+            if (filter === 'unresponded') list = list.filter(x => !x.isResponded);
+            else if (filter === 'responded') list = list.filter(x => x.isResponded);
+
+            if (search) {
+                list = list.filter(x => 
+                    x.name.toLowerCase().includes(search) || 
+                    x.sId.includes(search) || 
+                    x.advisor.toLowerCase().includes(search)
+                );
+            }
+
+            if (list.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400">ไม่พบข้อมูลตามเงื่อนไขที่ค้นหา</td></tr>';
+                return;
+            }
+
+            let auditRowsHtml = ''; 
+
+            list.forEach((item, idx) => {
+                const badge = item.isResponded 
+                    ? `<span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg font-bold text-[10px] whitespace-nowrap">✅ ตอบแล้ว</span>`
+                    : `<span class="bg-red-100 text-red-600 px-2 py-1 rounded-lg font-bold text-[10px] whitespace-nowrap">❌ ยังไม่ตอบ</span>`;
+
+                let details = "-";
+                let evidenceLink = "";
+                
+                if (item.isResponded && item.response) {
+                    details = `<span class="font-bold text-slate-700">${item.response.status}</span>: ${item.response.targetName || ''} (${item.response.targetRole || ''})`;
+                    // เช็คว่ามีลิงก์อัปโหลดรูปไหม (สมมติหลังบ้านส่งมาชื่อ evidenceUrl หรือเราเช็คจาก data.response)
+                    if(item.response.evidenceUrl && item.response.evidenceUrl.startsWith('http')) {
+                         evidenceLink = `<a href="${item.response.evidenceUrl}" target="_blank" class="text-[10px] text-blue-600 hover:underline block mt-1"><i class="fas fa-image"></i> ดูหลักฐาน</a>`;
+                    }
+                }
+
+                // 🟢 สร้างปุ่มดูข้อมูล
+                let actionBtn = `<button onclick="viewStudentDetails('${item.sId}')" class="mt-2 w-full bg-slate-200 hover:bg-slate-300 text-slate-700 px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all"><i class="fas fa-search"></i> ดูข้อมูล</button>`;
+
+                auditRowsHtml += `
+                    <tr class="hover:bg-slate-50 border-b border-slate-200">
+                        <td class="p-3 text-center text-slate-400 font-bold border-x border-slate-200">${idx + 1}</td>
+                        <td class="p-3 font-bold text-slate-800 border-x border-slate-200 leading-tight">
+                            ${item.prefix}${item.name}<br>
+                            <span class="text-[10px] text-slate-400 font-normal">รหัส: ${item.sId}</span>
+                        </td>
+                        <td class="p-3 border-x border-slate-200 leading-tight">
+                            ${item.level} ปี ${item.year}<br>
+                            <span class="text-[10px] text-slate-500 font-bold">${item.major}</span>
+                        </td>
+                        <td class="p-3 text-slate-600 border-x border-slate-200 text-[11px]">${item.advisor}</td>
+                        <td class="p-3 text-center border-x border-slate-200">${badge}<br>${actionBtn}</td>
+                        <td class="p-3 text-slate-600 border-x border-slate-200 text-[11px] leading-tight">
+                            ${details}
+                            ${evidenceLink}
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            tbody.innerHTML = auditRowsHtml;
+        }
+
+        // --- 🟢 ฟังก์ชัน Export Excel สำหรับ V-COP ---
+        function exportToExcel() {
+            const table = document.getElementById("major-summary-table");
+            const wb = XLSX.utils.table_to_book(table, { sheet: "สรุป V-COP" });
+            
+            const filterYear = document.getElementById('global-filter-year').value;
+            const yearStr = filterYear === 'all' ? 'รวมทุกปี' : `ปี_${filterYear}`;
+            
+            const dateStr = new Date().toLocaleDateString('th-TH').replace(/\//g, '-');
+            const fileName = `รายงานภาวะการมีงานทำ_VCOP_${yearStr}_${dateStr}.xlsx`;
+            
+            XLSX.writeFile(wb, fileName);
+            Swal.fire({
+                toast: true, position: 'top-end', icon: 'success',
+                title: 'ดาวน์โหลดไฟล์ Excel สำเร็จ', showConfirmButton: false, timer: 2000
+            });
+        }
+
+        function exportToPDF() {
+            window.print();
+        }
+
+        // --- 🟢 6. ฟังก์ชันดูข้อมูลรายบุคคลแบบละเอียด (Popup Modal) ---
+        function viewStudentDetails(studentId) {
+            const student = filteredAuditList.find(s => s.sId === studentId);
+            if (!student) return;
+
+            let detailsHtml = `
+                <div class="text-left text-sm space-y-3 mt-4 font-prompt">
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <p class="mb-1"><span class="text-slate-500 text-xs">รหัสประจำตัว:</span> <strong>${student.sId}</strong></p>
+                        <p class="mb-1"><span class="text-slate-500 text-xs">ชื่อ-สกุล:</span> <strong class="text-emerald-700">${student.prefix}${student.name}</strong></p>
+                        <p class="mb-1"><span class="text-slate-500 text-xs">ระดับชั้น:</span> <strong>${student.level} ปี ${student.year}</strong></p>
+                        <p class="mb-1"><span class="text-slate-500 text-xs">สาขาวิชา:</span> <strong>${student.major}</strong></p>
+                        <p><span class="text-slate-500 text-xs">ครูที่ปรึกษา:</span> <strong>${student.advisor}</strong></p>
+                    </div>
+            `;
+
+            if (student.isResponded && student.response) {
+                const r = student.response;
+                const statusColor = r.status === 'ว่างงาน/รองาน' ? 'text-orange-600' : 'text-teal-600';
+                detailsHtml += `
+                    <div class="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200">
+                        <p class="mb-1"><span class="text-slate-500 text-xs">สถานภาพปัจจุบัน:</span> <strong class="${statusColor}">${r.status}</strong></p>
+                        <p class="mb-1"><span class="text-slate-500 text-xs">รอบการติดตาม สอศ.:</span> <strong>${r.round || '-'}</strong></p>
+                        <p class="mb-1"><span class="text-slate-500 text-xs">เบอร์โทร:</span> <strong>${r.phone || '-'}</strong></p>
+                        <p class="mb-1"><span class="text-slate-500 text-xs">ที่อยู่ปัจจุบัน:</span> <strong>${r.address || '-'}</strong></p>
+                        <hr class="my-3 border-emerald-200">
+                        <p class="mb-1"><span class="text-slate-500 text-xs">ชื่อหน่วยงาน/สถานศึกษา:</span> <strong>${r.targetName || '-'}</strong></p>
+                        <p class="mb-1"><span class="text-slate-500 text-xs">ตำแหน่ง/คณะ:</span> <strong>${r.targetRole || '-'}</strong></p>
+                        <p class="mb-1"><span class="text-slate-500 text-xs">รายได้เฉลี่ยต่อเดือน:</span> <strong>${r.income || '-'}</strong></p>
+                        <p><span class="text-slate-500 text-xs">ความสอดคล้อง:</span> <strong>${r.isAligned || '-'}</strong></p>
+                    </div>
+                `;
+            } else {
+                detailsHtml += `<div class="bg-red-50 p-4 rounded-xl border border-red-200 text-red-600 text-center font-bold">❌ ผู้เรียนยังไม่ได้ตอบแบบสำรวจในรอบนี้</div>`;
+            }
+            detailsHtml += `</div>`;
+
+            Swal.fire({
+                title: '<i class="fas fa-id-badge text-emerald-600"></i> ข้อมูลผู้สำเร็จการศึกษา',
+                html: detailsHtml,
+                confirmButtonText: 'ปิดหน้าต่าง',
+                confirmButtonColor: '#0f766e',
+                width: '500px'
+            });
+        }
+
+        // --- 🟢 7. ฟังก์ชัน Export Excel ข้อมูลรายบุคคลตามตัวกรอง (Dynamic Export) ---
+        function exportIndividualToExcel() {
+            if (filteredAuditList.length === 0) {
+                return Swal.fire('ไม่พบข้อมูล', 'ไม่มีข้อมูลสำหรับเงื่อนไขที่คุณเลือก', 'warning');
+            }
+
+            // นำข้อมูลที่ถูก Filter ปี/สาขา/รอบ/ห้อง มาจัดเรียงใหม่เพื่อสร้างคอลัมน์ Excel
+            const exportData = filteredAuditList.map((s, index) => {
+                const r = s.response || {};
+                return {
+                    "ลำดับ": index + 1,
+                    "รหัสประจำตัว": s.sId,
+                    "คำนำหน้า": s.prefix,
+                    "ชื่อ-สกุล": s.name,
+                    "ระดับชั้น": s.level,
+                    "ปีการศึกษา": s.year,
+                    "สาขาวิชา": s.major,
+                    "ครูที่ปรึกษา": s.advisor,
+                    "สถานะการตอบ": s.isResponded ? "ตอบแล้ว" : "ยังไม่ตอบ",
+                    "รอบติดตาม (V-COP)": r.round || "-",
+                    "สถานภาพ": r.status || "-",
+                    "ชื่อหน่วยงาน/สถานศึกษา": r.targetName || "-",
+                    "ตำแหน่ง/คณะ": r.targetRole || "-",
+                    "รายได้เฉลี่ย": r.income || "-",
+                    "ความสอดคล้อง": r.isAligned || "-",
+                    "เบอร์โทรศัพท์": r.phone || "-",
+                    "ID Line": "-", // ข้อมูลอาจเพิ่มได้ภายหลัง
+                    "ที่อยู่ติดต่อ": r.address || "-",
+                    "เวลาที่ตอบล่าสุด": r.timestamp || "-"
+                };
+            });
+
+            const ws = XLSX.utils.json_to_sheet(exportData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "ข้อมูลผู้จบรายบุคคล");
+
+            // ดึงชื่อไฟล์ให้สัมพันธ์กับตัวกรองที่เลือก
+            const filterYear = document.getElementById('global-filter-year').value;
+            const filterMajor = document.getElementById('global-filter-major').value;
+            
+            const yearStr = filterYear === 'all' ? 'รวมทุกปี' : `ปี_${filterYear}`;
+            const majorStr = filterMajor === 'all' ? 'รวมทุกสาขา' : filterMajor;
+            const dateStr = new Date().toLocaleDateString('th-TH').replace(/\//g, '-');
+            
+            const fileName = `ข้อมูลผู้จบรายบุคคล_${yearStr}_${majorStr}_${dateStr}.xlsx`;
+
+            XLSX.writeFile(wb, fileName);
+            Swal.fire({
+                toast: true, position: 'top-end', icon: 'success',
+                title: 'ดาวน์โหลดไฟล์ข้อมูลดิบสำเร็จ', showConfirmButton: false, timer: 2000
+            });
+        }
+    </script>
+</body>
+</html>

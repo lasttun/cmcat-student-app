@@ -85,6 +85,11 @@ function doPost(e) {
       case 'updateReturnStatus': return output(updateReturnStatus(payload));
       case 'getLibraryStats': return output(getLibraryStats()); // 🟢 API สำหรับ Dashboard ห้องสมุด
       
+      // 🎓 เพิ่ม Routing ระบบติดตามผู้สำเร็จการศึกษา (Alumni Tracking)
+      case 'getAlumniMaster': return output(fetchAlumniMaster(payload.nationalId)); 
+      case 'saveAlumniTracking': return output(recordAlumniTracking(payload));
+      case 'getAlumniDashboardData': return output(getAlumniDashboardData(payload)); // 🟢 เพิ่ม API ดึงสถิติ Dashboard
+      
       default:
         return output({ success: false, message: `Action [${action}] is not implemented.` });
     }
@@ -882,4 +887,325 @@ borrowData.forEach(r => {
   } catch (error) {
     return { success: false, message: error.message };
   }
+}
+
+// ==========================================
+// 🎓 ALUMNI TRACKING SYSTEM (ระบบติดตามผู้สำเร็จการศึกษา)
+// ==========================================
+
+/** 🟢 16. ค้นหาข้อมูลนักศึกษาเก่าเพื่อ Auto-fill จากเลขบัตรประชาชน พร้อมเช็คสถานะการตอบ */
+function fetchAlumniMaster(nationalId) {
+  try {
+    const nId = String(nationalId).trim();
+    if (!nId) return { success: false, message: "ไม่ได้ส่งเลขบัตรประชาชนมา" };
+
+    const ss = getActiveSS();
+    const masterSheet = ss.getSheetByName('Alumni_Master'); 
+    if (!masterSheet) return { success: false, message: "ไม่พบฐานข้อมูล Alumni_Master" };
+
+    const masterData = masterSheet.getDataRange().getDisplayValues();
+    const students = masterData.filter(r => String(r[1]).trim() === nId);
+
+    if (students.length > 0) {
+      // 🟢 เพิ่มการตรวจสอบว่าเด็กคนนี้ (จากเลขบัตร) ตอบคำถามในปีนี้ไปแล้วหรือยัง
+      const logSheet = ss.getSheetByName('Alumni_Tracking_Logs');
+      const currentYearTH = String(new Date().getFullYear() + 543);
+      let alreadySubmitted = false;
+
+      if (logSheet && logSheet.getLastRow() > 1) {
+        const logData = logSheet.getDataRange().getDisplayValues();
+        // ค้นหาว่ามีเลขบัตรประชาชนคนนี้ ในรอบที่มีปีปัจจุบันอยู่หรือไม่
+        // (หมายเหตุ: เราไม่มีคอลัมน์เลขบัตรใน Log เราจึงต้องเทียบ Student_ID ของวุฒิใดวุฒิหนึ่ง)
+        const studentIds = students.map(s => String(s[0]).trim()); 
+        
+        for (let i = 1; i < logData.length; i++) {
+          const logSId = String(logData[i][2]).trim(); // คอลัมน์ C: Student_ID
+          const logRound = String(logData[i][1]).trim(); // คอลัมน์ B: Tracking_Round
+          
+          if (studentIds.includes(logSId) && logRound.includes(currentYearTH)) {
+            alreadySubmitted = true;
+            break;
+          }
+        }
+      }
+
+      // นำข้อมูลทุกรายการมาจัดรูปแบบเตรียมส่งกลับไปให้หน้าเว็บ
+      const results = students.map(student => ({
+          id: String(student[0]).trim(),
+          nationalId: String(student[1]).trim(),
+          prefix: String(student[2]).trim(),
+          name: String(student[3]).trim(),
+          level: String(student[4]).trim(),
+          year: String(student[5]).trim(),
+          major: String(student[6]).trim() || "ไม่ระบุสาขา",
+          advisor: String(student[7]).trim() || "ไม่ระบุ"
+      }));
+      
+      // ส่งสถานะ alreadySubmitted กลับไปด้วย
+      return { success: true, data: results, alreadySubmitted: alreadySubmitted }; 
+    }
+    return { success: false, message: "ไม่พบข้อมูลผู้สำเร็จการศึกษาจากเลขบัตรประชาชนนี้" };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+}
+
+/** 🟢 17. บันทึกข้อมูลการติดตามภาวะการมีงานทำ พร้อมอัปโหลดรูปลง Drive */
+function recordAlumniTracking(payload) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000); 
+    
+    // 📁 ตั้งค่า Folder ID ใน Google Drive ที่จะใช้เก็บรูปหลักฐาน (เอา ID มาใส่ตรงนี้)
+    const FOLDER_ID = '1gFaMMrCS6k7YwbRP6jFFVZcvqlEiHnWA'; 
+    let fileUrl = '';
+
+    // 🟢 ระบบแปลง Base64 กลับเป็นไฟล์รูปภาพและเซฟลง Drive
+    if (payload.evidenceFile && payload.evidenceFile.base64 && FOLDER_ID) {
+        try {
+            const folder = DriveApp.getFolderById(FOLDER_ID);
+            const contentType = payload.evidenceFile.mimeType;
+            const b64Data = payload.evidenceFile.base64.split(',')[1] || payload.evidenceFile.base64; 
+            
+            const blob = Utilities.newBlob(Utilities.base64Decode(b64Data), contentType, payload.evidenceFile.filename);
+            const file = folder.createFile(blob);
+            
+            // ดึง URL มาเก็บไว้ก่อนเลย ป้องกัน Error ตอนตั้งค่าแชร์
+            fileUrl = file.getUrl();
+            
+            try {
+                // พยายามตั้งค่าให้คลิกดูรูปได้เลย
+                file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+            } catch (shareErr) {
+                // 🟢 ถ้าวิทยาลัยบล็อกการแชร์สาธารณะ ระบบจะไม่พัง แต่รูปจะดูได้เฉพาะคนที่ใช้อีเมลวิทยาลัย
+                console.warn("ไม่สามารถตั้งค่าแชร์แบบสาธารณะได้: ", shareErr);
+            }
+            
+        } catch (fileErr) {
+            console.error("Upload Error: ", fileErr);
+            // 🟢 เปลี่ยนจากคำว่า 'อัปโหลดรูปไม่สำเร็จ' เป็นการนำ Error จริงๆ มาปริ้นลงชีต จะได้รู้ว่าพังที่อะไร
+            fileUrl = 'Error: ' + fileErr.message;
+        }
+    }
+
+    const ss = getActiveSS();
+    const sheetName = 'Alumni_Tracking_Logs';
+    let sheet = ss.getSheetByName(sheetName);
+    
+    // สร้างชีตพร้อม Header หากยังไม่เคยมีชีตนี้ (18 คอลัมน์ที่ออกแบบไว้)
+    if (!sheet) {
+      sheet = ss.insertSheet(sheetName);
+      sheet.appendRow([
+        'Timestamp', 'Tracking_Round', 'Student_ID', 'Prefix_Name', 'Full_Name', 
+        'Phone', 'Line_ID', 'Current_Address', 'Grad_Level', 'Grad_Year', 
+        'Major', 'Advisor', 'Current_Status', 'Target_Name', 'Target_Role', 
+        'Income_Range', 'Is_Aligned', 'Evidence_Image'
+      ]);
+      // ตกแต่งหัวตาราง
+      sheet.getRange(1, 1, 1, 18).setFontWeight('bold').setBackground('#10b981').setFontColor('#ffffff');
+      sheet.setFrozenRows(1);
+    }
+    
+    // 💡 การหารอบการติดตามอัตโนมัติ (เช่น 1_2569) ตามนโยบาย สอศ.
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1; // 1-12
+    const currentYearTH = now.getFullYear() + 543;
+    let trackingRound = `ไม่ระบุรอบ`;
+    
+    if (currentMonth <= 6) trackingRound = `รอบที่ 1/${currentYearTH}`; // ก่อน 30 มิ.ย.
+    else if (currentMonth <= 9) trackingRound = `รอบที่ 2/${currentYearTH}`; // 1 ก.ค. - 30 ก.ย.
+    else trackingRound = `รอบที่ 3/${currentYearTH}`; // 1 ต.ค. - 31 ธ.ค.
+
+    // จัดเตรียมชุดข้อมูล (Array 1 มิติ) ตามโครงสร้าง 18 คอลัมน์
+    const newRow = [[
+      now,                                  // A: Timestamp
+      trackingRound,                        // B: Tracking_Round
+      String(payload.studentId).trim(),     // C: Student_ID
+      String(payload.prefix || ''),         // D: Prefix_Name
+      String(payload.name || ''),           // E: Full_Name
+      String(payload.phone || ''),          // F: Phone
+      String(payload.lineId || ''),         // G: Line_ID
+      String(payload.address || ''),        // H: Current_Address
+      String(payload.level || ''),          // I: Grad_Level
+      String(payload.year || ''),           // J: Grad_Year
+      String(payload.major || ''),          // K: Major
+      String(payload.advisor || ''),        // L: Advisor
+      String(payload.status || ''),         // M: Current_Status (study, work, freelance, unemployed, other)
+      String(payload.targetName || ''),     // N: Target_Name (ชื่อหน่วยงาน/สถานศึกษา)
+      String(payload.targetRole || ''),     // O: Target_Role (ตำแหน่ง/คณะ)
+      String(payload.income || ''),         // P: Income_Range
+      String(payload.isAligned || ''),      // Q: Is_Aligned (ตรงสาขา/ไม่ตรงสาขา)
+      String(fileUrl || '')                 // 🟢 R: Evidence_Image (ใส่ลิงก์ Drive ที่เพิ่งอัปโหลดเสร็จ)
+    ]];
+    
+    // 🟢 Bulk Insert O(1) เพื่อประสิทธิภาพสูงสุดและหลีกเลี่ยง API Timeout
+    sheet.getRange(sheet.getLastRow() + 1, 1, 1, 18).setValues(newRow);
+    SpreadsheetApp.flush(); 
+    
+    return { success: true, message: "บันทึกข้อมูลสำเร็จ" };
+  } catch (error) {
+    return { success: false, message: "ระบบประมวลผลฐานข้อมูลกำลังทำงานหนัก กรุณาลองใหม่อีกครั้ง: " + error.toString() };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** 🟢 18. ระบบดึงข้อมูลสถิติและรายงานติดตามภาวะการมีงานทำ สำหรับผู้บริหาร/งานแนะแนว (OVEC Compliant) */
+function getAlumniDashboardData(payload) {
+  try {
+    const ss = getActiveSS();
+    
+    // 1. ดึงรายชื่อศิษย์เก่า Master
+    const masterSheet = ss.getSheetByName('Alumni_Master');
+    if (!masterSheet || masterSheet.getLastRow() <= 1) {
+      return { success: false, message: "ยังไม่มีข้อมูลในชีต Alumni_Master" };
+    }
+    const masterData = masterSheet.getDataRange().getDisplayValues();
+    masterData.shift(); // เอาหัวตารางออก
+    
+    const totalMasterCount = masterData.length;
+    const masterList = [];
+    const majorStats = {}; 
+    const levelStats = {}; 
+
+    masterData.forEach(r => {
+      const sId = String(r[0]).trim();
+      const nId = String(r[1]).trim();
+      const prefix = String(r[2]).trim();
+      const name = String(r[3]).trim();
+      const level = String(r[4]).trim() || "ไม่ระบุระดับ";
+      const year = String(r[5]).trim();
+      const major = String(r[6]).trim() || "ไม่ระบุสาขา";
+      const advisor = String(r[7]).trim() || "ไม่ระบุ";
+
+      masterList.push({ sId, nId, prefix, name, level, year, major, advisor });
+
+      if (!majorStats[major]) {
+        majorStats[major] = { total: 0, responded: 0, study: 0, work: 0, freelance: 0, unemployed: 0, other: 0, aligned: 0 };
+      }
+      majorStats[major].total++;
+
+      if (!levelStats[level]) {
+        levelStats[level] = { total: 0, responded: 0, study: 0, work: 0, freelance: 0, unemployed: 0, other: 0 };
+      }
+      levelStats[level].total++;
+    });
+
+    // 2. ดึงประวัติการตอบจาก Alumni_Tracking_Logs
+    const logSheet = ss.getSheetByName('Alumni_Tracking_Logs');
+    const latestResponseMap = {}; 
+
+    if (logSheet && logSheet.getLastRow() > 1) {
+      const logData = logSheet.getDataRange().getDisplayValues();
+      logData.shift();
+
+      logData.forEach(r => {
+        const round = String(r[1]).trim();
+        const sId = String(r[2]).trim();
+        const status = String(r[12]).trim(); 
+        const targetName = String(r[13]).trim();
+        const targetRole = String(r[14]).trim();
+        const income = String(r[15]).trim();
+        const isAligned = String(r[16]).trim();
+        const phone = String(r[5]).trim();
+        const address = String(r[7]).trim();
+
+        // เก็บข้อมูลล่าสุดของนักศึกษาแต่ละคน
+        latestResponseMap[sId] = {
+          round, status, targetName, targetRole, income, isAligned, phone, address, timestamp: r[0]
+        };
+      });
+    }
+
+    // 3. รวมผลสถิติภาพรวม (KPI Aggregation)
+    let respondedCount = 0;
+    let countStudy = 0, countWork = 0, countFreelance = 0, countUnemployed = 0, countOther = 0;
+    let countAligned = 0;
+    const incomeDistribution = {
+      'ต่ำกว่า 9,000 บาท': 0,
+      '9,000 - 12,000 บาท': 0,
+      '12,001 - 15,000 บาท': 0,
+      '15,001 - 20,000 บาท': 0,
+      'มากกว่า 20,000 บาท': 0,
+      'ไม่ระบุ/ศึกษาต่อ': 0
+    };
+
+    const auditList = masterList.map(m => {
+      const resp = latestResponseMap[m.sId];
+      const isResponded = !!resp;
+
+      if (isResponded) {
+        respondedCount++;
+        const st = resp.status;
+
+        if (st === 'ศึกษาต่อ') { countStudy++; majorStats[m.major].study++; levelStats[m.level].study++; }
+        else if (st === 'มีงานทำ') { countWork++; majorStats[m.major].work++; levelStats[m.level].work++; }
+        else if (st === 'ประกอบอาชีพอิสระ') { countFreelance++; majorStats[m.major].freelance++; levelStats[m.level].freelance++; }
+        else if (st.includes('ว่างงาน') || st.includes('รองาน')) { countUnemployed++; majorStats[m.major].unemployed++; levelStats[m.level].unemployed++; }
+        else { countOther++; majorStats[m.major].other++; levelStats[m.level].other++; }
+
+        majorStats[m.major].responded++;
+        levelStats[m.level].responded++;
+
+        if (resp.isAligned === 'ตรงสาขา') {
+          countAligned++;
+          majorStats[m.major].aligned++;
+        }
+
+        if (resp.income && incomeDistribution[resp.income] !== undefined) {
+          incomeDistribution[resp.income]++;
+        } else {
+          incomeDistribution['ไม่ระบุ/ศึกษาต่อ']++;
+        }
+      }
+
+      return {
+        ...m,
+        isResponded,
+        response: resp || null
+      };
+    });
+
+    const trackingRate = totalMasterCount > 0 ? Math.round((respondedCount / totalMasterCount) * 100) : 0;
+    const activeEmployed = countWork + countFreelance + countStudy;
+    const employmentRate = respondedCount > 0 ? Math.round((activeEmployed / respondedCount) * 100) : 0;
+    const alignmentRate = activeEmployed > 0 ? Math.round((countAligned / activeEmployed) * 100) : 0;
+
+    return {
+      success: true,
+      data: {
+        summary: {
+          totalMasterCount,
+          respondedCount,
+          unrespondedCount: totalMasterCount - respondedCount,
+          trackingRate,
+          employmentRate,
+          alignmentRate,
+          counts: {
+            study: countStudy,
+            work: countWork,
+            freelance: countFreelance,
+            unemployed: countUnemployed,
+            other: countOther,
+            aligned: countAligned
+          }
+        },
+        incomeDistribution,
+        majorStats,
+        levelStats,
+        auditList
+      }
+    };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+}
+
+// 🟢 ฟังก์ชันสำหรับบังคับขอสิทธิ์ Google Drive แบบเต็มรูปแบบ (อ่านและสร้างไฟล์)
+function authorizeDrive() {
+  // คำสั่งล่อ: บังคับให้ระบบต้องขอสิทธิ์ "สร้างไฟล์" (Write Permission)
+  const dummyFile = DriveApp.createFile("test_permission.txt", "ขอสิทธิ์สำเร็จ");
+  
+  // พอได้สิทธิ์และสร้างไฟล์ล่อเสร็จแล้ว ก็สั่งลบทิ้งลงถังขยะทันทีเพื่อไม่ให้รก Drive
+  dummyFile.setTrashed(true); 
 }

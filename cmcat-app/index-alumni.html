@@ -28,10 +28,11 @@
         }
     </style>
 </head>
-<body class="bg-slate-50 min-h-screen relative overflow-hidden flex items-center justify-center selection:bg-emerald-200">
+<!-- 🟢 นำ overflow-hidden ออก และเปลี่ยนจาก flex items-center เป็น py-10 เพื่อให้มีพื้นที่เหลือสำหรับเลื่อน -->
+<body class="bg-slate-50 min-h-screen relative selection:bg-emerald-200 py-10 md:py-0 md:flex md:items-center md:justify-center">
 
     <!-- 🌟 พื้นหลังตกแต่ง (Background Blobs) -->
-    <div class="fixed inset-0 w-full h-full pointer-events-none z-0 flex justify-center items-center opacity-40">
+    <div class="fixed inset-0 w-full h-full pointer-events-none z-0 flex justify-center items-center opacity-40 overflow-hidden">
         <div class="absolute top-[-10%] left-[-10%] w-96 h-96 bg-emerald-300 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob"></div>
         <div class="absolute top-[-10%] right-[-10%] w-96 h-96 bg-teal-300 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-2000"></div>
         <div class="absolute bottom-[-20%] left-[20%] w-96 h-96 bg-indigo-300 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-4000"></div>

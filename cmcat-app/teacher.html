@@ -356,85 +356,89 @@
         
         if(!roomString) return;
 
+        // Reset สถานะ
         alertBox.classList.add('hidden');
         isAlreadyCheckedToday = false;
         checkedByTeacherName = "";
 
-        container.innerHTML = `<div class="flex flex-col items-center py-20"><div class="animate-spin rounded-full h-12 w-12 border-4 border-emerald-100 border-t-emerald-700"></div><p class="mt-4 text-emerald-800 font-bold">🚀 กำลังโหลดข้อมูล (Production Mode)...</p></div>`;
+        container.innerHTML = `<div class="flex flex-col items-center py-20"><div class="animate-spin rounded-full h-12 w-12 border-4 border-emerald-100 border-t-emerald-700"></div><p class="mt-4 text-emerald-800 font-medium">กำลังโหลดข้อมูลนักเรียน และตรวจสอบประวัติวันนี้...</p></div>`;
 
         try {
-            // 🚀 PRODUCTION OPTIMIZATION 1: ยิง API พร้อมกัน 3 เส้น แต่บังคับ redirect: 'follow' กัน CORS 404
+            // 🚨 ดึงข้อมูล 3 อย่าง: นักเรียน, SDQ และ "ประวัติการเช็คชื่อทั้งหมดของห้องนี้"
             const [resS, resSDQ, resHist] = await Promise.all([
-                fetch(API_URL, { method: 'POST', redirect: 'follow', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getStudentsInRoom', payload: { roomString } }) }),
-                fetch(API_URL, { method: 'POST', redirect: 'follow', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getSDQDashboard', payload: { roomString } }) }),
-                fetch(API_URL, { method: 'POST', redirect: 'follow', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getRoomHistory', payload: { roomString } }) })
+                fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getStudentsInRoom', payload: { roomString } }) }),
+                fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getSDQDashboard', payload: { roomString } }) }),
+                fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getRoomHistory', payload: { roomString } }) }) // *ต้องเพิ่มฟังก์ชันนี้ใน GAS หรือถ้าไม่มีให้ข้ามไป*
             ]);
             
             const dataS = await resS.json();
             const dataSDQ = await resSDQ.json();
             
-            // 🟢 กำหนดตัวแปร historyData ไว้ด้านนอก เพื่อไม่ให้เกิด Error (is not defined)
+            // 🛠️ ตรวจสอบว่ามีข้อมูลจาก getRoomHistory ไหม ถ้ามีให้เช็ควันที่
             let historyData = [];
             try { 
                 const dataHist = await resHist.json(); 
-                if(dataHist.success) {
-                    historyData = dataHist.data;
-                    // 🚀 เก็บข้อมูลประวัติทั้งห้องไว้ในตัวแปร Global เพื่อใช้ตอนออกรายงาน โดยไม่ต้องยิง API ซ้ำ
-                    window.globalRoomHistoryData = historyData;
-                }
-            } catch(e) { console.warn("ไม่สามารถดึงประวัติได้"); }
+                if(dataHist.success) historyData = dataHist.data;
+            } catch(e) { console.warn("API getRoomHistory อาจยังไม่มีในฝั่ง Backend"); }
 
+            // 🛠️ แก้ไข: สร้างวันที่รูปแบบ "DD/MM/YYYY" (ค.ศ.) ให้ตรงกับระบบหลังบ้าน
             const todayDate = new Date();
             const dd = String(todayDate.getDate()).padStart(2, '0');
             const mm = String(todayDate.getMonth() + 1).padStart(2, '0');
             const yyyy = todayDate.getFullYear(); 
-            const todayStr = `${dd}/${mm}/${yyyy}`;
+            const todayStr = `${dd}/${mm}/${yyyy}`; // ตัวอย่างผลลัพธ์: 30/04/2026
 
-            // 🚀 PRODUCTION OPTIMIZATION 2: ทำ Hash Map O(1) คัดแยกข้อมูลของ "วันนี้" รวดเดียวจบ
-            const todayAttendanceMap = {};
-            
-            for (let i = 0; i < historyData.length; i++) {
-                const r = historyData[i];
-                let rDate = r[1] ? String(r[1]).trim() : "";
-                
-                if(rDate) {
-                    const parts = rDate.split('/');
+            // เช็คว่า วันนี้ (Today) มีประวัติการเช็คชื่อของห้องนี้ไหม
+            const todayRecord = historyData.find(record => {
+                // คอลัมน์ Date_TH (Index 1 จาก Database)
+                let recordDate = record[1] ? String(record[1]).trim() : "";
+                if(recordDate) {
+                    const parts = recordDate.split('/');
                     if(parts.length === 3) {
+                        const d = parts[0].padStart(2, '0');
+                        const m = parts[1].padStart(2, '0');
                         let y = parts[2];
+                        
+                        // 🟢 FIX: ป้องกันปัญหา Google Sheets แปลงปี ค.ศ. เป็น พ.ศ. อัตโนมัติ
                         if (parseInt(y) > 2500) y = (parseInt(y) - 543).toString();
-                        rDate = `${parts[0].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${y}`;
+                        
+                        recordDate = `${d}/${m}/${y}`;
                     }
                 }
                 
-                if (rDate === todayStr) {
-                    const sId = String(r[3]).trim();
-                    todayAttendanceMap[sId] = {
-                        status: String(r[5]).trim(),
-                        teacher: r[2]
-                    };
-                    
-                    if (!isAlreadyCheckedToday) {
-                        isAlreadyCheckedToday = true;
-                        checkedByTeacherName = r[2];
-                        document.getElementById('checked-by-name').innerText = `บันทึกโดย: ${checkedByTeacherName} (เมื่อ ${todayStr})`;
-                        alertBox.classList.remove('hidden');
-                    }
-                }
+                return recordDate === todayStr;
+            });
+
+            if (todayRecord) {
+                isAlreadyCheckedToday = true;
+                checkedByTeacherName = todayRecord[2]; // สมมติว่า record[2] คือชื่อครูที่บันทึก
+                
+                // โชว์ป้ายเตือน
+                document.getElementById('checked-by-name').innerText = `บันทึกโดย: ${checkedByTeacherName} (เมื่อ ${todayStr})`;
+                alertBox.classList.remove('hidden');
             }
 
             if(dataS.success) {
-                const isInternship = checkIsInternshipRoom(roomString, new Date());
-                
-                // 🚀 PRODUCTION OPTIMIZATION 3: ดึงข้อมูลจาก Map โดยตรง ไม่ต้องวนลูปหาใหม่ ลดภาระ CPU
+                const isInternship = checkIsInternshipRoom(roomString, new Date()); // 🟢 เช็คชื่อห้องว่าเป็นฝึกงานไหม
+                // ใช้สถานะจริงจาก history (ถ้ามีการเช็คชื่อวันนี้แล้ว)
                 currentStudentsData = dataS.data.map(s => {
-                    const sId = String(s.id).trim();
-                    const todayRecord = todayAttendanceMap[sId];
+                    const todayRecord = historyData.find(r => {
+                        let rDate = r[1] ? String(r[1]).trim() : "";
+                        if(rDate) {
+                            const p = rDate.split('/');
+                            if(p.length === 3) {
+                                let y = p[2];
+                                if (parseInt(y) > 2500) y = (parseInt(y) - 543).toString();
+                                rDate = `${p[0].padStart(2, '0')}/${p[1].padStart(2, '0')}/${y}`;
+                            }
+                        }
+                        return rDate === todayStr && String(r[3]).trim() === String(s.id).trim();
+                    });
                     return { 
                         ...s, 
-                        status: todayRecord ? todayRecord.status : (isInternship ? 'ฝึกงาน' : 'มา')
+                        status: todayRecord ? String(todayRecord[5]).trim() : (isInternship ? 'ฝึกงาน' : 'มา')
                     };
                 });
-                
                 const latestSDQMap = {};
                 if(dataSDQ.success) {
                     dataSDQ.data.forEach(item => {
@@ -446,90 +450,7 @@
                 renderTable(currentStudentsData, latestSDQMap);
             } else { throw new Error(dataS.message); }
         } catch (e) {
-            container.innerHTML = `<div class="p-8 text-center text-red-500 bg-red-50 rounded-3xl font-bold border border-red-100">❌ เกิดข้อผิดพลาด: กรุณารีเฟรชหน้าเว็บ หรือตรวจสอบการเชื่อมต่อ (${e.message})</div>`;
-        }
-    }
-
-    // 🟢 ระบบรายงานเข้าแถว (Production Ready)
-    var globalAttendanceData = []; // 🟢 เปลี่ยน let เป็น var เพื่อแก้ปัญหา Error ตัวแปรซ้ำ 
-    
-    async function openAttendanceReport() {
-        const roomString = document.getElementById('room-select').value;
-        if(!roomString) return Swal.fire('แจ้งเตือน', 'กรุณาเลือกห้องเรียนก่อน', 'warning');
-        
-        document.getElementById('att-report-modal').classList.remove('hidden');
-        const content = document.getElementById('att-report-content');
-        content.innerHTML = `<div class="text-center py-12"><div class="animate-spin rounded-full h-12 w-12 border-4 border-emerald-100 border-t-emerald-600 mx-auto mb-4"></div><p class="text-emerald-700 font-bold">🚀 ประมวลผลข้อมูล (Production Mode)...</p></div>`;
-
-        try {
-            // 🚀 PRODUCTION OPTIMIZATION 4: นำข้อมูลประวัติที่ดึงมาแล้วจากตอนโหลดห้อง มาจัดกลุ่มใหม่
-            // ป้องกันกรณีที่ window.globalRoomHistoryData เป็น null หรือ undefined
-            const rawHistory = Array.isArray(window.globalRoomHistoryData) ? window.globalRoomHistoryData : [];
-            
-            // สร้าง Dictionary (Hash Map) สำหรับค้นหาประวัติอย่างรวดเร็ว (ลดภาระ CPU มหาศาล)
-            const historyMap = {};
-            rawHistory.forEach(record => {
-                const sId = String(record[3]).trim();
-                if (!historyMap[sId]) historyMap[sId] = [];
-                historyMap[sId].push(record);
-            });
-
-            const monthSet = new Set();
-            
-            // นำประวัติไปจับคู่กับนักเรียนปัจจุบัน "ทุกคน" ในห้อง (แม้คนนั้นจะไม่มีประวัติก็จะได้ Array ว่าง)
-            globalAttendanceData = currentStudentsData.map(s => {
-                const sId = String(s.id).trim();
-                const studentHistory = historyMap[sId] || [];
-                
-                // จัดรูปแบบวันที่ให้ถูกต้อง
-                studentHistory.forEach(record => {
-                    let dateStr = record[1] ? String(record[1]).trim() : ""; 
-                    if(dateStr) {
-                        const parts = dateStr.split('/');
-                        if(parts.length === 3) {
-                            let y = parts[2];
-                            // 🟢 FIX: ป้องกันปัญหา Google Sheets แปลงปี ค.ศ. เป็น พ.ศ. อัตโนมัติ
-                            if (parseInt(y) > 2500) y = (parseInt(y) - 543).toString();
-                            
-                            // 🟢 FIX: เติม 0 ข้างหน้าวัน/เดือน ให้ตรงกับฟอร์แมต
-                            const d = parts[0].padStart(2, '0');
-                            const m = parts[1].padStart(2, '0');
-                            
-                            dateStr = `${d}/${m}/${y}`;
-                            record[1] = dateStr; 
-                            monthSet.add(`${y}-${m}`);
-                        }
-                    }
-                });
-                return studentHistory;
-            });
-
-            // ตรวจสอบว่าถ้าห้องนี้ยังไม่มีประวัติการเช็คชื่อเลย ให้หยุดการทำงานและแจ้งเตือน
-            if (monthSet.size === 0) {
-                content.innerHTML = `<div class="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200"><i class="fas fa-folder-open text-3xl text-slate-300 mb-2"></i><p class="text-slate-500 font-bold">ยังไม่มีประวัติการเช็คชื่อเข้าแถวสำหรับห้องเรียนนี้ครับ</p></div>`;
-                document.getElementById('btn-export-pdf').classList.add('hidden');
-                document.getElementById('report-type-select').classList.add('hidden');
-                document.getElementById('report-month-select').classList.add('hidden');
-                return;
-            }
-
-            const monthSelect = document.getElementById('report-month-select'); 
-            monthSelect.innerHTML = '';
-            
-            Array.from(monthSet).sort().forEach(m => {
-                const [year, month] = m.split('-');
-                const monthName = new Date(year, parseInt(month)-1, 1).toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
-                monthSelect.innerHTML += `<option value="${m}">${monthName}</option>`;
-            });
-            
-            document.getElementById('report-type-select').classList.remove('hidden');
-            
-            // ประมวลผลและวาดตาราง
-            renderAttendanceReportTable();
-            
-        } catch (err) { 
-            console.error(err);
-            content.innerHTML = `<div class="p-8 text-center text-red-500 font-bold bg-red-50 rounded-2xl border border-red-100">❌ เกิดข้อผิดพลาดในการประมวลผลข้อมูลรายงาน<br><span class="text-xs font-normal">รายละเอียด: ${err.message}</span></div>`; 
+            container.innerHTML = `<div class="p-8 text-center text-red-500 bg-red-50 rounded-3xl font-bold border border-red-100">❌ เกิดข้อผิดพลาด: ${e.message}</div>`;
         }
     }
 
@@ -784,7 +705,7 @@ function renderTable(students, sdqMap) {
     async function submitAttendance() {
         const btn = document.getElementById('btn-save-att'); btn.disabled = true; btn.innerHTML = "กำลังบันทึก...";
         try {
-            const res = await fetch(API_URL, { method: 'POST', redirect: 'follow', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'saveAttendance', payload: { records: currentStudentsData, teacherName: currentUser.name } }) });
+            const res = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'saveAttendance', payload: { records: currentStudentsData, teacherName: currentUser.name } }) });
             const result = await res.json();
             if(result.success) {
                 Swal.fire({ 
@@ -816,7 +737,7 @@ function renderTable(students, sdqMap) {
         content.innerHTML = `<div class="text-center py-12"><div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-100 border-t-blue-600 mx-auto mb-4"></div><p class="text-blue-700 font-bold">กำลังรวบรวมข้อมูลสถิติ...</p></div>`;
 
         try {
-            const fetchPromises = currentStudentsData.map(s => fetch(API_URL, { method: 'POST', redirect: 'follow', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getHistory', payload: { studentId: s.id } }) }).then(res => res.json()));
+            const fetchPromises = currentStudentsData.map(s => fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getHistory', payload: { studentId: s.id } }) }).then(res => res.json()));
             const results = await Promise.all(fetchPromises);
             globalAttendanceData = results.map(r => r.success ? r.data : []);
             
@@ -1083,7 +1004,7 @@ function renderTable(students, sdqMap) {
         tableDiv.innerHTML = '<div class="text-center py-10"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-700 mx-auto"></div></div>';
 
         try {
-            const res = await fetch(API_URL, { method: 'POST', redirect: 'follow', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getStudentDeepData', payload: { studentId: id } }) });
+            const res = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getStudentDeepData', payload: { studentId: id } }) });
             const result = await res.json();
             if(result.success) renderHistoryTimeline(result.data);
         } catch (e) { tableDiv.innerHTML = "ไม่สามารถโหลดประวัติได้"; }
@@ -1182,7 +1103,6 @@ function renderTable(students, sdqMap) {
 
             const res = await fetch(API_URL, { 
                 method: 'POST', 
-                redirect: 'follow',
                 headers: { "Content-Type": "text/plain;charset=utf-8" }, 
                 body: JSON.stringify({ 
                     action: 'saveSDQData', 
@@ -1294,7 +1214,6 @@ function renderTable(students, sdqMap) {
         try {
             const response = await fetch(API_URL, {
                 method: 'POST',
-                redirect: 'follow',
                 headers: { "Content-Type": "text/plain;charset=utf-8" },
                 body: JSON.stringify({
                     action: 'saveHomeroomSpeech',

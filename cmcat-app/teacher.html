@@ -373,59 +373,16 @@
             const dataS = await resS.json();
             const dataSDQ = await resSDQ.json();
             
-            // 🟢 ระบบรายงานเข้าแถว
-    let globalAttendanceData = []; 
-    
-    async function openAttendanceReport() {
-        const roomString = document.getElementById('room-select').value;
-        if(!roomString) return Swal.fire('แจ้งเตือน', 'กรุณาเลือกห้องเรียนก่อน', 'warning');
-        document.getElementById('att-report-modal').classList.remove('hidden');
-        const content = document.getElementById('att-report-content');
-        content.innerHTML = `<div class="text-center py-12"><div class="animate-spin rounded-full h-12 w-12 border-4 border-emerald-100 border-t-emerald-600 mx-auto mb-4"></div><p class="text-emerald-700 font-bold">🚀 ประมวลผลข้อมูล (Production Mode)...</p></div>`;
-
-        try {
-            // 🚀 PRODUCTION OPTIMIZATION 4: นำข้อมูลประวัติที่ดึงมาแล้วจากตอนโหลดห้อง มาจัดกลุ่มแทนการยิง API 40 ครั้ง
-            const rawHistory = window.globalRoomHistoryData || [];
-            
-            // จับกลุ่มประวัติของนักเรียนแต่ละคนอย่างรวดเร็ว (ความเร็วระดับมิลลิวินาที)
-            globalAttendanceData = currentStudentsData.map(s => {
-                return rawHistory.filter(r => String(r[3]).trim() === String(s.id).trim());
-            });
-            
-            const monthSet = new Set();
-            globalAttendanceData.forEach(studentHistory => {
-                studentHistory.forEach(record => {
-                    let dateStr = record[1] ? String(record[1]).trim() : ""; 
-                    if(dateStr) {
-                        const parts = dateStr.split('/');
-                        if(parts.length === 3) {
-                            let y = parts[2];
-                            // 🟢 FIX: ป้องกันปัญหา Google Sheets แปลงปี ค.ศ. เป็น พ.ศ. ให้รายงานไม่พัง
-                            if (parseInt(y) > 2500) y = (parseInt(y) - 543).toString();
-                            dateStr = `${parts[0].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${y}`;
-                            record[1] = dateStr; // แก้ไขค่า Date ให้เป็นฟอร์แมตเดียวกันทั้งหมด
-                            monthSet.add(`${y}-${parts[1].padStart(2, '0')}`);
-                        }
-                    }
-                });
-            });
-
-            const monthSelect = document.getElementById('report-month-select'); monthSelect.innerHTML = '';
-            Array.from(monthSet).sort().forEach(m => {
-                const [year, month] = m.split('-');
-                const monthName = new Date(year, parseInt(month)-1, 1).toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
-                monthSelect.innerHTML += `<option value="${m}">${monthName}</option>`;
-            });
-            
-            if(monthSet.size > 0) document.getElementById('report-type-select').classList.remove('hidden');
-            
-            // ประมวลผลเร็วขึ้น 1,000% วาดตารางทันที
-            renderAttendanceReportTable();
-        } catch (err) { 
-            console.error(err);
-            content.innerHTML = '<div class="p-8 text-center text-red-500 font-bold">❌ เกิดข้อผิดพลาดในการรวบรวมข้อมูล</div>'; 
-        }
-    }
+            // 🟢 กำหนดตัวแปร historyData ไว้ด้านนอก เพื่อไม่ให้เกิด Error (is not defined)
+            let historyData = [];
+            try { 
+                const dataHist = await resHist.json(); 
+                if(dataHist.success) {
+                    historyData = dataHist.data;
+                    // 🚀 เก็บข้อมูลประวัติทั้งห้องไว้ในตัวแปร Global เพื่อใช้ตอนออกรายงาน โดยไม่ต้องยิง API ซ้ำ
+                    window.globalRoomHistoryData = historyData;
+                }
+            } catch(e) { console.warn("ไม่สามารถดึงประวัติได้"); }
 
             const todayDate = new Date();
             const dd = String(todayDate.getDate()).padStart(2, '0');
@@ -490,6 +447,89 @@
             } else { throw new Error(dataS.message); }
         } catch (e) {
             container.innerHTML = `<div class="p-8 text-center text-red-500 bg-red-50 rounded-3xl font-bold border border-red-100">❌ เกิดข้อผิดพลาด: กรุณารีเฟรชหน้าเว็บ หรือตรวจสอบการเชื่อมต่อ (${e.message})</div>`;
+        }
+    }
+
+    // 🟢 ระบบรายงานเข้าแถว (Production Ready)
+    var globalAttendanceData = []; // 🟢 เปลี่ยน let เป็น var เพื่อแก้ปัญหา Error ตัวแปรซ้ำ 
+    
+    async function openAttendanceReport() {
+        const roomString = document.getElementById('room-select').value;
+        if(!roomString) return Swal.fire('แจ้งเตือน', 'กรุณาเลือกห้องเรียนก่อน', 'warning');
+        
+        document.getElementById('att-report-modal').classList.remove('hidden');
+        const content = document.getElementById('att-report-content');
+        content.innerHTML = `<div class="text-center py-12"><div class="animate-spin rounded-full h-12 w-12 border-4 border-emerald-100 border-t-emerald-600 mx-auto mb-4"></div><p class="text-emerald-700 font-bold">🚀 ประมวลผลข้อมูล (Production Mode)...</p></div>`;
+
+        try {
+            // 🚀 PRODUCTION OPTIMIZATION 4: นำข้อมูลประวัติที่ดึงมาแล้วจากตอนโหลดห้อง มาจัดกลุ่มใหม่
+            // ป้องกันกรณีที่ window.globalRoomHistoryData เป็น null หรือ undefined
+            const rawHistory = Array.isArray(window.globalRoomHistoryData) ? window.globalRoomHistoryData : [];
+            
+            // สร้าง Dictionary (Hash Map) สำหรับค้นหาประวัติอย่างรวดเร็ว (ลดภาระ CPU มหาศาล)
+            const historyMap = {};
+            rawHistory.forEach(record => {
+                const sId = String(record[3]).trim();
+                if (!historyMap[sId]) historyMap[sId] = [];
+                historyMap[sId].push(record);
+            });
+
+            const monthSet = new Set();
+            
+            // นำประวัติไปจับคู่กับนักเรียนปัจจุบัน "ทุกคน" ในห้อง (แม้คนนั้นจะไม่มีประวัติก็จะได้ Array ว่าง)
+            globalAttendanceData = currentStudentsData.map(s => {
+                const sId = String(s.id).trim();
+                const studentHistory = historyMap[sId] || [];
+                
+                // จัดรูปแบบวันที่ให้ถูกต้อง
+                studentHistory.forEach(record => {
+                    let dateStr = record[1] ? String(record[1]).trim() : ""; 
+                    if(dateStr) {
+                        const parts = dateStr.split('/');
+                        if(parts.length === 3) {
+                            let y = parts[2];
+                            // 🟢 FIX: ป้องกันปัญหา Google Sheets แปลงปี ค.ศ. เป็น พ.ศ. อัตโนมัติ
+                            if (parseInt(y) > 2500) y = (parseInt(y) - 543).toString();
+                            
+                            // 🟢 FIX: เติม 0 ข้างหน้าวัน/เดือน ให้ตรงกับฟอร์แมต
+                            const d = parts[0].padStart(2, '0');
+                            const m = parts[1].padStart(2, '0');
+                            
+                            dateStr = `${d}/${m}/${y}`;
+                            record[1] = dateStr; 
+                            monthSet.add(`${y}-${m}`);
+                        }
+                    }
+                });
+                return studentHistory;
+            });
+
+            // ตรวจสอบว่าถ้าห้องนี้ยังไม่มีประวัติการเช็คชื่อเลย ให้หยุดการทำงานและแจ้งเตือน
+            if (monthSet.size === 0) {
+                content.innerHTML = `<div class="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200"><i class="fas fa-folder-open text-3xl text-slate-300 mb-2"></i><p class="text-slate-500 font-bold">ยังไม่มีประวัติการเช็คชื่อเข้าแถวสำหรับห้องเรียนนี้ครับ</p></div>`;
+                document.getElementById('btn-export-pdf').classList.add('hidden');
+                document.getElementById('report-type-select').classList.add('hidden');
+                document.getElementById('report-month-select').classList.add('hidden');
+                return;
+            }
+
+            const monthSelect = document.getElementById('report-month-select'); 
+            monthSelect.innerHTML = '';
+            
+            Array.from(monthSet).sort().forEach(m => {
+                const [year, month] = m.split('-');
+                const monthName = new Date(year, parseInt(month)-1, 1).toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
+                monthSelect.innerHTML += `<option value="${m}">${monthName}</option>`;
+            });
+            
+            document.getElementById('report-type-select').classList.remove('hidden');
+            
+            // ประมวลผลและวาดตาราง
+            renderAttendanceReportTable();
+            
+        } catch (err) { 
+            console.error(err);
+            content.innerHTML = `<div class="p-8 text-center text-red-500 font-bold bg-red-50 rounded-2xl border border-red-100">❌ เกิดข้อผิดพลาดในการประมวลผลข้อมูลรายงาน<br><span class="text-xs font-normal">รายละเอียด: ${err.message}</span></div>`; 
         }
     }
 

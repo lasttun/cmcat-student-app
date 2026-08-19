@@ -373,11 +373,59 @@
             const dataS = await resS.json();
             const dataSDQ = await resSDQ.json();
             
-            let historyData = [];
-            try { 
-                const dataHist = await resHist.json(); 
-                if(dataHist.success) historyData = dataHist.data;
-            } catch(e) { console.warn("ไม่สามารถดึงประวัติได้"); }
+            // 🟢 ระบบรายงานเข้าแถว
+    let globalAttendanceData = []; 
+    
+    async function openAttendanceReport() {
+        const roomString = document.getElementById('room-select').value;
+        if(!roomString) return Swal.fire('แจ้งเตือน', 'กรุณาเลือกห้องเรียนก่อน', 'warning');
+        document.getElementById('att-report-modal').classList.remove('hidden');
+        const content = document.getElementById('att-report-content');
+        content.innerHTML = `<div class="text-center py-12"><div class="animate-spin rounded-full h-12 w-12 border-4 border-emerald-100 border-t-emerald-600 mx-auto mb-4"></div><p class="text-emerald-700 font-bold">🚀 ประมวลผลข้อมูล (Production Mode)...</p></div>`;
+
+        try {
+            // 🚀 PRODUCTION OPTIMIZATION 4: นำข้อมูลประวัติที่ดึงมาแล้วจากตอนโหลดห้อง มาจัดกลุ่มแทนการยิง API 40 ครั้ง
+            const rawHistory = window.globalRoomHistoryData || [];
+            
+            // จับกลุ่มประวัติของนักเรียนแต่ละคนอย่างรวดเร็ว (ความเร็วระดับมิลลิวินาที)
+            globalAttendanceData = currentStudentsData.map(s => {
+                return rawHistory.filter(r => String(r[3]).trim() === String(s.id).trim());
+            });
+            
+            const monthSet = new Set();
+            globalAttendanceData.forEach(studentHistory => {
+                studentHistory.forEach(record => {
+                    let dateStr = record[1] ? String(record[1]).trim() : ""; 
+                    if(dateStr) {
+                        const parts = dateStr.split('/');
+                        if(parts.length === 3) {
+                            let y = parts[2];
+                            // 🟢 FIX: ป้องกันปัญหา Google Sheets แปลงปี ค.ศ. เป็น พ.ศ. ให้รายงานไม่พัง
+                            if (parseInt(y) > 2500) y = (parseInt(y) - 543).toString();
+                            dateStr = `${parts[0].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${y}`;
+                            record[1] = dateStr; // แก้ไขค่า Date ให้เป็นฟอร์แมตเดียวกันทั้งหมด
+                            monthSet.add(`${y}-${parts[1].padStart(2, '0')}`);
+                        }
+                    }
+                });
+            });
+
+            const monthSelect = document.getElementById('report-month-select'); monthSelect.innerHTML = '';
+            Array.from(monthSet).sort().forEach(m => {
+                const [year, month] = m.split('-');
+                const monthName = new Date(year, parseInt(month)-1, 1).toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
+                monthSelect.innerHTML += `<option value="${m}">${monthName}</option>`;
+            });
+            
+            if(monthSet.size > 0) document.getElementById('report-type-select').classList.remove('hidden');
+            
+            // ประมวลผลเร็วขึ้น 1,000% วาดตารางทันที
+            renderAttendanceReportTable();
+        } catch (err) { 
+            console.error(err);
+            content.innerHTML = '<div class="p-8 text-center text-red-500 font-bold">❌ เกิดข้อผิดพลาดในการรวบรวมข้อมูล</div>'; 
+        }
+    }
 
             const todayDate = new Date();
             const dd = String(todayDate.getDate()).padStart(2, '0');

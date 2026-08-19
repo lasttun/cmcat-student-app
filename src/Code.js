@@ -359,7 +359,6 @@ function fetchRoomAttendanceCalendar(roomString) {
 // ==========================================
 
 function handleLogin(payload) {
-  // 🟢 ดักจับชื่อตัวแปรทุกรูปแบบที่หน้าบ้าน (Cloudflare) อาจจะส่งมา
   const rawID = payload.studentId || payload.username || payload.phone || payload.email;
   const rawPass = payload.password;
 
@@ -369,53 +368,45 @@ function handleLogin(payload) {
   const inputID = String(rawID).trim();
   const inputPass = String(rawPass).trim();
 
-// --- 1. ตรวจสอบนักเรียน ---
-      const sSheet = ss.getSheetByName(CONFIG.SHEETS.STUDENTS);
-      if (sSheet) {
-        // 🟢 FIX: เปลี่ยนจาก getValues() เป็น getDisplayValues() เพื่อแก้ปัญหา Sheet ตัดเลข 0 ทิ้ง
-        const sData = sSheet.getDataRange().getDisplayValues(); 
-        const student = sData.find(r => String(r[0]).trim() === inputID && String(r[1]).trim() === inputPass);
-        if (student) {
-          return {
-            success: true, role: 'student',
-            user: { id: String(student[0]), name: student[2], level: `${student[3]} ${student[4]}/${student[5]}` }
-          };
+  // --- 1. ตรวจสอบนักเรียน ---
+  const sSheet = ss.getSheetByName(CONFIG.SHEETS.STUDENTS);
+  if (sSheet) {
+    const sData = sSheet.getDataRange().getValues(); 
+    // 🚀 Fast Fail Optimization: เทียบค่าตรงๆ ก่อน ถ้าไม่ตรงให้โดดข้ามทันที (ประหยัดเวลาได้มหาศาล)
+    for (let i = 1; i < sData.length; i++) {
+        if (sData[i][0] == inputID || String(sData[i][0]).trim() === inputID) {
+            if (sData[i][1] == inputPass || String(sData[i][1]).trim() === inputPass) {
+                return {
+                  success: true, role: 'student',
+                  user: { id: String(sData[i][0]).trim(), name: String(sData[i][2]), level: `${sData[i][3]} ${sData[i][4]}/${sData[i][5]}` }
+                };
+            }
         }
-      }
+    }
+  }
 
-      // --- 2. ตรวจสอบครูและผู้บริหาร ---
-      const tSheet = ss.getSheetByName(CONFIG.SHEETS.TEACHERS);
-      if (tSheet) {
-        // 🟢 FIX: เปลี่ยนเป็น getDisplayValues() เพื่อดึงข้อมูลออกมาเป็น String ตรงกับที่พิมพ์มา 100%
-        const tData = tSheet.getDataRange().getDisplayValues();
-        const teacher = tData.find(r => String(r[0]).trim() === inputID && String(r[3]).trim() === inputPass);
-    
-    if (teacher) {
-      // 🟢 ทำความสะอาดคำสิทธิ์จราจร ป้องกันปัญหาเว้นวรรคพิมพ์เกินในเซลล์ Google Sheets
-      const rawRole = String(teacher[6] || '').trim();
-      let computedRole = 'teacher';
-      
-      if (rawRole === 'admin' || rawRole === 'ผู้บริหาร') {
-        computedRole = 'admin'; 
-      } else if (rawRole === 'ครูที่ปรึกษา') {
-        computedRole = 'teacher';
-      } else {
-        computedRole = rawRole; 
-      }
+  // --- 2. ตรวจสอบครูและผู้บริหาร ---
+  const tSheet = ss.getSheetByName(CONFIG.SHEETS.TEACHERS);
+  if (tSheet) {
+    const tData = tSheet.getDataRange().getValues();
+    for (let i = 1; i < tData.length; i++) {
+        if (tData[i][0] == inputID || String(tData[i][0]).trim() === inputID) {
+            if (tData[i][3] == inputPass || String(tData[i][3]).trim() === inputPass) {
+                const rawRole = String(tData[i][6] || '').trim();
+                let computedRole = 'teacher';
+                
+                if (rawRole === 'admin' || rawRole === 'ผู้บริหาร') computedRole = 'admin'; 
+                else if (rawRole === 'ครูที่ปรึกษา') computedRole = 'teacher';
+                else computedRole = rawRole; 
 
-// 🟢 ดึงข้อมูลห้องเรียนจากคอลัมน์ F (Index 5) และแยกด้วยลูกน้ำอย่างปลอดภัย
-    const myRooms = teacher[5] ? String(teacher[5]).split(',').map(r => r.trim()).filter(r => r !== "") : [];
+                const myRooms = tData[i][5] ? String(tData[i][5]).split(',').map(r => r.trim()).filter(r => r !== "") : [];
 
-    return {
-      success: true,
-      role: computedRole, 
-      user: { // 🟢 FIX: เปลี่ยนจาก data เป็น user เพื่อให้สอดคล้องกับหน้า index.html 100%
-        email: teacher[0],
-        name: teacher[1],
-        position: teacher[2],
-        rooms: myRooms
-      }
-    };
+                return {
+                  success: true, role: computedRole, 
+                  user: { email: String(tData[i][0]).trim(), name: String(tData[i][1]), position: String(tData[i][2]), rooms: myRooms }
+                };
+            }
+        }
     }
   }
 

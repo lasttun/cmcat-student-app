@@ -63,8 +63,11 @@ function doPost(e) {
 
     // --- ROUTING SYSTEM ---
     switch (action) {
+      // 🟢 รวมคำสั่ง Login ไว้ในบรรทัดเดียว ป้องกันการสับสน
       case 'login': 
-      case 'verifyTeacher': return output(handleLogin(payload)); // 🟢 คืนชีพเส้นทางล็อกอิน (รองรับคำสั่งจาก index.html)
+        return output(handleLogin(payload)); 
+      case 'verifyTeacher': 
+        return output(handleLogin(payload)); // 🟢 คืนชีพเส้นทางล็อกอิน (รองรับคำสั่งจาก index.html)
       case 'getRoomData': return output(fetchRoomList());
       case 'getStudentsInRoom': return output(fetchStudentsByRoom(payload.roomString));
       case 'saveAttendance': return output(recordAttendance(payload));

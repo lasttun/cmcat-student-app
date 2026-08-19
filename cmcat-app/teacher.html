@@ -366,9 +366,9 @@
         try {
             // 🚨 ดึงข้อมูล 3 อย่าง: นักเรียน, SDQ และ "ประวัติการเช็คชื่อทั้งหมดของห้องนี้"
             const [resS, resSDQ, resHist] = await Promise.all([
-                fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getStudentsInRoom', payload: { roomString } }) }),
-                fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getSDQDashboard', payload: { roomString } }) }),
-                fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getRoomHistory', payload: { roomString } }) }) // *ต้องเพิ่มฟังก์ชันนี้ใน GAS หรือถ้าไม่มีให้ข้ามไป*
+                fetch(API_URL, { method: 'POST', redirect: 'follow', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getStudentsInRoom', payload: { roomString } }) }),
+                fetch(API_URL, { method: 'POST', redirect: 'follow', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getSDQDashboard', payload: { roomString } }) }),
+                fetch(API_URL, { method: 'POST', redirect: 'follow', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getRoomHistory', payload: { roomString } }) }) 
             ]);
             
             const dataS = await resS.json();
@@ -705,7 +705,7 @@ function renderTable(students, sdqMap) {
     async function submitAttendance() {
         const btn = document.getElementById('btn-save-att'); btn.disabled = true; btn.innerHTML = "กำลังบันทึก...";
         try {
-            const res = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'saveAttendance', payload: { records: currentStudentsData, teacherName: currentUser.name } }) });
+            const res = await fetch(API_URL, { method: 'POST', redirect: 'follow', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'saveAttendance', payload: { records: currentStudentsData, teacherName: currentUser.name } }) });
             const result = await res.json();
             if(result.success) {
                 Swal.fire({ 
@@ -737,7 +737,7 @@ function renderTable(students, sdqMap) {
         content.innerHTML = `<div class="text-center py-12"><div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-100 border-t-blue-600 mx-auto mb-4"></div><p class="text-blue-700 font-bold">กำลังรวบรวมข้อมูลสถิติ...</p></div>`;
 
         try {
-            const fetchPromises = currentStudentsData.map(s => fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getHistory', payload: { studentId: s.id } }) }).then(res => res.json()));
+            const fetchPromises = currentStudentsData.map(s => fetch(API_URL, { method: 'POST', redirect: 'follow', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getHistory', payload: { studentId: s.id } }) }).then(res => res.json()));
             const results = await Promise.all(fetchPromises);
             globalAttendanceData = results.map(r => r.success ? r.data : []);
             
@@ -1004,7 +1004,7 @@ function renderTable(students, sdqMap) {
         tableDiv.innerHTML = '<div class="text-center py-10"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-700 mx-auto"></div></div>';
 
         try {
-            const res = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getStudentDeepData', payload: { studentId: id } }) });
+            const res = await fetch(API_URL, { method: 'POST', redirect: 'follow', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getStudentDeepData', payload: { studentId: id } }) });
             const result = await res.json();
             if(result.success) renderHistoryTimeline(result.data);
         } catch (e) { tableDiv.innerHTML = "ไม่สามารถโหลดประวัติได้"; }
@@ -1103,6 +1103,7 @@ function renderTable(students, sdqMap) {
 
             const res = await fetch(API_URL, { 
                 method: 'POST', 
+                redirect: 'follow',
                 headers: { "Content-Type": "text/plain;charset=utf-8" }, 
                 body: JSON.stringify({ 
                     action: 'saveSDQData', 
@@ -1214,6 +1215,7 @@ function renderTable(students, sdqMap) {
         try {
             const response = await fetch(API_URL, {
                 method: 'POST',
+                redirect: 'follow',
                 headers: { "Content-Type": "text/plain;charset=utf-8" },
                 body: JSON.stringify({
                     action: 'saveHomeroomSpeech',

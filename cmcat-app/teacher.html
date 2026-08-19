@@ -364,22 +364,19 @@
         container.innerHTML = `<div class="flex flex-col items-center py-20"><div class="animate-spin rounded-full h-12 w-12 border-4 border-emerald-100 border-t-emerald-700"></div><p class="mt-4 text-emerald-800 font-medium">กำลังโหลดข้อมูลนักเรียน และตรวจสอบประวัติวันนี้...</p></div>`;
 
         try {
-            // 🚨 ดึงข้อมูล 3 อย่าง: นักเรียน, SDQ และ "ประวัติการเช็คชื่อทั้งหมดของห้องนี้"
-            const [resS, resSDQ, resHist] = await Promise.all([
-                fetch(API_URL, { method: 'POST', redirect: 'follow', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getStudentsInRoom', payload: { roomString } }) }),
-                fetch(API_URL, { method: 'POST', redirect: 'follow', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getSDQDashboard', payload: { roomString } }) }),
-                fetch(API_URL, { method: 'POST', redirect: 'follow', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getRoomHistory', payload: { roomString } }) }) 
-            ]);
-            
+            // 🚨 ปรับปรุงการดึงข้อมูล: ดึงทีละเส้นเพื่อความเสถียร ป้องกันเซิร์ฟเวอร์ Google ตัดการเชื่อมต่อ (Error 404)
+            const resS = await fetch(API_URL, { method: 'POST', redirect: 'follow', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getStudentsInRoom', payload: { roomString } }) });
             const dataS = await resS.json();
+
+            const resSDQ = await fetch(API_URL, { method: 'POST', redirect: 'follow', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getSDQDashboard', payload: { roomString } }) });
             const dataSDQ = await resSDQ.json();
             
-            // 🛠️ ตรวจสอบว่ามีข้อมูลจาก getRoomHistory ไหม ถ้ามีให้เช็ควันที่
             let historyData = [];
-            try { 
-                const dataHist = await resHist.json(); 
+            try {
+                const resHist = await fetch(API_URL, { method: 'POST', redirect: 'follow', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getRoomHistory', payload: { roomString } }) });
+                const dataHist = await resHist.json();
                 if(dataHist.success) historyData = dataHist.data;
-            } catch(e) { console.warn("API getRoomHistory อาจยังไม่มีในฝั่ง Backend"); }
+            } catch(e) { console.warn("ไม่สามารถดึงประวัติการเช็คชื่อห้องได้"); }
 
             // 🛠️ แก้ไข: สร้างวันที่รูปแบบ "DD/MM/YYYY" (ค.ศ.) ให้ตรงกับระบบหลังบ้าน
             const todayDate = new Date();

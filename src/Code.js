@@ -93,6 +93,19 @@ function doPost(e) {
       case 'saveAlumniTracking': return output(recordAlumniTracking(payload));
       case 'getAlumniDashboardData': return output(getAlumniDashboardData(payload)); // 🟢 เพิ่ม API ดึงสถิติ Dashboard
       
+      // 📝 เพิ่ม Routing ระบบสอบเสมือนจริง (E-Testing)
+      case 'getExamQuestionsForMode': return output(fetchExamQuestionsForMode(payload));
+      case 'submitExam': return output(recordExamSubmission(payload));
+
+      // 🎮 เพิ่ม Routing ระบบ Live Game (Kahoot-style)
+      case 'hostStartLiveGame': return output(hostStartLiveGame(payload));
+      case 'studentJoinLiveGame': return output(studentJoinLiveGame(payload));
+      case 'getLiveGameState': return output(getLiveGameState());
+      case 'hostUpdateGameControl': return output(hostUpdateGameControl(payload));
+      case 'submitLiveAnswer': return output(submitLiveAnswer(payload));
+      case 'getLiveGameLeaderboard': return output(getLiveGameLeaderboard(payload.gameId)); // 🟢 เพิ่ม API ดึงตารางคะแนน
+      case 'getExamDashboard': return output(getExamDashboard()); // 🟢 เพิ่ม API ดึงรายงานผลสอบ E-Testing
+      
       default:
         return output({ success: false, message: `Action [${action}] is not implemented.` });
     }
@@ -1202,4 +1215,305 @@ function authorizeDrive() {
   
   // พอได้สิทธิ์และสร้างไฟล์ล่อเสร็จแล้ว ก็สั่งลบทิ้งลงถังขยะทันทีเพื่อไม่ให้รก Drive
   dummyFile.setTrashed(true); 
+}
+
+// ==========================================
+// 📝 E-TESTING & ITEM BANK SYSTEM
+// ==========================================
+
+/** 🟢 19. ดึงข้อสอบสำหรับโหมดฝึก (เลือกตามหมวดหมู่) หรือโหมดสอบจริง (ดึงตามสัดส่วน Blueprint) */
+function fetchExamQuestionsForMode(payload) {
+  try {
+    const { mode, category } = payload; // mode: 'PRACTICE' หรือ 'SIMULATION'
+    const sheet = getTargetSheet('Exam_Questions');
+    if (sheet.getLastRow() <= 1) return { success: true, data: [] };
+    
+    const data = sheet.getDataRange().getDisplayValues();
+    data.shift();
+
+    let filteredQuestions = [];
+
+    if (mode === 'PRACTICE') {
+      filteredQuestions = data.filter(r => category === 'ALL' || String(r[1]).trim() === String(category).trim());
+      filteredQuestions = shuffleArray(filteredQuestions).slice(0, 30); // สุ่มมาทำ 30 ข้อในโหมดฝึก
+    } else if (mode === 'SIMULATION') {
+      filteredQuestions = shuffleArray(data).slice(0, 148); // จำลอง 148 ข้อ (ปรับเปลี่ยน logic ได้ตามชอบ)
+    } else if (mode === 'LIVE_GAME') {
+      filteredQuestions = data.filter(r => category === 'ALL' || String(r[1]).trim() === String(category).trim());
+    }
+
+    const questions = filteredQuestions.map((r, index) => ({
+      no: index + 1,
+      questionId: r[0],
+      category: r[1],
+      subSkill: r[2],
+      questionText: r[3],
+      options: { A: r[4], B: r[5], C: r[6], D: r[7] }
+      // ⚠️ ไม่ส่ง เฉลย(r[8]) และ คำอธิบาย(r[9]) ไปที่ Client เพื่อความปลอดภัย
+    }));
+
+    return { success: true, data: questions, total: questions.length };
+  } catch (e) {
+    return { success: false, message: e.message };
+  }
+}
+
+/** 🛠️ Helper function สำหรับสุ่มข้อสอบ */
+function shuffleArray(array) {
+  let currentIndex = array.length, randomIndex;
+  while (currentIndex > 0) {
+    randomIndex = Math.floor(Math.random() * currentIndex);
+    currentIndex--;
+    [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+  }
+  return array;
+}
+
+/** 🟢 20. ตรวจคำตอบและบันทึกผลสอบ (Server-Side Grading) */
+function recordExamSubmission(payload) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000);
+    const { examId, studentId, mode, category, answers } = payload;
+    const ss = getActiveSS();
+    
+    const sSheet = ss.getSheetByName(CONFIG.SHEETS.STUDENTS);
+    const sData = sSheet.getDataRange().getValues();
+    const student = sData.find(r => String(r[0]).trim() === String(studentId).trim());
+    if (!student) return { success: false, message: "ไม่พบข้อมูลนักศึกษา" };
+    
+    const studentName = student[2];
+    const studentRoom = `${student[3]} ${student[4]}/${student[5]}`;
+
+    const qSheet = ss.getSheetByName('Exam_Questions');
+    const qData = qSheet.getDataRange().getValues();
+    qData.shift();
+
+    let score = 0;
+    let totalQuestions = 0;
+    const answerKey = {};
+
+    qData.forEach(r => {
+      answerKey[String(r[0]).trim()] = String(r[8]).trim(); // คอลัมน์ I คือเฉลย
+    });
+
+    for (let qId in answers) {
+      totalQuestions++;
+      if (answerKey[qId] && answerKey[qId] === answers[qId]) {
+        score++;
+      }
+    }
+
+    let resSheet = ss.getSheetByName('Exam_Results');
+    if (!resSheet) {
+      resSheet = ss.insertSheet('Exam_Results');
+      resSheet.appendRow(['Timestamp', 'Exam_ID', 'Student_ID', 'Student_Name', 'Room', 'Score_Got', 'Total_Score', 'Percentage', 'Answers_JSON']);
+    }
+
+    const percentage = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0;
+    const timestamp = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "dd/MM/yyyy HH:mm:ss");
+    
+    resSheet.appendRow([
+      timestamp, examId || mode, studentId, studentName, studentRoom, score, totalQuestions, percentage, JSON.stringify(answers)
+    ]);
+    SpreadsheetApp.flush();
+
+    return { success: true, score: score, total: totalQuestions, percentage: percentage };
+  } catch (e) {
+    return { success: false, message: e.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ==========================================
+// 🎮 KAHOOT-STYLE LIVE GAME SERVICES
+// ==========================================
+
+/** 🟢 21. ครูสร้างห้องและเริ่มเกม (Host Session) */
+function hostStartLiveGame(payload) {
+  const { category, teacherName } = payload;
+  const props = PropertiesService.getScriptProperties();
+  const gameId = "GAME_" + Date.now().toString().slice(-6);
+
+  const sheet = getTargetSheet('Exam_Questions');
+  const data = sheet.getDataRange().getDisplayValues();
+  data.shift();
+
+  const filteredQuestions = data.filter(r => category === 'ALL' || String(r[1]).trim() === String(category).trim());
+  const questions = filteredQuestions.map(r => ({
+    questionId: r[0],
+    questionText: r[3],
+    options: { A: r[4], B: r[5], C: r[6], D: r[7] },
+    correct: String(r[8]).trim()
+  }));
+
+  if (questions.length === 0) return { success: false, message: "ไม่พบข้อสอบในหมวดนี้" };
+
+  props.setProperties({
+    'ACTIVE_GAME_ID': gameId,
+    'GAME_STATUS': 'WAITING',
+    'CURRENT_Q_INDEX': '-1',
+    'QUESTIONS_JSON': JSON.stringify(questions),
+    'HOST_NAME': teacherName
+  });
+
+  return { success: true, gameId: gameId, totalQuestions: questions.length };
+}
+
+/** 🟢 22. นักศึกษา Join เข้าห้องเกมสด */
+function studentJoinLiveGame(payload) {
+  const { studentId, gameId } = payload;
+  const props = PropertiesService.getScriptProperties();
+  
+  if (props.getProperty('ACTIVE_GAME_ID') !== gameId) {
+    return { success: false, message: "ไม่พบรหัสห้องเกมนี้ หรือเกมอาจจะจบไปแล้ว" };
+  }
+
+  const ss = getActiveSS();
+  const sSheet = ss.getSheetByName(CONFIG.SHEETS.STUDENTS);
+  const sData = sSheet.getDataRange().getValues();
+  const student = sData.find(r => String(r[0]).trim() === String(studentId).trim());
+
+  if (!student) return { success: false, message: "ไม่พบรหัสนักศึกษานี้ในระบบ" };
+
+  return { success: true, studentName: student[2], room: `${student[3]} ${student[4]}/${student[5]}` };
+}
+
+/** 🟢 23. ดึงสถานะปัจจุบันสำหรับ Polling */
+function getLiveGameState() {
+  const props = PropertiesService.getScriptProperties();
+  const status = props.getProperty('GAME_STATUS') || 'WAITING';
+  const qIndex = parseInt(props.getProperty('CURRENT_Q_INDEX') || '-1');
+  const questionsJson = props.getProperty('QUESTIONS_JSON');
+  
+  let currentQuestion = null;
+  if (questionsJson && qIndex >= 0) {
+    const questions = JSON.parse(questionsJson);
+    if (questions[qIndex]) {
+      const q = questions[qIndex];
+      currentQuestion = {
+        no: qIndex + 1,
+        total: questions.length,
+        questionText: q.questionText,
+        options: q.options
+      };
+    }
+  }
+
+  return { success: true, status: status, questionIndex: qIndex, currentQuestion: currentQuestion };
+}
+
+/** 🟢 24. ครูสั่งเปลี่ยนข้อ หรือเปิด Leaderboard */
+function hostUpdateGameControl(payload) {
+  const { status, nextIndex } = payload;
+  const props = PropertiesService.getScriptProperties();
+  
+  const updates = { 'GAME_STATUS': status };
+  if (nextIndex !== undefined) {
+    updates['CURRENT_Q_INDEX'] = String(nextIndex);
+    updates['Q_START_TIME'] = String(Date.now());
+  }
+  
+  props.setProperties(updates);
+  return { success: true };
+}
+
+/** 🟢 25. เด็กส่งคำตอบเข้ามาในโหมดสด */
+function submitLiveAnswer(payload) {
+  const { studentId, studentName, questionIndex, selectedAnswer } = payload;
+  const props = PropertiesService.getScriptProperties();
+  
+  if (props.getProperty('GAME_STATUS') !== 'PLAYING') {
+    return { success: false, message: "หมดเวลาตอบสำหรับข้อนี้แล้ว" };
+  }
+
+  const questions = JSON.parse(props.getProperty('QUESTIONS_JSON'));
+  const currentQ = questions[questionIndex];
+  if (!currentQ) return { success: false, message: "ข้อสอบไม่ถูกต้อง" };
+
+  const isCorrect = (String(selectedAnswer).trim().toUpperCase() === currentQ.correct);
+  const startTime = parseInt(props.getProperty('Q_START_TIME') || Date.now());
+  const elapsedSeconds = (Date.now() - startTime) / 1000;
+  
+  let points = 0;
+  if (isCorrect) {
+    const maxTime = 30; // ตั้งเวลาต่อข้อที่ 30 วินาที
+    const timeFactor = Math.max(0, (maxTime - elapsedSeconds) / maxTime);
+    points = Math.round(500 + (500 * timeFactor));
+  }
+
+  const ss = getActiveSS();
+  let logSheet = ss.getSheetByName('Live_Game_Logs');
+  if (!logSheet) {
+    logSheet = ss.insertSheet('Live_Game_Logs');
+    logSheet.appendRow(['Game_ID', 'Student_ID', 'Student_Name', 'Question_No', 'Selected_Answer', 'Is_Correct', 'Points_Earned', 'Timestamp']);
+  }
+
+  const gameId = props.getProperty('ACTIVE_GAME_ID');
+  logSheet.appendRow([gameId, studentId, studentName, questionIndex + 1, selectedAnswer, isCorrect, points, new Date()]);
+  SpreadsheetApp.flush();
+
+  return { success: true, isCorrect: isCorrect, pointsEarned: points };
+}
+
+/** 🟢 26. ดึงข้อมูลคะแนนรวม 5 อันดับแรกของ Live Game (Leaderboard) */
+function getLiveGameLeaderboard(gameId) {
+  try {
+    const ss = getActiveSS();
+    const logSheet = ss.getSheetByName('Live_Game_Logs');
+    if (!logSheet || logSheet.getLastRow() <= 1) return { success: true, data: [] };
+
+    const data = logSheet.getDataRange().getDisplayValues();
+    data.shift(); // เอาหัวตารางออก
+
+    const scores = {};
+    // กวาดข้อมูลและรวมคะแนน
+    data.forEach(r => {
+      if (String(r[0]).trim() === String(gameId).trim()) {
+        const sName = String(r[2]).trim(); // ชื่อนักศึกษา
+        const points = parseInt(r[6]) || 0; // คะแนนที่ได้
+        if (!scores[sName]) scores[sName] = 0;
+        scores[sName] += points;
+      }
+    });
+
+    // แปลง Object เป็น Array -> เรียงลำดับจากมากไปน้อย -> ตัดมาแค่ Top 5
+    const leaderboard = Object.keys(scores)
+      .map(name => ({ name: name, score: scores[name] }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+
+    return { success: true, data: leaderboard };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+}
+
+/** 🟢 27. ดึงข้อมูลรายงานผลสอบ E-Testing สำหรับ Dashboard ครู */
+function getExamDashboard() {
+  try {
+    const ss = getActiveSS();
+    const resSheet = ss.getSheetByName('Exam_Results');
+    if (!resSheet || resSheet.getLastRow() <= 1) return { success: true, data: [] };
+
+    const data = resSheet.getDataRange().getDisplayValues();
+    data.shift(); // เอาหัวตารางออก
+
+    // กรองเอาเฉพาะข้อมูลที่มีคะแนนและจัดรูปแบบ (ดึงข้อมูลล่าสุดขึ้นก่อน)
+    const results = data.map(r => ({
+      timestamp: r[0],
+      examId: r[1],
+      studentId: r[2],
+      studentName: r[3],
+      room: r[4],
+      score: parseInt(r[5]) || 0,
+      total: parseInt(r[6]) || 0,
+      percentage: parseInt(r[7]) || 0
+    })).filter(r => r.studentId !== '').reverse();
+
+    return { success: true, data: results };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
 }

@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>สรุปผลการประเมิน กิจกรรมสุจริตจิตอาสา ปี 2569 - วิทยาลัยเกษตรและเทคโนโลยีเชียงใหม่</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Kanit', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800">
+
+    <div id="login-screen" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 border border-slate-100">
+            <div class="text-center mb-6">
+                <div class="inline-flex items-center justify-center w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full mb-3 text-2xl font-bold">
+                    🔒
+                </div>
+                <h2 class="text-2xl font-bold text-slate-900">ระบบตรวจสอบผลการประเมิน</h2>
+                <p class="text-sm text-slate-500 mt-1">วิทยาลัยเกษตรและเทคโนโลยีเชียงใหม่</p>
+            </div>
+            <form id="login-form" onsubmit="handleLogin(event)" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">กรุณากรอกรหัสผ่านเพื่อเข้าใช้งาน</label>
+                    <input type="password" id="passcode" required placeholder="รหัสผ่าน" 
+                        class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition text-center tracking-widest text-lg font-semibold">
+                </div>
+                <div id="error-msg" class="text-red-500 text-sm text-center hidden">รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง</div>
+                <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 rounded-xl transition shadow-lg shadow-emerald-600/20">
+                    เข้าสู่ระบบ
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div id="dashboard" class="hidden">
+        <header class="bg-emerald-700 text-white shadow-md">
+            <div class="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-4">
+                <div>
+                    <span class="bg-emerald-800 text-emerald-100 text-xs px-3 py-1 rounded-full font-medium">ประจำปีงบประมาณ 2569</span>
+                    <h1 class="text-2xl sm:text-3xl font-bold mt-2">ผลการประเมินผู้เรียน กิจกรรมสุจริตจิตอาสา</h1>
+                    <p class="text-emerald-100 text-sm mt-1">วิทยาลัยเกษตรและเทคโนโลยีเชียงใหม่ | ครูผู้สอน: นายกีรติเทพ ทิยาว</p>
+                </div>
+                <button onclick="handleLogout()" class="bg-emerald-800 hover:bg-emerald-900 text-white text-sm px-4 py-2 rounded-lg transition border border-emerald-600">
+                    ออกจากระบบ
+                </button>
+            </div>
+        </header>
+
+        <main class="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8 space-y-6">
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <p class="text-sm font-medium text-slate-500">จำนวนผู้ส่งคำตอบทั้งหมด</p>
+                    <p id="total-students" class="text-3xl font-bold text-slate-900 mt-2">0</p>
+                    <span class="text-xs text-slate-400 mt-1 block">คน</span>
+                </div>
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <p class="text-sm font-medium text-slate-500">คะแนนเฉลี่ยรวม</p>
+                    <p id="avg-score" class="text-3xl font-bold text-emerald-600 mt-2">0%</p>
+                    <span class="text-xs text-slate-400 mt-1 block">จากคะแนนเต็ม 4,000 คะแนน</span>
+                </div>
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <p class="text-sm font-medium text-slate-500">คะแนนสูงสุด</p>
+                    <p id="max-score" class="text-3xl font-bold text-blue-600 mt-2">0 (100%)</p>
+                    <span class="text-xs text-slate-400 mt-1 block">คะแนนเต็ม</span>
+                </div>
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <p class="text-sm font-medium text-slate-500">สถานะการส่งงาน</p>
+                    <p class="text-3xl font-bold text-purple-600 mt-2">ส่งคำตอบแล้ว</p>
+                    <span class="text-xs text-slate-400 mt-1 block">100% ครบถ้วน</span>
+                </div>
+            </div>
+
+            <!-- Filter & Search Controls -->
+            <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-center">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1 uppercase tracking-wider">ค้นหาข้อมูล</label>
+                    <div class="relative">
+                        <input type="text" id="search-input" oninput="applyFilters()" placeholder="รหัส, ชื่อ, นามสกุล..." 
+                            class="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-sm transition">
+                        <span class="absolute left-3 top-2.5 text-slate-400">🔍</span>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1 uppercase tracking-wider">ระดับชั้น</label>
+                    <select id="level-filter" onchange="applyFilters()" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
+                        <option value="">ทุกระดับชั้น (ปวช. / ปวส.)</option>
+                        <option value="ปวช.">ประกาศนียบัตรวิชาชีพ (ปวช.)</option>
+                        <option value="ปวส.">ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1 uppercase tracking-wider">แผนกวิชา</label>
+                    <select id="dept-filter" onchange="applyFilters()" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
+                        <option value="">ทุกแผนกวิชา</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1 uppercase tracking-wider">เรียงลำดับ</label>
+                    <select id="sort-order" onchange="applyFilters()" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
+                        <option value="score-desc">คะแนน: สูงไปต่ำ (จัดอันดับ)</option>
+                        <option value="score-asc">คะแนน: ต่ำไปสูง</option>
+                        <option value="id-asc">รหัสนักศึกษา</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="flex justify-between items-center px-2">
+                <div class="text-sm text-slate-500">
+                    แสดงผลลัพธ์ทั้งหมด <span id="record-count" class="font-bold text-slate-800">0</span> รายการ
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-700 text-xs uppercase tracking-wider border-b border-slate-200 font-semibold">
+                                <th class="py-4 px-4 text-center">อันดับ</th>
+                                <th class="py-4 px-4">รหัสนักศึกษา</th>
+                                <th class="py-4 px-4">ชื่อ - นามสกุล</th>
+                                <th class="py-4 px-4">แผนกวิชา</th>
+                                <th class="py-4 px-4">ระดับชั้น</th>
+                                <th class="py-4 px-4 text-center">คะแนนที่ได้</th>
+                                <th class="py-4 px-4 text-center">ร้อยละ (%)</th>
+                                <th class="py-4 px-4 text-center">สถานะ</th>
+                                <th class="py-4 px-4">เวลาส่งคำตอบ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="student-table-body" class="divide-y divide-slate-100 text-sm text-slate-600">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Check session login state
+        window.onload = function() {
+            if (sessionStorage.getItem('isLoggedIn') === 'true') {
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('dashboard').classList.remove('hidden');
+                initApp();
+            }
+        };
+
+        function handleLogin(event) {
+            event.preventDefault();
+            const pass = document.getElementById('passcode').value;
+            if (pass === 'ITA') {
+                sessionStorage.setItem('isLoggedIn', 'true');
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('dashboard').classList.remove('hidden');
+                initApp();
+            } else {
+                document.getElementById('error-msg').classList.remove('hidden');
+            }
+        }
+
+        function handleLogout() {
+            sessionStorage.removeItem('isLoggedIn');
+            location.reload();
+        }
+
+        // Student Data from CSV
+        const studentData = [
+            { id: "68217010061", fname: "สิทธิศักดิ์", lname: "ปู่หมื่น", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 1425, max: 4000, percent: 35.63, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:47:52" },
+            { id: "6821070018", fname: "ศุภโชค", lname: "สมรัก", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 2325, max: 4000, percent: 58.13, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:49:29" },
+            { id: "69307090007", fname: "น.ส.ธัญวรินทร์", lname: "เอกศรี", dept: "31709 เทคโนโลยีและนวัตกรรมการเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3450, max: 4000, percent: 86.25, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:47:59" },
+            { id: "69317090008", fname: "เนตรอัปสร", lname: "วรโชติวนาไพร", dept: "31709 เทคโนโลยีและนวัตกรรมการเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3625, max: 4000, percent: 90.63, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:48:53" },
+            { id: "69317030016", fname: "นาย จิรเมธ ศักดิ์ชาติบำรุงกูล", lname: "ศักดิ์ชาติบำรุงกูล", dept: "31703 สัตวศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 2100, max: 4000, percent: 52.5, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:46:09" },
+            { id: "65217010077", fname: "พีรพีระพัฒน์", lname: "เขื่อนปัญปัญญา", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3175, max: 4000, percent: 79.38, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:46:00" },
+            { id: "68217010002", fname: "นายชวลิต", lname: "ไผทเสริมบุญ", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3675, max: 4000, percent: 91.88, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:56:56" },
+            { id: "68217010067", fname: "นายโชคชัย", lname: "-", dept: "31704 ช่างกลเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 2025, max: 4000, percent: 50.63, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:45:24" },
+            { id: "69317060003", fname: "นายฐาปนพงศ์", lname: "ดวงตาติ๊บ", dept: "31706 เทคโนโลยีการจัดการธุรกิจเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3500, max: 4000, percent: 87.5, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:55:02" },
+            { id: "68217010056", fname: "นายวรากร", lname: "สมคิดธำรงไพร", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3175, max: 4000, percent: 79.38, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:47:53" },
+            { id: "68217010048", fname: "แดง", lname: "สร้อยแสง", dept: "31704 ช่างกลเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3425, max: 4000, percent: 85.63, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:50:51" },
+            { id: "68217010081", fname: "ศิวกร", lname: "ตุงแสง", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3250, max: 4000, percent: 81.25, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:45:42" },
+            { id: "69317020015", fname: "ศุภชัย", lname: "ลุนละวัน", dept: "31702 พืชศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 1900, max: 4000, percent: 47.5, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:42:38" },
+            { id: "68217010070", fname: "นาย ณัณัฐพล", lname: "เขื่อนคำ", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3800, max: 4000, percent: 95.0, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:44:27" },
+            { id: "68217010049", fname: "ธนกร", lname: "มาลัยวรรฌ์", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 1750, max: 4000, percent: 43.75, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:40:42" },
+            { id: "69317150002", fname: "นายยศกร", lname: "หอมวิลัย", dept: "31715 เพาะเลี้ยงสัตว์น้ำ", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3175, max: 4000, percent: 79.38, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:48:36" },
+            { id: "69317040002", fname: "ไชยภัทร", lname: "เทพกัน", dept: "31704 ช่างกลเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3900, max: 4000, percent: 97.5, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:42:46" },
+            { id: "68217010014", fname: "ภานุวัฒน์", lname: "สอยแสงวงค์", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3700, max: 4000, percent: 92.5, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:44:15" },
+            { id: "68217010038", fname: "อภิชาติ", lname: "เลาเทาะ", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 2100, max: 4000, percent: 52.5, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:41:36" },
+            { id: "6317030025", fname: "พาทิศ", lname: "สบเสบเมยทอง", dept: "31703 สัตวศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 2400, max: 4000, percent: 60.0, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:40:26" },
+            { id: "6931704001", fname: "ไกรวิชญ์", lname: "กังสดาลพนา", dept: "31704 ช่างกลเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3225, max: 4000, percent: 80.63, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:45:04" },
+            { id: "682170066", fname: "นาย ชีวิน", lname: "รักเป่าดง", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3375, max: 4000, percent: 84.38, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:44:17" },
+            { id: "69317030028", fname: "นาย วัฒวัฒนพงษ์", lname: "สิริแสิริแจ่มพงศ์", dept: "31703 สัตวศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3800, max: 4000, percent: 95.0, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:44:05" },
+            { id: "69317030008", fname: "ฟ้า", lname: "ภูเขียว", dept: "31703 สัตวศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3350, max: 4000, percent: 83.75, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:42:08" },
+            { id: "67217010075", fname: "ผดุงผดุงศรี", lname: "แซ่เฮ่อร์", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3750, max: 4000, percent: 93.75, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:42:23" },
+            { id: "69317030021", fname: "ธนันชัย", lname: "ดาวประกายสี", dept: "31703 สัตวศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3475, max: 4000, percent: 86.88, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:45:29" },
+            { id: "68217010060", fname: "นายสลักลักษณ์", lname: "ใจใหม่", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3375, max: 4000, percent: 84.38, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:48:07" },
+            { id: "69317020011", fname: "ธีรพงษ์", lname: "ชุลีกรมงคล", dept: "31702 พืชศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 2400, max: 4000, percent: 60.0, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:42:17" },
+            { id: "68217010085", fname: "น.ส หมื่อหมึ", lname: "-", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3675, max: 4000, percent: 91.88, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:44:50" },
+            { id: "6931730009", fname: "ภูวนาถ", lname: "นาคสืบวงศ์", dept: "31703 สัตวศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 2175, max: 4000, percent: 54.38, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:42:17" },
+            { id: "68217010030", fname: "ธาวิน", lname: "นุตะละ", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 2025, max: 4000, percent: 50.63, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:43:51" },
+            { id: "69317140005", fname: "พลอยมณี", lname: "สงวนศักดิ์", dept: "31714 เทคโนโลยีผลิตภัณฑ์อาหาร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3325, max: 4000, percent: 83.13, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:45:18" },
+            { id: "69317020018", fname: "นายจิรพัส", lname: "ผาติอมรกิจ", dept: "31702 พืชศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3100, max: 4000, percent: 77.5, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:45:07" },
+            { id: "69317050013", fname: "พัฒนะพงษ์", lname: "ปิยพัทธ์อุ", dept: "31702 พืชศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3250, max: 4000, percent: 81.25, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:48:18" },
+            { id: "69317020007", fname: "สุรชาติ", lname: "เมฆสวรรค์บำรุง", dept: "31702 พืชศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 2575, max: 4000, percent: 64.38, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:48:04" },
+            { id: "68217010076", fname: "นาย พรภวิษย์", lname: "แซ่เจ่า", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 2325, max: 4000, percent: 58.13, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:47:32" },
+            { id: "69317020002", fname: "ชุติพนธ์", lname: "เกาะทู", dept: "31702 พืชศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3150, max: 4000, percent: 78.75, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:46:27" },
+            { id: "68217010079", fname: "นายศราวุธ", lname: "เลิศนิมิตเมตตา", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 2850, max: 4000, percent: 71.25, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:53:07" },
+            { id: "69317030002", fname: "กรวิชญ์", lname: "โชติเวทย์ฤทธิกุล", dept: "31703 สัตวศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 2275, max: 4000, percent: 56.88, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:42:33" },
+            { id: "68217010035", fname: "นาย วีรศักดิ์", lname: "เกียรติยากุล", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 2225, max: 4000, percent: 55.63, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:43:53" },
+            { id: "69317040007", fname: "พลวัต", lname: "พาหุพันธ์", dept: "31704 ช่างกลเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3400, max: 4000, percent: 85.0, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:46:43" },
+            { id: "69317090021", fname: "สมจิตร", lname: "เปรมปรีสมปอง", dept: "31709 เทคโนโลยีและนวัตกรรมการเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3350, max: 4000, percent: 83.75, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:47:10" },
+            { id: "69317020020", fname: "ธีรพงศ์", lname: "พนาสันติกุล", dept: "31702 พืชศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3225, max: 4000, percent: 80.63, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:46:35" },
+            { id: "68217010015", fname: "นางสาวรุ่งรดา", lname: "ไผ่อำไพทอง", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 2300, max: 4000, percent: 57.5, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:42:41" },
+            { id: "6931709009", fname: "บารมี", lname: "ธารศรีทอง", dept: "31709 เทคโนโลยีและนวัตกรรมการเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3725, max: 4000, percent: 93.13, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:45:31" },
+            { id: "69317030024", fname: "นานพัชรดนัย", lname: "กันตี", dept: "31703 สัตวศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3250, max: 4000, percent: 81.25, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:43:10" },
+            { id: "69317040009", fname: "รัตนากร", lname: "เครือทะวงค์", dept: "31704 ช่างกลเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3325, max: 4000, percent: 83.13, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:46:48" },
+            { id: "68317030031", fname: "กนกอร", lname: "ปู่มองผอ", dept: "31703 สัตวศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3225, max: 4000, percent: 80.63, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:50:06" },
+            { id: "69317090002", fname: "กนต์รพี", lname: "เลิศวทัญญูสกุล", dept: "31709 เทคโนโลยีและนวัตกรรมการเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3350, max: 4000, percent: 83.75, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:44:01" },
+            { id: "68317030034", fname: "นางสาว ทีบลิพอ", lname: "-", dept: "31703 สัตวศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3150, max: 4000, percent: 78.75, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:48:30" },
+            { id: "69317030017", fname: "จีราพันธ์", lname: "ดาวประกายสี", dept: "31703 สัตวศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3150, max: 4000, percent: 78.75, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:45:28" },
+            { id: "68217010062", fname: "สิรินุช", lname: "ธาดารักษ์สกุล", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3675, max: 4000, percent: 91.88, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:43:56" },
+            { id: "69317030012", fname: "สวิง", lname: "เกียรติยากุล", dept: "31703 สัตวศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3225, max: 4000, percent: 80.63, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:42:18" },
+            { id: "69317090014", fname: "วิฑูรย์", lname: "พนาสุขสันติ", dept: "31709 เทคโนโลยีและนวัตกรรมการเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3050, max: 4000, percent: 76.25, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:46:36" },
+            { id: "68217010130", fname: "อาเครือ", lname: "ลุงจายคู", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3850, max: 4000, percent: 96.25, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:43:07" },
+            { id: "69317090003", fname: "โกวิท", lname: "ศิริวรรณ์", dept: "31709 เทคโนโลยีและนวัตกรรมการเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3500, max: 4000, percent: 87.5, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:48:17" },
+            { id: "69317060001", fname: "กมลภพ", lname: "ประสิทธิ์", dept: "31706 เทคโนโลยีการจัดการธุรกิจเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3600, max: 4000, percent: 90.0, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:43:07" },
+            { id: "69317030018", fname: "ณัฐชา", lname: "เรืองกิจขยัน", dept: "31703 สัตวศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3700, max: 4000, percent: 92.5, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:43:24" },
+            { id: "68217010064", fname: "นางสาวขวัญจิรา", lname: "สบลานสวัสดิ์", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 2875, max: 4000, percent: 71.88, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:45:01" },
+            { id: "69317090013", fname: "ภัทรชัย", lname: "ชัยปรัชญาพร", dept: "31709 เทคโนโลยีและนวัตกรรมการเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3850, max: 4000, percent: 96.25, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:45:58" },
+            { id: "69317030006", fname: "ธีระเทพ", lname: "จันตา", dept: "31703 สัตวศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3100, max: 4000, percent: 77.5, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:45:41" },
+            { id: "6937090020", fname: "สมเกียรติ", lname: "ธันยพรประทาน", dept: "31709 เทคโนโลยีและนวัตกรรมการเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3725, max: 4000, percent: 93.13, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:43:36" },
+            { id: "69317090005", fname: "นายชินภัทร", lname: "สีจันโท", dept: "31709 เทคโนโลยีและนวัตกรรมการเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3250, max: 4000, percent: 81.25, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:44:00" },
+            { id: "69317020010", fname: "ธาวิน", lname: "เติมบรรยงกุล", dept: "31702 พืชศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3225, max: 4000, percent: 80.63, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:45:34" },
+            { id: "68217010058", fname: "น.ส วิลาวัณย์", lname: "พนาดาวเด่น", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3850, max: 4000, percent: 96.25, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:44:58" },
+            { id: "69317090016", fname: "นายศักย๋ศรณ์", lname: "กิจโชคประเสริฐ", dept: "31709 เทคโนโลยีและนวัตกรรมการเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3550, max: 4000, percent: 88.75, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:44:40" },
+            { id: "69317030022", fname: "ธีรภัทร", lname: "ยศงาม", dept: "31703 สัตวศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3900, max: 4000, percent: 97.5, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:42:39" },
+            { id: "68217010033", fname: "นางสาวมณฑิตา", lname: "ศักดิ์ชัยบูรณ์", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 2950, max: 4000, percent: 73.75, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:44:44" },
+            { id: "69317090027", fname: "อรุณ", lname: "แสงใส", dept: "31709 เทคโนโลยีและนวัตกรรมการเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3675, max: 4000, percent: 91.88, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:43:31" },
+            { id: "69317090018", fname: "นายศุภกิตต์", lname: "สขิสดุดี", dept: "31709 เทคโนโลยีและนวัตกรรมการเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 4000, max: 4000, percent: 100.0, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:49:01" },
+            { id: "6931703001", fname: "นางสาวหน่อมึชิ", lname: "-", dept: "31703 สัตวศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 2850, max: 4000, percent: 71.25, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:47:22" },
+            { id: "68217010071", fname: "นภัสสร", lname: "ธวัฒน์สิริ", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3650, max: 4000, percent: 91.25, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:43:21" },
+            { id: "68217010074", fname: "ปองคุณ", lname: "ลุงชัย", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3025, max: 4000, percent: 75.63, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:42:18" },
+            { id: "69317060006", fname: "ปานเพชร", lname: "ปัญโญ", dept: "31706 เทคโนโลยีการจัดการธุรกิจเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 2925, max: 4000, percent: 73.13, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:46:26" },
+            { id: "68217010052", fname: "น.ส.โยแล", lname: "-", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3675, max: 4000, percent: 91.88, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:43:52" },
+            { id: "69317090026", fname: "อภินันต์", lname: "สุริยะ", dept: "31709 เทคโนโลยีและนวัตกรรมการเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3900, max: 4000, percent: 97.5, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:43:33" },
+            { id: "68217010005", fname: "ณภัทร", lname: "จิรวัชรโภคิน", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 2400, max: 4000, percent: 60.0, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:48:12" },
+            { id: "68217010086", fname: "จิ่ง", lname: "ลุงคำ", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3150, max: 4000, percent: 78.75, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:45:32" },
+            { id: "69317090001", fname: "กนกวรรณ", lname: "ภัทรเสถียรชัย", dept: "31709 เทคโนโลยีและนวัตกรรมการเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3425, max: 4000, percent: 85.63, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:43:40" },
+            { id: "6931706005", fname: "นิภาพร", lname: "สิริวนาชัย", dept: "31706 เทคโนโลยีการจัดการธุรกิจเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3500, max: 4000, percent: 87.5, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:42:52" },
+            { id: "69317030023", fname: "นายปฏิพัฒน์", lname: "พิริยะพงศ์พาณิช", dept: "31703 สัตวศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3625, max: 4000, percent: 90.63, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:45:02" },
+            { id: "69317090019", fname: "ศุภโชค", lname: "ภาพิธุ", dept: "31709 เทคโนโลยีและนวัตกรรมการเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 2975, max: 4000, percent: 74.38, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:46:31" },
+            { id: "69317020022", fname: "มือถือ", lname: "ครองบังอาครองบังอาจ", dept: "31702 พืชศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3075, max: 4000, percent: 76.88, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:44:10" },
+            { id: "69317020004", fname: "วรเมธ", lname: "หรี่จา", dept: "31702 พืชศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3650, max: 4000, percent: 91.25, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:42:26" },
+            { id: "69317060009", fname: "อนุภาพ", lname: "ภิระบรรณ", dept: "31706 เทคโนโลยีการจัดการธุรกิจเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3700, max: 4000, percent: 92.5, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:43:32" },
+            { id: "68217010063", fname: "นายอดิศักดิ์", lname: "ชื่นชมนาง", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3575, max: 4000, percent: 89.38, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:44:21" },
+            { id: "68217010059", fname: "นาย ศุภสิน", lname: "แหล่โพแหนะ", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 2950, max: 4000, percent: 73.75, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:43:13" },
+            { id: "69317090022", fname: "สมโชค", lname: "วุฒิศีลวัต", dept: "31709 เทคโนโลยีและนวัตกรรมการเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3800, max: 4000, percent: 95.0, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:49:14" },
+            { id: "68217010057", fname: "นายวริทธิ์ดนย์", lname: "แสนคำแพรวเดชา", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3900, max: 4000, percent: 97.5, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:43:05" },
+            { id: "69317030015", fname: "จตุพร", lname: "จตุรพิธสุขสกุล", dept: "31703 สัตวศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3150, max: 4000, percent: 78.75, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:43:24" },
+            { id: "69317020003", fname: "ไชยาสิทธิ์", lname: "สิทธิ์คงดิลก", dept: "31702 พืชศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3725, max: 4000, percent: 93.13, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:42:27" },
+            { id: "68217010013", fname: "ธีรภัทร์", lname: "ควรนิคม", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3550, max: 4000, percent: 88.75, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:43:24" },
+            { id: "69317020017", fname: "คิรากร", lname: "กระจ่างกิจชมชิด", dept: "31702 พืชศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 2750, max: 4000, percent: 68.75, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:43:34" },
+            { id: "68217010041", fname: "กนกอร", lname: "แสงกระจ่างพราว", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 2625, max: 4000, percent: 65.63, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:47:35" },
+            { id: "68217010068", fname: "นางสาวญาณิศา", lname: "สุขจี๋", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3625, max: 4000, percent: 90.63, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:42:52" },
+            { id: "69317030033", fname: "พัณณิตา", lname: "ธาราหรรษา", dept: "31703 สัตวศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3450, max: 4000, percent: 86.25, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:42:10" },
+            { id: "69317020012", fname: "นาย พัชรพล", lname: "สัตย์ซื่อ", dept: "31702 พืชศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3225, max: 4000, percent: 80.63, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:42:41" },
+            { id: "69317090025", fname: "อธิป", lname: "เดชาไพร", dept: "31709 เทคโนโลยีและนวัตกรรมการเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3850, max: 4000, percent: 96.25, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:48:07" },
+            { id: "69317040003", fname: "ต่อตระกูล", lname: "เป็งคำมา", dept: "31704 ช่างกลเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 4000, max: 4000, percent: 100.0, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:44:15" },
+            { id: "69317060004", fname: "ณิชนันท์", lname: "เกลียวมนิลา", dept: "31706 เทคโนโลยีการจัดการธุรกิจเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3075, max: 4000, percent: 76.88, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:41:14" },
+            { id: "69317020009", fname: "ธนดล", lname: "วงค์คำมูล", dept: "31702 พืชศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3050, max: 4000, percent: 76.25, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:43:13" },
+            { id: "69317030026", fname: "ภัทรพงษ์", lname: "โปธา", dept: "31703 สัตวศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 2750, max: 4000, percent: 68.75, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:40:55" },
+            { id: "69317140002", fname: "กัญญาภัค", lname: "ไฮคำ", dept: "31714 เทคโนโลยีผลิตภัณฑ์อาหาร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 2825, max: 4000, percent: 70.63, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:41:52" },
+            { id: "69317090017", fname: "ศิริโชค", lname: "อายี", dept: "31709 เทคโนโลยีและนวัตกรรมการเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3300, max: 4000, percent: 82.5, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:44:10" },
+            { id: "68217010073", fname: "บุษบา", lname: "เจตดิลกกุล", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3625, max: 4000, percent: 90.63, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:45:29" },
+            { id: "69317020001", fname: "จิตสุภา", lname: "อักโขภิณีกนก", dept: "31702 พืชศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 2950, max: 4000, percent: 73.75, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:45:18" },
+            { id: "69317060002", fname: "ชลัมพล", lname: "เเก้วหน้อย", dept: "31706 เทคโนโลยีการจัดการธุรกิจเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3250, max: 4000, percent: 81.25, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:41:16" },
+            { id: "68217010022", fname: "อภิวิชญ์", lname: "ลิลิต", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3250, max: 4000, percent: 81.25, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:44:28" },
+            { id: "69317140006", fname: "น.ส.วรรณนัช", lname: "แซ่ย้าง", dept: "31714 เทคโนโลยีผลิตภัณฑ์อาหาร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 2600, max: 4000, percent: 65.0, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:41:22" },
+            { id: "68217010006", fname: "ณัฐวัฒน์", lname: "ใจมาธิ", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 2825, max: 4000, percent: 70.63, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:48:17" },
+            { id: "69317140007", fname: "ศิริกัญญา", lname: "ภูโสภา", dept: "31714 เทคโนโลยีผลิตภัณฑ์อาหาร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3125, max: 4000, percent: 78.13, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:42:51" },
+            { id: "68217010043", fname: "นาย คณุตม์", lname: "เเซ่ย่าง", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 2950, max: 4000, percent: 73.75, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:46:54" },
+            { id: "69317020016", fname: "นาย อัครเดช", lname: "วิเก่ะ", dept: "31702 พืชศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3325, max: 4000, percent: 83.13, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:44:31" },
+            { id: "69317030027", fname: "มณฑิรา", lname: "อินใจ", dept: "31703 สัตวศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3000, max: 4000, percent: 75.0, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:46:57" },
+            { id: "682170012", fname: "ธนากุล", lname: "แสงทอง", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 2200, max: 4000, percent: 55.0, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:36:56" },
+            { id: "68217010080", fname: "นางสาวศศิกานต์", lname: "วิไลวรรณ์", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3900, max: 4000, percent: 97.5, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:40:20" },
+            { id: "69317030032", fname: "นภาพร", lname: "ปรีชาสุปรีชาสุขสันต์", dept: "31703 สัตวศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3575, max: 4000, percent: 89.38, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:42:41" },
+            { id: "69317090010", fname: "ปี", lname: "ลุงคำ", dept: "31709 เทคโนโลยีและนวัตกรรมการเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 4000, max: 4000, percent: 100.0, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:43:12" },
+            { id: "68217010088", fname: "น.ส.ลีลาวดี", lname: "แซ่มัว", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3225, max: 4000, percent: 80.63, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:42:40" },
+            { id: "69317090011", fname: "พลอยไพลิน", lname: "ปิ่นเจริญ", dept: "31709 เทคโนโลยีและนวัตกรรมการเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 2525, max: 4000, percent: 63.13, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:40:51" },
+            { id: "68217010042", fname: "ขวัญดาว", lname: "ประเดิมโชค", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3800, max: 4000, percent: 95.0, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:42:49" },
+            { id: "69317140004", fname: "ธนดล", lname: "พรมมา", dept: "31714 เทคโนโลยีผลิตภัณฑ์อาหาร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 2175, max: 4000, percent: 54.38, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:37:28" },
+            { id: "69317030029", fname: "นายศาสตรา", lname: "เปี้ยปลูก", dept: "31703 สัตวศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 4000, max: 4000, percent: 100.0, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:40:11" },
+            { id: "68217010028", fname: "นายทุนจ่าม", lname: "-", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3300, max: 4000, percent: 82.5, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:43:55" },
+            { id: "68217010051", fname: "ประพประพัฒน์", lname: "แซ่ว่าง", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3675, max: 4000, percent: 91.88, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:44:33" },
+            { id: "69317030010", fname: "ลอย", lname: "นายสา", dept: "31703 สัตวศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3750, max: 4000, percent: 93.75, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:44:00" },
+            { id: "682170032", fname: "นาย พะดาดา", lname: "-", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3550, max: 4000, percent: 88.75, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:44:19" },
+            { id: "68217010082", fname: "นางสาว สรัลพร", lname: "เกลียวมนิลา", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3125, max: 4000, percent: 78.13, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:41:57" },
+            { id: "69317020", fname: "ทิฆัมพร", lname: "ศักดิ์สถิตย์ชัย", dept: "31703 สัตวศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3275, max: 4000, percent: 81.88, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:41:55" },
+            { id: "68217010021", fname: "น.ส.สุชัญญา", lname: "เทวตา", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 2775, max: 4000, percent: 69.38, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:41:17" },
+            { id: "69317090028", fname: "อากู่", lname: "อางี", dept: "31709 เทคโนโลยีและนวัตกรรมการเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3775, max: 4000, percent: 94.38, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:42:18" },
+            { id: "68217010047", fname: "ณิชกานต์", lname: "สุขแพ่ง", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3450, max: 4000, percent: 86.25, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:39:44" },
+            { id: "68217010044", fname: "น.ส.จิดาภา", lname: "พฤกษาฉิมพลี", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3125, max: 4000, percent: 78.13, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:40:22" },
+            { id: "69317030030", fname: "สมชัย", lname: "หยางสกุลดี", dept: "31703 สัตวศาสตร์", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3200, max: 4000, percent: 80.0, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:40:25" },
+            { id: "6317090012", fname: "พิชชาภา", lname: "ทามงคล", dept: "31709 เทคโนโลยีและนวัตกรรมการเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3575, max: 4000, percent: 89.38, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:41:02" },
+            { id: "68217010010", fname: "น.ส ธนพร", lname: "สุวรรณ์", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3650, max: 4000, percent: 91.25, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:40:30" },
+            { id: "69317090024", fname: "นายอดุลย์", lname: "เลาเทาะ", dept: "31709 เทคโนโลยีและนวัตกรรมการเกษตร", level: "ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.) ชั้นปีที่ 1", score: 3950, max: 4000, percent: 98.75, status: "ส่งคำตอบแล้ว", time: "2026-08-20 15:43:59" },
+            { id: "13555125", fname: "sadasd", lname: "adasd", dept: "21701 เกษตรศาสตร์", level: "ประกาศนียบัตรวิชาชีพ (ปวช.) ชั้นปีที่ 2", score: 3800, max: 4000, percent: 95.0, status: "ส่งคำตอบแล้ว", time: "2026-08-28 10:37:45" }
+        ];
+
+        function initApp() {
+            populateDepartmentDropdown();
+            applyFilters();
+        }
+
+        function populateDepartmentDropdown() {
+            const deptSet = new Set();
+            studentData.forEach(item => deptSet.add(item.dept));
+            const deptFilter = document.getElementById('dept-filter');
+            
+            deptSet.forEach(dept => {
+                const option = document.createElement('option');
+                option.value = dept;
+                option.textContent = dept;
+                deptFilter.appendChild(option);
+            });
+        }
+
+        function applyFilters() {
+            const query = document.getElementById('search-input').value.toLowerCase();
+            const levelVal = document.getElementById('level-filter').value;
+            const deptVal = document.getElementById('dept-filter').value;
+            const sortVal = document.getElementById('sort-order').value;
+
+            // 1. Filter
+            let filtered = studentData.filter(item => {
+                const matchesQuery = item.id.toLowerCase().includes(query) ||
+                                     item.fname.toLowerCase().includes(query) ||
+                                     item.lname.toLowerCase().includes(query) ||
+                                     item.dept.toLowerCase().includes(query);
+                
+                const matchesLevel = levelVal === "" || item.level.includes(levelVal);
+                const matchesDept = deptVal === "" || item.dept === deptVal;
+
+                return matchesQuery && matchesLevel && matchesDept;
+            });
+
+            // 2. Sort
+            filtered.sort((a, b) => {
+                if (sortVal === 'score-desc') {
+                    return b.score - a.score;
+                } else if (sortVal === 'score-asc') {
+                    return a.score - b.score;
+                } else if (sortVal === 'id-asc') {
+                    return a.id.localeCompare(b.id);
+                }
+            });
+
+            renderTable(filtered);
+            updateStats(filtered);
+        }
+
+        function renderTable(data) {
+            const tableBody = document.getElementById('student-table-body');
+            tableBody.innerHTML = '';
+            
+            if (data.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="9" class="text-center py-8 text-slate-400">ไม่พบข้อมูลนักศึกษาที่ค้นหา</td></tr>`;
+                document.getElementById('record-count').innerText = 0;
+                return;
+            }
+
+            data.forEach((item, index) => {
+                const row = document.createElement('tr');
+                row.className = "hover:bg-slate-50 transition border-b border-slate-50";
+                
+                // Highlight top 3 ranks if sorting by score desc
+                let rankBadge = `<span class="text-slate-500 font-medium">${index + 1}</span>`;
+                if (document.getElementById('sort-order').value === 'score-desc') {
+                    if (index === 0) rankBadge = `<span class="inline-flex items-center justify-center w-6 h-6 bg-amber-100 text-amber-700 rounded-full font-bold text-xs">🥇 1</span>`;
+                    else if (index === 1) rankBadge = `<span class="inline-flex items-center justify-center w-6 h-6 bg-slate-200 text-slate-700 rounded-full font-bold text-xs">🥈 2</span>`;
+                    else if (index === 2) rankBadge = `<span class="inline-flex items-center justify-center w-6 h-6 bg-orange-100 text-orange-800 rounded-full font-bold text-xs">🥉 3</span>`;
+                }
+
+                row.innerHTML = `
+                    <td class="py-3 px-4 text-center font-semibold">${rankBadge}</td>
+                    <td class="py-3 px-4 font-mono text-xs font-semibold text-slate-700">${item.id}</td>
+                    <td class="py-3 px-4 font-medium text-slate-900">${item.fname} ${item.lname !== '-' ? item.lname : ''}</td>
+                    <td class="py-3 px-4"><span class="bg-slate-100 text-slate-700 text-xs px-2.5 py-1 rounded-md font-medium">${item.dept}</span></td>
+                    <td class="py-3 px-4 text-xs text-slate-500">${item.level}</td>
+                    <td class="py-3 px-4 text-center font-semibold text-slate-700">${item.score} / ${item.max}</td>
+                    <td class="py-3 px-4 text-center">
+                        <span class="inline-block px-2.5 py-1 rounded-full text-xs font-bold ${item.percent >= 80 ? 'bg-emerald-100 text-emerald-700' : item.percent >= 50 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}">
+                            ${item.percent}%
+                        </span>
+                    </td>
+                    <td class="py-3 px-4 text-center"><span class="text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded font-medium">${item.status}</span></td>
+                    <td class="py-3 px-4 text-xs text-slate-400 font-mono">${item.time}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+
+            document.getElementById('record-count').innerText = data.length;
+        }
+
+        function updateStats(data) {
+            const total = data.length;
+            document.getElementById('total-students').innerText = total;
+
+            if (total > 0) {
+                const totalPercent = data.reduce((acc, curr) => acc + curr.percent, 0);
+                const avgPercent = (totalPercent / total).toFixed(2);
+                document.getElementById('avg-score').innerText = avgPercent + '%';
+
+                const maxScoreObj = data.reduce((prev, current) => (prev.score > current.score) ? prev : current);
+                document.getElementById('max-score').innerText = `${maxScoreObj.score} (${maxScoreObj.percent}%)`;
+            } else {
+                document.getElementById('avg-score').innerText = '0%';
+                document.getElementById('max-score').innerText = '0 (0%)';
+            }
+        }
+    </script>
+</body>
+</html>

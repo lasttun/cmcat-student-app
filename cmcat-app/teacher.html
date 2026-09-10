@@ -744,10 +744,16 @@ function renderTable(students, sdqMap) {
             const monthSet = new Set();
             globalAttendanceData.forEach(studentHistory => {
                 studentHistory.forEach(record => {
-                    const dateStr = record[1]; 
+                    let dateStr = record[1] ? String(record[1]).trim() : ""; 
                     if(dateStr) {
                         const parts = dateStr.split('/');
-                        if(parts.length === 3) monthSet.add(`${parts[2]}-${parts[1]}`);
+                        if(parts.length === 3) {
+                            let m = parts[1].padStart(2, '0');
+                            let y = parts[2];
+                            // ถ้าเป็น พ.ศ. (> 2500) ให้ลบ 543 กลับเป็น ค.ศ. ก่อนสร้าง Dropdown
+                            if (parseInt(y) > 2500) y = (parseInt(y) - 543).toString(); 
+                            monthSet.add(`${y}-${m}`);
+                        }
                     }
                 });
             });
@@ -802,11 +808,17 @@ function renderTable(students, sdqMap) {
 
         globalAttendanceData.forEach(history => {
             history.forEach(record => {
-                const dateStr = record[1];
+                let dateStr = record[1] ? String(record[1]).trim() : "";
                 if(dateStr) {
                     const parts = dateStr.split('/');
                     if(parts.length === 3) {
-                        const mKey = `${parts[2]}-${parts[1]}`;
+                        const d = parts[0].padStart(2, '0');
+                        const m = parts[1].padStart(2, '0');
+                        let y = parts[2];
+                        if (parseInt(y) > 2500) y = (parseInt(y) - 543).toString();
+                        dateStr = `${d}/${m}/${y}`; // แปลงเป็นฟอร์แมตมาตรฐาน
+
+                        const mKey = `${y}-${m}`;
                         allMonthsInTerm.add(mKey);
                         if (typeSelect === 'term_summary' || mKey === selectedMonth) activeDates.add(dateStr);
 
@@ -866,12 +878,27 @@ function renderTable(students, sdqMap) {
             let present = 0, late = 0, leave = 0, absent = 0;
             let monthStats = {}; let statusMap = {};
 
+            // 1. แปลงวันที่และจัดการข้อมูลซ้ำ ให้นับวันละ 1 ครั้งเท่านั้น
             historyData.forEach(record => {
-                const dStr = record[1]; if(!dStr) return;
+                let dStr = record[1] ? String(record[1]).trim() : ""; 
+                if(!dStr) return;
+                const parts = dStr.split('/');
+                if(parts.length === 3) {
+                    const d = parts[0].padStart(2, '0');
+                    const m = parts[1].padStart(2, '0');
+                    let y = parts[2];
+                    if (parseInt(y) > 2500) y = (parseInt(y) - 543).toString();
+                    dStr = `${d}/${m}/${y}`;
+                }
+                // ถ้าระบบเจอวันซ้ำกัน มันจะเขียนทับไปเลย ทำให้เหลือวันละ 1 Record เท่านั้น
+                statusMap[dStr] = record[5]; 
+            });
+
+            // 2. คำนวณสถิติจากชุดข้อมูลที่ตัดส่วนซ้ำซ้อนออกไปแล้ว
+            Object.keys(statusMap).forEach(dStr => {
                 const mKey = `${dStr.split('/')[2]}-${dStr.split('/')[1]}`;
-                const status = record[5];
+                const status = statusMap[dStr];
                 
-                if (mKey === selectedMonth) statusMap[dStr] = status;
                 if(!monthStats[mKey]) monthStats[mKey] = { active:0, present:0, late:0, leave:0 };
                 monthStats[mKey].active++;
                 if(status === 'มา') monthStats[mKey].present++; else if(status === 'สาย') monthStats[mKey].late++; else if(status === 'ลา') monthStats[mKey].leave++;

@@ -89,6 +89,9 @@
             </div>
         </div>
         <div class="flex items-center gap-2">
+            <button onclick="openSavingsReport()" class="bg-teal-600 text-white hover:bg-teal-700 px-3 py-2 md:px-4 md:py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all shadow-sm flex items-center gap-1.5 shrink-0 border border-teal-500">
+                💰 <span class="hidden sm:inline">เช็คการออมเงิน</span>
+            </button>
             <button onclick="openSpeechModule()" class="bg-indigo-600 text-white hover:bg-indigo-700 px-3 py-2 md:px-4 md:py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all shadow-sm flex items-center gap-1.5 shrink-0 border border-indigo-500">
                 📢 <span class="hidden sm:inline">บันทึกอบรมหน้าเสาธง</span>
             </button>
@@ -244,6 +247,27 @@
             </div>
             <div class="p-4 md:p-6 overflow-y-auto flex-1 custom-scrollbar">
                 <div id="att-report-content" class="overflow-x-auto text-sm"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 💰 Savings Report Modal (เพิ่มใหม่) -->
+    <div id="savings-report-modal" class="hidden fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-2 md:p-4">
+        <div class="bg-white rounded-[2.5rem] w-full max-w-6xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
+            <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-teal-50/50 no-print-modal-header">
+                <div>
+                    <h2 class="text-2xl font-bold text-teal-800">💰 ระบบติดตามการออมเงิน</h2>
+                    <p class="text-teal-700 font-medium text-sm mt-1">สรุปยอดการออมเงินประจำเดือน ห้อง <span id="sv-room-label" class="font-bold"></span></p>
+                </div>
+                <div class="flex gap-2 items-center">
+                    <button onclick="printSavingsReport()" class="hidden sm:flex bg-slate-800 text-white hover:bg-slate-900 px-4 py-2 rounded-xl shadow-sm transition-all font-bold text-sm items-center gap-2 border border-slate-700">
+                        🖨️ พิมพ์รายงาน
+                    </button>
+                    <button onclick="closeSavingsReport()" class="bg-white text-slate-400 hover:text-red-500 p-2 rounded-full shadow-sm hover:shadow transition-all font-bold text-xl px-3 py-1">&times;</button>
+                </div>
+            </div>
+            <div class="p-4 md:p-6 overflow-y-auto flex-1 custom-scrollbar">
+                <div id="savings-report-content" class="overflow-x-auto text-sm"></div>
             </div>
         </div>
     </div>
@@ -1336,6 +1360,187 @@ function renderTable(students, sdqMap) {
         setTimeout(() => {
             window.print();
         }, 800);
+    }
+
+    // ==========================================
+    // 💰 SAVINGS TRACKER (ระบบสำหรับครูที่ปรึกษา)
+    // ==========================================
+    async function openSavingsReport() {
+        const roomString = document.getElementById('room-select').value;
+        if(!roomString) return Swal.fire('แจ้งเตือน', 'กรุณาเลือกห้องเรียนก่อนทำการเช็คข้อมูลออมเงิน', 'warning');
+        
+        document.getElementById('sv-room-label').innerText = roomString;
+        document.getElementById('savings-report-modal').classList.remove('hidden');
+        
+        const content = document.getElementById('savings-report-content');
+        content.innerHTML = `<div class="text-center py-12"><div class="animate-spin rounded-full h-12 w-12 border-4 border-teal-100 border-t-teal-600 mx-auto mb-4"></div><p class="text-teal-700 font-bold">กำลังประมวลผลข้อมูลบัญชีเงินออม...</p></div>`;
+
+        try {
+            const res = await fetch(API_URL, {
+                method: 'POST', 
+                headers: { "Content-Type": "text/plain;charset=utf-8" }, 
+                body: JSON.stringify({ action: 'getAdvisorSavingsReport', payload: { roomString } })
+            });
+
+            // 🟢 อ่านเป็น text ก่อน เพื่อดักกรณี Server ส่ง HTML กลับมา
+            const text = await res.text();
+            console.log("Savings API Raw Response:", text.substring(0, 500));
+
+            let result;
+            try {
+                result = JSON.parse(text);
+            } catch (parseErr) {
+                throw new Error("Server ส่ง HTML กลับมาแทน JSON (มักเกิดจาก Deploy เก่า / สิทธิ์ / Timeout)\n\nดูรายละเอียดใน Console");
+            }
+            
+            if(result.success) {
+                renderSavingsReportTable(result.data);
+            } else {
+                throw new Error(result.message || "ไม่ทราบสาเหตุ");
+            }
+        } catch (err) {
+            console.error(err);
+            content.innerHTML = `
+                <div class="p-6 text-center text-red-600 font-bold bg-red-50 rounded-2xl border border-red-100">
+                    ❌ เกิดข้อผิดพลาดในการดึงข้อมูลออมเงิน<br>
+                    <span class="text-sm font-medium text-red-500 mt-2 block">${err.message}</span>
+                    <p class="text-xs text-slate-500 mt-3 font-normal">เปิด Console (F12) ดู "Savings API Raw Response" เพื่อตรวจสอบเพิ่มเติม</p>
+                </div>`;
+        }
+    }
+
+    function closeSavingsReport() { document.getElementById('savings-report-modal').classList.add('hidden'); }
+
+    function renderSavingsReportTable(data) {
+        const content = document.getElementById('savings-report-content');
+        if(data.length === 0) {
+            content.innerHTML = '<div class="text-center p-8 text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-300">ยังไม่มีข้อมูลนักเรียนในห้องนี้</div>';
+            return;
+        }
+
+        let totalTarget = 0, totalSaved = 0, passedCount = 0;
+
+        let tableHtml = `
+            <table class="w-full text-left border-collapse whitespace-nowrap min-w-max print:border print:border-black print:text-black">
+                <thead>
+                    <tr class="bg-teal-50 text-teal-800 text-[11px] uppercase tracking-widest border-b border-teal-100 print:bg-white print:text-black print:text-sm">
+                        <th class="p-3 font-bold text-center print:border print:border-black">รหัสนักศึกษา</th>
+                        <th class="p-3 font-bold sticky left-0 bg-teal-50 z-10 shadow-[2px_0_5px_rgba(0,0,0,0.05)] print:static print:bg-white print:shadow-none print:border print:border-black">ชื่อ-สกุล</th>
+                        <th class="p-3 font-bold text-center print:border print:border-black">ประเภท</th>
+                        <th class="p-3 font-bold text-center print:border print:border-black">เป้าหมาย/เดือน</th>
+                        <th class="p-3 font-bold text-center border-l-2 border-slate-200 print:border print:border-black">ออมเดือนนี้</th>
+                        <th class="p-3 font-bold text-center border-l border-teal-100 print:border print:border-black">สะสมสุทธิ</th>
+                        <th class="p-3 font-bold text-center print:border print:border-black">สถานะ</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 print:divide-black">
+        `;
+
+        data.forEach(s => {
+            let statusBadge = '';
+            let printStatus = ''; // 🟢 ข้อความสำหรับตอนพิมพ์ (ขาวดำ เรียบๆ)
+            let statusRowClass = '';
+            
+            if (s.statusColor === 'GREEN') {
+                statusBadge = '<span class="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-[11px] font-bold border border-emerald-200">🟢 ผ่านเกณฑ์</span>';
+                printStatus = 'ผ่าน';
+                passedCount++;
+            } else if (s.statusColor === 'YELLOW') {
+                statusBadge = '<span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-[11px] font-bold border border-orange-200">🟡 กำลังออม</span>';
+                printStatus = 'กำลังออม';
+                statusRowClass = 'bg-orange-50/40';
+            } else {
+                statusBadge = '<span class="bg-red-100 text-red-700 px-3 py-1 rounded-full text-[11px] font-bold border border-red-200">🔴 ยังไม่ออม</span>';
+                printStatus = 'ยังไม่ออม';
+                statusRowClass = 'bg-red-50/40';
+            }
+
+            tableHtml += `
+                <tr class="hover:bg-slate-50 transition-colors ${statusRowClass} print:bg-white print:text-black">
+                    <td class="p-3 text-center text-slate-500 font-mono text-sm print:border print:border-black print:text-black">${s.studentId}</td>
+                    <td class="p-3 font-bold text-slate-700 sticky left-0 ${statusRowClass ? statusRowClass : 'bg-white/90'} backdrop-blur-md z-10 truncate max-w-[150px] sm:max-w-none shadow-[2px_0_5px_rgba(0,0,0,0.05)] print:static print:bg-white print:shadow-none print:border print:border-black print:text-black text-left pl-4">${s.studentName}</td>
+                    <td class="p-3 text-center print:border print:border-black"><span class="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-bold tracking-wide print:bg-transparent print:p-0 print:text-sm print:text-black">${s.studentType || 'ทั่วไป'}</span></td>
+                    <td class="p-3 text-center text-slate-600 text-sm print:border print:border-black print:text-black">${s.targetAmount.toLocaleString()}</td>
+                    <td class="p-3 text-center font-bold ${s.statusColor === 'GREEN' ? 'text-emerald-600' : (s.statusColor === 'YELLOW' ? 'text-orange-600' : 'text-red-500')} text-sm border-l-2 border-slate-200 print:border print:border-black print:text-black">${s.currentMonthDeposit.toLocaleString()}</td>
+                    <td class="p-3 text-center font-bold text-teal-700 border-l border-slate-100 print:border print:border-black print:text-black">${s.currentBalance.toLocaleString()}</td>
+                    <td class="p-3 text-center print:border print:border-black">
+                        <div class="print:hidden">${statusBadge}</div>
+                        <div class="hidden print:block font-bold text-black">${printStatus}</div>
+                    </td>
+                </tr>
+            `;
+            
+            totalTarget++; // 🟢 นับนักเรียนทุกคนที่มีบัญชีเป็นฐานคำนวณ
+        });
+
+        tableHtml += `</tbody></table>`;
+
+        // Summary Card ด้านบน
+        const pctGss = totalTarget > 0 ? Math.round((passedCount / totalTarget) * 100) : 0;
+        
+        let summaryHtml = `
+            <!-- สรุปผลสำหรับหน้าจอ (ซ่อนตอนปรินต์) -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 print:hidden">
+                <div class="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 text-center shadow-sm">
+                    <p class="text-xs font-bold text-indigo-600 uppercase">นักเรียนทั้งหมด</p>
+                    <h3 class="text-2xl md:text-3xl font-extrabold text-indigo-800">${totalTarget} <span class="text-sm font-medium">คน</span></h3>
+                </div>
+                <div class="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 text-center shadow-sm">
+                    <p class="text-xs font-bold text-emerald-600 uppercase">ที่ออมครบเป้าหมาย</p>
+                    <h3 class="text-2xl md:text-3xl font-extrabold text-emerald-800">${passedCount} <span class="text-sm font-medium">คน</span></h3>
+                </div>
+                <div class="bg-slate-800 p-4 rounded-2xl border border-slate-700 text-center text-white shadow-sm relative overflow-hidden">
+                    <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent skew-x-12 translate-x-[-100%] animate-[shimmer_2s_infinite]"></div>
+                    <p class="text-xs font-bold text-slate-400 uppercase">อัตราความสำเร็จ</p>
+                    <h3 class="text-2xl md:text-3xl font-extrabold ${pctGss >= 80 ? 'text-emerald-400' : (pctGss >= 50 ? 'text-yellow-400' : 'text-red-400')}">${pctGss}%</h3>
+                </div>
+            </div>
+
+            <!-- สรุปผลสำหรับปรินต์เอกสารราชการ (ซ่อนบนหน้าจอ) -->
+            <div class="hidden print:block mb-4 text-[16pt] leading-relaxed">
+                <p><b>สรุปผลการดำเนินงาน:</b> มีนักเรียน นักศึกษา ที่มีบัญชีเงินออมจำนวนทั้งหมด <b>${totalTarget}</b> คน</p>
+                <p>สามารถออมเงินได้บรรลุเป้าหมายตามเกณฑ์ จำนวน <b>${passedCount}</b> คน คิดเป็นร้อยละ <b>${pctGss}%</b></p>
+            </div>
+        `;
+
+        content.innerHTML = summaryHtml + '<div class="overflow-x-auto border border-slate-200 rounded-xl shadow-inner print:border-none print:shadow-none">' + tableHtml + '</div>';
+    }
+
+    // ฟังก์ชันการพิมพ์ที่ประยุกต์ใช้โครงสร้าง CSS เดิม (ซ่อน Web UI และโชว์เฉพาะ Print Container)
+    function printSavingsReport() {
+        const roomSelect = document.getElementById('room-select').value;
+        const reportContent = document.getElementById('savings-report-content').innerHTML;
+        const printArea = document.getElementById('print-master-container');
+        
+        const d = new Date();
+        const monthsTH = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+        
+        printArea.innerHTML = `
+            <style>
+                @media print {
+                    @page { size: A4 portrait; margin: 15mm; }
+                    body { font-family: 'TH Sarabun New', 'Sarabun', sans-serif !important; }
+                }
+            </style>
+            <div style="text-align: center; margin-bottom: 20px; font-family: 'Sarabun', sans-serif;">
+                <h2 style="font-weight: bold; font-size: 20pt; margin-bottom: 5px;">วิทยาลัยเกษตรและเทคโนโลยีเชียงใหม่</h2>
+                <h3 style="font-weight: bold; font-size: 18pt; margin-top: 0; margin-bottom: 5px;">รายงานติดตามความก้าวหน้าการออมเงินนักเรียน</h3>
+                <p style="font-size: 16pt; margin-top: 0;">ประจำเดือน ${monthsTH[d.getMonth()]} พ.ศ. ${d.getFullYear() + 543}</p>
+                <p style="font-size: 16pt;">ระดับชั้น ${roomSelect} | ครูที่ปรึกษา: ${currentUser.name}</p>
+            </div>
+            
+            ${reportContent}
+            
+            <div style="display: flex; justify-content: flex-end; margin-top: 50px; padding-right: 50px; font-family: 'Sarabun', sans-serif;">
+                <div style="text-align: center; font-size: 16pt;">
+                    <p style="margin-bottom: 15px;">ลงชื่อ..........................................................ครูที่ปรึกษา</p>
+                    <p style="margin-top: 0; margin-bottom: 0;">( ${currentUser.name} )</p>
+                    <p style="margin-top: 0;">ตำแหน่ง ${currentUser.position || 'ครูผู้สอน'}</p>
+                </div>
+            </div>
+        `;
+        
+        setTimeout(() => { window.print(); }, 500);
     }
 
     function logout() { localStorage.clear(); window.location.href = "index.html"; }

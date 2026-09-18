@@ -15,7 +15,9 @@ const CONFIG = {
   SHEETS: {
     STUDENTS: 'Students',
     TEACHERS: 'Teachers',
-    SDQ: 'SDQ_Results'
+    SDQ: 'SDQ_Results',
+    SAVINGS_MASTER: 'Savings_Master', // 💰 เพิ่ม Sheet จัดการบัญชีและเป้าหมาย
+    SAVINGS_TX: 'Savings_Transactions' // 💰 เพิ่ม Sheet เก็บประวัติการฝาก-ถอน
   }
 };
 
@@ -105,6 +107,11 @@ function doPost(e) {
       case 'submitLiveAnswer': return output(submitLiveAnswer(payload));
       case 'getLiveGameLeaderboard': return output(getLiveGameLeaderboard(payload.gameId)); // 🟢 เพิ่ม API ดึงตารางคะแนน
       case 'getExamDashboard': return output(getExamDashboard()); // 🟢 เพิ่ม API ดึงรายงานผลสอบ E-Testing
+      
+      // 💰 เพิ่ม Routing ระบบออมเงิน (Savings Tracker สำหรับ กสศ. และนักศึกษาทั่วไป)
+      case 'getSavingsDashboard': return output(getSavingsDashboard(payload));
+      case 'saveSavingsTransaction': return output(saveSavingsTransaction(payload));
+      case 'getAdvisorSavingsReport': return output(getAdvisorSavingsReport(payload));
       
       default:
         return output({ success: false, message: `Action [${action}] is not implemented.` });
@@ -594,6 +601,259 @@ function getExecutiveSummary(payload) {
         sdq: sdqStats, sdqLists: { risk: sdqRiskList, problem: sdqProblemList }
       }
     };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+}
+
+// ==========================================
+// 💰 SAVINGS TRACKER SYSTEM (ระบบออมเงิน กสศ. & ทั่วไป)
+// ==========================================
+
+/** 💰 28. ดึงข้อมูล Dashboard การออมเงินของนักเรียนรายบุคคล */
+function getSavingsDashboard(payload) {
+  try {
+    const studentId = String(payload.studentId).trim();
+    const ss = getActiveSS();
+    
+    // 1. ดึงข้อมูลนักเรียนเพื่อดูระดับชั้น (ปวช/ปวส)
+    const sSheet = ss.getSheetByName(CONFIG.SHEETS.STUDENTS);
+    const sData = sSheet.getDataRange().getValues();
+    const studentInfo = sData.find(r => String(r[0]).trim() === studentId);
+    if (!studentInfo) return { success: false, message: "ไม่พบข้อมูลนักศึกษา" };
+    const level = String(studentInfo[3]).trim(); // เช่น ปวช. หรือ ปวส.
+    
+    // 2. ตรวจสอบและดึงข้อมูลจาก Savings_Master
+    let masterSheet = getTargetSheet(CONFIG.SHEETS.SAVINGS_MASTER);
+    if (masterSheet.getLastRow() === 0) {
+      masterSheet.appendRow(['Student_ID', 'Student_Type', 'Monthly_Income', 'Target_Percentage', 'Target_Amount', 'Current_Balance', 'Last_Updated']);
+      masterSheet.getRange(1, 1, 1, 7).setFontWeight('bold').setBackground('#f59e0b');
+    }
+    
+    let masterData = masterSheet.getDataRange().getValues();
+    let myMaster = masterData.find(r => String(r[0]).trim() === studentId);
+    
+    // ถ้าเพิ่งเข้าใช้งานครั้งแรก ยังไม่มีบัญชี (โยนสถานะกลับไปให้ Frontend บังคับตั้งค่า)
+    if (!myMaster) {
+      return { 
+        success: true, 
+        isNewUser: true, 
+        studentLevel: level,
+        data: { currentBalance: 0, transactions: [] }
+      };
+    }
+    
+    // 3. ดึงประวัติรายการจาก Savings_Transactions
+    let txSheet = getTargetSheet(CONFIG.SHEETS.SAVINGS_TX);
+    let txData = [];
+    if (txSheet.getLastRow() > 1) {
+      const rawTx = txSheet.getDataRange().getDisplayValues();
+      txData = rawTx.slice(1).filter(r => String(r[2]).trim() === studentId).map(r => ({
+        txId: r[0], timestamp: r[1], type: r[3], amount: parseFloat(r[4].replace(/,/g, '')), note: r[5], evidenceUrl: r[6]
+      })).reverse(); // ล่าสุดขึ้นก่อน
+    }
+    
+    // คำนวณยอดฝากเฉพาะเดือนนี้ (เพื่อทำ Progress Bar 50% หรือ 30%)
+    let calculatedBalance = 0;
+    let currentMonthDeposit = 0;
+    const currentMonthStr = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "MM/yyyy");
+
+    txData.forEach(tx => {
+      if (tx.type === 'ฝาก') {
+        calculatedBalance += tx.amount;
+        if (tx.timestamp.includes(currentMonthStr)) {
+           currentMonthDeposit += tx.amount;
+        }
+      } else if (tx.type === 'ถอน') {
+        calculatedBalance -= tx.amount;
+      }
+    });
+
+    // 🟢 Self-Healing: ซิงค์ยอด Roll-up ล่าสุดลง Master ถ้ามีการเปลี่ยนแปลง
+    const masterRowIndex = masterData.findIndex(r => String(r[0]).trim() === studentId) + 1;
+    if (parseFloat(myMaster[5] || 0) !== calculatedBalance) {
+        masterSheet.getRange(masterRowIndex, 6).setValue(calculatedBalance);
+    }
+    
+    return {
+      success: true,
+      isNewUser: false,
+      studentLevel: level,
+      data: {
+        studentType: myMaster[1],
+        monthlyIncome: myMaster[2],
+        targetPercentage: myMaster[3],
+        targetAmount: myMaster[4],
+        currentBalance: calculatedBalance,
+        currentMonthDeposit: currentMonthDeposit,
+        transactions: txData
+      }
+    };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+}
+
+/** 💰 29. บันทึกรายการฝาก/ถอน และตั้งเป้าหมายบัญชี (Enterprise Write Lock) */
+function saveSavingsTransaction(payload) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000); // 🔒 ป้องกัน Race Condition
+    const { studentId, studentType, monthlyIncome, type, amount, note, evidenceFile } = payload;
+    const ss = getActiveSS();
+    
+    // --- 1. จัดการรูปภาพสลิป (ใช้ Drive API) ---
+    const FOLDER_ID = '167X_522L8uWobMsOlQ2yudVkjzkhNJqg'; // โฟลเดอร์สำหรับเก็บสลิปออมเงิน
+    let fileUrl = '';
+    if (evidenceFile && evidenceFile.base64 && FOLDER_ID) {
+        try {
+            const folder = DriveApp.getFolderById(FOLDER_ID);
+            const b64Data = evidenceFile.base64.split(',')[1] || evidenceFile.base64; 
+            const blob = Utilities.newBlob(Utilities.base64Decode(b64Data), evidenceFile.mimeType, evidenceFile.filename);
+            const file = folder.createFile(blob);
+            fileUrl = file.getUrl();
+            try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}
+        } catch (e) {
+            fileUrl = 'Error Uploading';
+        }
+    }
+
+    // --- 2. จัดการ Savings_Master (ตั้งค่าเป้าหมาย กสศ. อัตโนมัติ) ---
+    let masterSheet = getTargetSheet(CONFIG.SHEETS.SAVINGS_MASTER);
+    const masterData = masterSheet.getDataRange().getValues();
+    const masterRowIndex = masterData.findIndex(r => String(r[0]).trim() === String(studentId).trim());
+    
+    let currentBalance = 0;
+    
+    // ถ้ายังไม่มีบัญชี (สร้างใหม่พร้อม Lock กฎ กสศ.)
+    if (masterRowIndex === -1 && monthlyIncome) {
+        let targetPercent = 0;
+        if (studentType === 'กสศ_ปวช') targetPercent = 50;
+        else if (studentType === 'กสศ_ปวส') targetPercent = 30;
+        else targetPercent = payload.targetPercentage || 10; // ทั่วไปให้กำหนดเป้าหมายเอง
+        
+        const targetAmount = (parseFloat(monthlyIncome) * targetPercent) / 100;
+        masterSheet.appendRow([ studentId, studentType, monthlyIncome, targetPercent, targetAmount, 0, new Date() ]);
+    } else if (masterRowIndex > -1) {
+        currentBalance = parseFloat(masterData[masterRowIndex][5] || 0);
+    }
+
+    // --- 3. บันทึก Transaction ---
+    if (amount && parseFloat(amount) > 0) {
+        let txSheet = getTargetSheet(CONFIG.SHEETS.SAVINGS_TX);
+        if (txSheet.getLastRow() === 0) {
+            txSheet.appendRow(['Transaction_ID', 'Timestamp', 'Student_ID', 'Type', 'Amount', 'Note', 'Evidence_Image']);
+            txSheet.getRange(1, 1, 1, 7).setFontWeight('bold').setBackground('#f59e0b');
+        }
+        
+        const txId = "TX_" + Date.now();
+        const txAmount = parseFloat(amount);
+        
+        txSheet.appendRow([
+            txId, Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "dd/MM/yyyy HH:mm:ss"), 
+            studentId, type, txAmount, note, fileUrl
+        ]);
+        
+        // อัปเดต Balance รวมลง Master 
+        if (masterRowIndex > -1) {
+            const newBalance = type === 'ฝาก' ? currentBalance + txAmount : currentBalance - txAmount;
+            masterSheet.getRange(masterRowIndex + 1, 6).setValue(newBalance);
+            masterSheet.getRange(masterRowIndex + 1, 7).setValue(new Date());
+        }
+    }
+    
+    SpreadsheetApp.flush();
+    return { success: true, message: "บันทึกข้อมูลเรียบร้อย" };
+  } catch (error) {
+    return { success: false, message: error.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** 💰 31. รายงานติดตามการออมสำหรับครูที่ปรึกษา (Visual Flags - Red/Yellow/Green) */
+function getAdvisorSavingsReport(payload) {
+  try {
+    const roomString = payload.roomString;
+    const studentResult = fetchStudentsByRoom(roomString);
+    if (!studentResult.success) return studentResult;
+    
+    const studentIds = studentResult.data.map(s => s.id);
+    const studentIdSet = new Set(studentIds); // ใช้ O(1) Lookup
+    
+    const masterSheet = getTargetSheet(CONFIG.SHEETS.SAVINGS_MASTER);
+    if (masterSheet.getLastRow() <= 1) return { success: true, data: [] };
+    const masterData = masterSheet.getDataRange().getValues();
+    
+    const txSheet = getTargetSheet(CONFIG.SHEETS.SAVINGS_TX);
+    let txData = [];
+    // 🟢 เปลี่ยนเป็น getDisplayValues() เพื่อให้อ่านวันที่และตัวเลขถูกต้อง 100%
+    if (txSheet.getLastRow() > 1) txData = txSheet.getDataRange().getDisplayValues();
+    
+    // หากวดยอดฝากเฉพาะเดือนนี้
+    const currentMonthStr = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "MM/yyyy");
+    const currentMonthDeposits = {}; 
+    
+    if (txData.length > 1) {
+        txData.slice(1).forEach(tx => {
+            const sId = String(tx[2]).trim();
+            const dateStr = String(tx[1]);
+            const type = String(tx[3]);
+            // 🟢 ป้องกันบั๊กเครื่องหมายจุลภาค (เช่น 3,750) ไม่ให้แปลงเป็นเลขผิดพลาด
+            const amount = parseFloat(String(tx[4]).replace(/,/g, '') || 0);
+            
+            if (studentIdSet.has(sId) && type === 'ฝาก' && dateStr.includes(currentMonthStr)) {
+                currentMonthDeposits[sId] = (currentMonthDeposits[sId] || 0) + amount;
+            }
+        });
+    }
+    
+    const reportData = [];
+    masterData.slice(1).forEach(r => {
+        const sId = String(r[0]).trim();
+        if (studentIdSet.has(sId)) {
+            const stuInfo = studentResult.data.find(s => s.id === sId);
+            const targetAmount = parseFloat(r[4] || 0);
+            const monthDeposit = currentMonthDeposits[sId] || 0;
+            
+            // 🚥 Logic แถบสีแจ้งเตือนครูที่ปรึกษา
+            let statusColor = 'RED'; // สัญญาณเตือน: ยังไม่ออมเลยในเดือนนี้
+            if (monthDeposit >= targetAmount && targetAmount > 0) statusColor = 'GREEN'; // ปลอดภัย: ออมถึงเป้า กสศ. แล้ว
+            else if (monthDeposit > 0) statusColor = 'YELLOW'; // เฝ้าระวัง: ออมแล้วแต่ยังไม่ถึงเป้า
+            
+// 🟢 ป้องกัน Error กรณีวันที่ในชีตเป็นรูปแบบพิเศษหรือ Invalid Date
+                let lastUpdatedFormatted = '-';
+                if (r[6]) {
+                    try {
+                        const dateObj = new Date(r[6]);
+                        if (!isNaN(dateObj.getTime())) {
+                            lastUpdatedFormatted = Utilities.formatDate(dateObj, CONFIG.TIMEZONE, "dd/MM/yyyy");
+                        } else {
+                            lastUpdatedFormatted = String(r[6]);
+                        }
+                    } catch (e) {
+                        lastUpdatedFormatted = String(r[6]);
+                    }
+                }
+
+                reportData.push({
+                    studentId: sId,
+                    studentName: stuInfo.name,
+                    studentType: r[1],
+                    monthlyIncome: r[2],
+                    targetPercent: r[3],
+                    targetAmount: targetAmount,
+                    currentBalance: r[5],
+                    currentMonthDeposit: monthDeposit,
+                    statusColor: statusColor,
+                    lastUpdated: lastUpdatedFormatted
+                });
+        }
+    });
+    
+    // เรียงตามรหัสนักศึกษา (น้อยไปมาก)
+    reportData.sort((a, b) => a.studentId.localeCompare(b.studentId, undefined, {numeric: true}));
+    return { success: true, data: reportData };
   } catch (error) {
     return { success: false, message: error.message };
   }
@@ -1517,3 +1777,4 @@ function getExamDashboard() {
     return { success: false, message: error.message };
   }
 }
+

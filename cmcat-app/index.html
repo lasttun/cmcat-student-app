@@ -17,7 +17,7 @@
         const API_URL = "https://script.google.com/macros/s/AKfycbztsC4Wng1zDAVyNmHka6N00m1os6aHGqcZV2LW1l1NBrlATIWPLzwdORzU4lP_P6_p/exec";
         
         function showPage(pageId) {
-            const pages = ['login-page', 'dash-page', 'exam-hub-page', 'exam-room-page', 'live-game-page'];
+            const pages = ['login-page', 'dash-page', 'exam-hub-page', 'exam-room-page', 'live-game-page', 'savings-page'];
             pages.forEach(p => {
                 const el = document.getElementById(p);
                 if(el) el.classList.add('hidden');
@@ -357,10 +357,19 @@
                 <!-- E-Testing Box -->
                 <div class="bg-gradient-to-r from-blue-50 to-emerald-50 p-6 rounded-2xl shadow-sm border border-blue-200 text-center flex flex-col justify-between">
                     <div>
-                        <h4 class="font-bold text-blue-800 text-lg mb-2"><i class="fa-solid fa-laptop-code"></i> E-Testing & Live Game</h4>
-                        <p class="text-sm text-blue-600 mb-4">คลังข้อสอบ V-NET และระบบตอบคำถามสดในห้องเรียน</p>
+                        <h4 class="font-bold text-blue-800 text-lg mb-2"><i class="fa-solid fa-laptop-code"></i> E-Testing</h4>
+                        <p class="text-sm text-blue-600 mb-4">คลังข้อสอบ V-NET</p>
                     </div>
                     <button onclick="showPage('exam-hub-page')" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-full font-bold shadow-md transition-all hover:scale-105">เข้าสู่คลังข้อสอบ</button>
+                </div>
+
+                <!-- 💰 Savings Box (เพิ่มใหม่) -->
+                <div class="bg-gradient-to-r from-teal-50 to-emerald-100 p-6 rounded-2xl shadow-sm border border-teal-200 text-center flex flex-col justify-between">
+                    <div>
+                        <h4 class="font-bold text-teal-800 text-lg mb-2"><i class="fa-solid fa-piggy-bank"></i> บันทึกการออม</h4>
+                        <p class="text-sm text-teal-600 mb-4">ติดตามเป้าหมายการออมเงิน (กสศ. / ทั่วไป)</p>
+                    </div>
+                    <button onclick="openSavingsDashboard()" class="bg-teal-600 hover:bg-teal-700 text-white px-6 py-3 rounded-full font-bold shadow-md transition-all hover:scale-105">จัดการเงินออม</button>
                 </div>
             </div>
 
@@ -777,7 +786,7 @@
             </div>
         </div>
 
-        <script>
+<script>
             let currentLiveGameId = '';
             let livePollingInterval = null;
             let lastQuestionIndex = -1;
@@ -895,6 +904,345 @@
                 showPage('exam-hub-page');
             }
         </script>
+    </div> <!-- 🟢 ปิดกล่อง Live Game ตรงนี้อย่างถูกต้อง -->
+
+    <!-- ========================================== -->
+    <!-- 6. SAVINGS TRACKER PAGE                    -->
+    <!-- ========================================== -->
+    <div id="savings-page" class="hidden pb-10 min-h-screen bg-slate-50">
+        <nav class="bg-teal-800 text-white p-3 md:p-4 shadow-lg flex justify-between items-center sticky top-0 z-40">
+            <div class="flex items-center gap-3">
+                <button onclick="showPage('dash-page')" class="bg-teal-700 p-2 rounded-lg hover:bg-teal-600"><i class="fa-solid fa-arrow-left"></i></button>
+                <p class="font-bold text-sm md:text-base">ระบบออมเงินนักเรียน</p>
+            </div>
+            <button onclick="openSavingsModal()" class="bg-white text-teal-800 px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-slate-100">
+                + ทำรายการ
+            </button>
+        </nav>
+        
+        <div class="container mx-auto p-4 max-w-3xl mt-4">
+            <!-- 📊 Dashboard Card -->
+            <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 mb-6 relative overflow-hidden">
+                <div class="absolute top-0 right-0 p-4 opacity-10"><i class="fa-solid fa-coins text-8xl text-teal-500"></i></div>
+                <div class="flex justify-between items-start mb-1">
+                    <h3 class="text-slate-500 font-bold">ยอดเงินออมสะสมสุทธิ</h3>
+                    <p class="text-[10px] text-slate-400 bg-slate-50 px-2 py-1 rounded-lg border border-slate-100 flex items-center gap-1">
+                        <i class="fa-solid fa-clock-rotate-left"></i> <span id="sv-last-update">กำลังอัปเดต...</span>
+                    </p>
+                </div>
+                <h1 class="text-4xl md:text-5xl font-bold text-teal-700 mb-6">฿<span id="sv-total-balance">0.00</span></h1>
+                
+                <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                    <div class="flex justify-between items-end mb-2">
+                        <div>
+                            <p class="text-xs font-bold text-slate-500">เป้าหมายรายเดือน (<span id="sv-target-pct">0</span>%)</p>
+                            <p class="text-lg font-bold text-slate-700">฿<span id="sv-month-saved">0</span> / ฿<span id="sv-target-amt">0</span></p>
+                        </div>
+                        <div id="sv-status-badge" class="px-3 py-1 bg-slate-200 text-slate-600 rounded-full text-xs font-bold">รอข้อมูล</div>
+                    </div>
+                    <!-- Progress Bar -->
+                    <div class="w-full bg-slate-200 rounded-full h-3 mb-1 overflow-hidden">
+                        <div id="sv-progress-bar" class="bg-teal-500 h-3 rounded-full transition-all duration-1000" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 📝 Transaction History -->
+            <h4 class="font-bold text-slate-700 mb-3 text-lg"><i class="fa-solid fa-clock-rotate-left"></i> ประวัติทำรายการ</h4>
+            <div id="sv-history-list" class="space-y-3">
+                <div class="text-center text-slate-400 p-6 bg-white rounded-2xl border border-dashed">กำลังโหลดข้อมูล...</div>
+            </div>
+        </div>
     </div>
+
+    <!-- 📝 Savings Modal -->
+    <div id="savings-modal" class="hidden fixed inset-0 bg-slate-900 bg-opacity-70 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl w-full max-w-md max-h-[90vh] flex flex-col shadow-2xl animate-[slideUp_0.3s_ease-out]">
+            <div class="p-5 md:p-6 border-b border-slate-100 flex justify-between items-center shrink-0">
+                <h2 class="text-xl font-bold text-teal-700">ฝาก / ถอนเงินออม</h2>
+                <button onclick="closeSavingsModal()" class="w-10 h-10 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-red-100 hover:text-red-500 text-xl transition-all"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            
+            <div class="p-5 md:p-6 overflow-y-auto flex-1 bg-slate-50 custom-scrollbar">
+                <form id="savings-form" class="space-y-4">
+                    
+                    <!-- ปุ่มเปิด/ปิด การตั้งค่าเป้าหมาย (รองรับรายได้ผันผวน) -->
+                    <div class="text-right mb-2">
+                        <button type="button" onclick="toggleSetupSection()" class="text-xs font-bold text-teal-600 hover:text-teal-800 bg-teal-50 px-3 py-1.5 rounded-lg border border-teal-100">
+                            <i class="fa-solid fa-gear"></i> อัปเดตรายรับ / เป้าหมาย
+                        </button>
+                    </div>
+
+                    <!-- Setup Section (จะโชว์อัตโนมัติถ้าเป็นเด็กใหม่ หรือโชว์เมื่อเด็กกดปุ่มตั้งค่า) -->
+                    <div id="sv-setup-section" class="hidden bg-orange-50 p-4 rounded-xl border border-orange-200 mb-4 animate-in fade-in slide-in-from-top-2">
+                        <p class="text-xs font-bold text-orange-600 mb-3"><i class="fa-solid fa-bullseye"></i> กำหนดเป้าหมายการออมเดือนนี้</p>
+                        
+                        <div class="space-y-3">
+                            <div>
+                                <label class="text-[10px] font-bold text-slate-500">รายรับ หรือ เงินทุนในเดือนนี้ (บาท)</label>
+                                <input type="number" id="sv-income" oninput="autoCalculateAmount()" placeholder="เช่น 3000" class="w-full p-2.5 mt-1 rounded-lg border border-orange-200 outline-none focus:ring-2 focus:ring-orange-400 text-sm font-bold text-slate-700">
+                            </div>
+                            
+                            <div>
+                                <label class="text-[10px] font-bold text-slate-500">เปอร์เซ็นต์ที่ต้องการออม (กสศ. ขั้นต่ำ 30% - 50%)</label>
+                                <select id="sv-percent" onchange="autoCalculateAmount()" class="w-full p-2.5 mt-1 rounded-lg border border-orange-200 outline-none focus:ring-2 focus:ring-orange-400 text-sm font-bold text-slate-700 bg-white cursor-pointer">
+                                    <option value="50">ออม 50% (แนะนำสำหรับ ปวช.)</option>
+                                    <option value="30">ออม 30% (แนะนำสำหรับ ปวส.)</option>
+                                    <option value="20">ออม 20% (ทั่วไป)</option>
+                                    <option value="10">ออม 10% (ทั่วไป)</option>
+                                </select>
+                            </div>
+                            <p class="text-[9px] text-orange-500 leading-tight">* หากรายได้ในแต่ละเดือนไม่เท่ากัน ท่านสามารถมากดอัปเดตยอดเงินที่นี่ได้เสมอ</p>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <label class="w-full text-center border-2 border-slate-200 p-3 rounded-xl cursor-pointer has-[:checked]:bg-teal-50 has-[:checked]:border-teal-500 has-[:checked]:text-teal-700 font-bold transition-all">
+                            <input type="radio" name="txType" value="ฝาก" class="hidden" checked> <i class="fa-solid fa-arrow-down mr-1"></i> ฝากเงิน
+                        </label>
+                        <label class="w-full text-center border-2 border-slate-200 p-3 rounded-xl cursor-pointer has-[:checked]:bg-rose-50 has-[:checked]:border-rose-500 has-[:checked]:text-rose-700 font-bold transition-all">
+                            <input type="radio" name="txType" value="ถอน" class="hidden"> <i class="fa-solid fa-arrow-up mr-1"></i> ถอนเงิน
+                        </label>
+                    </div>
+
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 ml-1">จำนวนเงิน (บาท)</label>
+                        <input type="number" id="sv-amount" required placeholder="0.00" class="w-full mt-1 p-4 rounded-xl border border-slate-200 text-xl font-bold text-slate-700 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100">
+                    </div>
+                    
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 ml-1">บันทึกช่วยจำ</label>
+                        <input type="text" id="sv-note" placeholder="เช่น ออมเงิน กสศ. เดือนนี้" class="w-full mt-1 p-3 rounded-xl border border-slate-200 outline-none focus:border-teal-500">
+                    </div>
+
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 ml-1">แนบสลิปโอนเงิน (ถ้ามี)</label>
+                        <input type="file" id="sv-slip" accept="image/*" class="w-full mt-1 p-2 bg-white rounded-xl border border-slate-200 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100">
+                    </div>
+                </form>
+            </div>
+            
+            <div class="p-5 border-t border-slate-100 bg-white rounded-b-3xl shrink-0">
+                <button onclick="submitSavings()" id="btn-submit-sv" class="w-full bg-teal-600 hover:bg-teal-700 text-white p-4 rounded-xl font-bold transition-all shadow-md active:scale-95">บันทึกรายการ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script ระบบออมเงิน -->
+    <script>
+        let isSavingsNewUser = false;
+        let savingsStudentType = '';
+
+        async function openSavingsDashboard() {
+            showPage('savings-page');
+            const user = JSON.parse(localStorage.getItem('currentUser'));
+            
+            try {
+                const res = await fetch(API_URL, {
+                    method: 'POST', body: JSON.stringify({ action: 'getSavingsDashboard', payload: { studentId: user.id } })
+                });
+                const result = await res.json();
+                
+                if (result.success) {
+                    isSavingsNewUser = result.isNewUser;
+                    savingsStudentType = determineStudentType(result.studentLevel);
+                    
+                    if (!isSavingsNewUser) {
+                        const d = result.data;
+                        document.getElementById('sv-total-balance').innerText = d.currentBalance.toLocaleString();
+                        document.getElementById('sv-target-pct').innerText = d.targetPercentage;
+                        document.getElementById('sv-month-saved').innerText = d.currentMonthDeposit.toLocaleString();
+                        document.getElementById('sv-target-amt').innerText = d.targetAmount.toLocaleString();
+                        
+                        // 🟢 ประทับเวลาล่าสุดที่โหลดข้อมูลเสร็จ
+                        const now = new Date();
+                        const timeStr = `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth()+1).toString().padStart(2, '0')}/${now.getFullYear()+543} เวลา ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} น.`;
+                        document.getElementById('sv-last-update').innerText = timeStr;
+                        
+                        let pct = d.targetAmount > 0 ? (d.currentMonthDeposit / d.targetAmount) * 100 : 0;
+                        if (pct > 100) pct = 100;
+                        document.getElementById('sv-progress-bar').style.width = pct + '%';
+                        
+                        const badge = document.getElementById('sv-status-badge');
+                        if (d.currentMonthDeposit >= d.targetAmount) {
+                            badge.className = "px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold";
+                            badge.innerText = "บรรลุเป้าหมาย ✅";
+                            document.getElementById('sv-progress-bar').className = "bg-emerald-500 h-3 rounded-full transition-all duration-1000";
+                        } else {
+                            badge.className = "px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-bold";
+                            badge.innerText = "กำลังออม ⏳";
+                            document.getElementById('sv-progress-bar').className = "bg-orange-500 h-3 rounded-full transition-all duration-1000";
+                        }
+                        
+                        renderSavingsHistory(d.transactions);
+                    } else {
+                        document.getElementById('sv-history-list').innerHTML = '<div class="text-center text-slate-500 p-6 bg-white rounded-2xl border border-dashed">คุณยังไม่มีบัญชี กด + ทำรายการ เพื่อตั้งค่าครั้งแรกครับ</div>';
+                    }
+                }
+            } catch (err) {
+                Swal.fire('Error', 'ดึงข้อมูลเงินออมไม่สำเร็จ', 'error');
+            }
+        }
+
+        function determineStudentType(levelString) {
+            if(levelString.includes('ปวช')) return 'กสศ_ปวช'; 
+            if(levelString.includes('ปวส')) return 'กสศ_ปวส';
+            return 'ทั่วไป';
+        }
+
+        function openSavingsModal() {
+            document.getElementById('savings-form').reset();
+            const setupBox = document.getElementById('sv-setup-section');
+            
+            if(isSavingsNewUser) {
+                setupBox.classList.remove('hidden');
+                document.getElementById('sv-income').required = true;
+            } else {
+                setupBox.classList.add('hidden'); // ซ่อนไว้ก่อน ให้กดปุ่มค่อยเปิด
+                document.getElementById('sv-income').required = false;
+            }
+            document.getElementById('savings-modal').classList.remove('hidden');
+        }
+        
+        // 🟢 ฟังก์ชันใหม่: สลับเปิด-ปิด ส่วนการตั้งค่ารายรับ-เป้าหมาย
+        function toggleSetupSection() {
+            const setupBox = document.getElementById('sv-setup-section');
+            if (setupBox.classList.contains('hidden')) {
+                setupBox.classList.remove('hidden');
+                document.getElementById('sv-income').focus();
+            } else {
+                setupBox.classList.add('hidden');
+                document.getElementById('sv-income').value = ''; // เคลียร์ค่าถ้ากดซ่อน
+            }
+        }
+        
+        function closeSavingsModal() { document.getElementById('savings-modal').classList.add('hidden'); }
+
+        // 🟢 ฟังก์ชันคำนวณยอดออมอัตโนมัติ
+        function autoCalculateAmount() {
+            const setupBox = document.getElementById('sv-setup-section');
+            if (setupBox.classList.contains('hidden')) return; // ถ้าไม่ได้เปิดโหมดตั้งค่าไว้ ไม่ต้องทำอะไร
+            
+            const txType = document.querySelector('input[name="txType"]:checked').value;
+            if (txType === 'ถอน') return; // ถ้ากด "ถอน" อยู่ ไม่ต้องคำนวณยอดอัตโนมัติ
+            
+            const income = parseFloat(document.getElementById('sv-income').value) || 0;
+            const pct = parseFloat(document.getElementById('sv-percent').value) || 0;
+            
+            if (income > 0) {
+                const autoAmount = (income * pct) / 100;
+                document.getElementById('sv-amount').value = autoAmount;
+                document.getElementById('sv-note').value = `ออมเงินตามเป้าหมาย ${pct}%`;
+            }
+        }
+
+        // จับตาดูว่าถ้าเด็กเปลี่ยนเป็น "ฝาก" หรือ "ถอน" ให้คำนวณใหม่/เคลียร์ช่อง
+        document.querySelectorAll('input[name="txType"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                if(e.target.value === 'ฝาก') autoCalculateAmount();
+                else document.getElementById('sv-amount').value = ''; // ถ้ากดถอน ให้เคลียร์ยอดให้เด็กกรอกเอง
+            });
+        });
+
+        async function submitSavings() {
+            const amount = document.getElementById('sv-amount').value;
+            const type = document.querySelector('input[name="txType"]:checked').value;
+            const note = document.getElementById('sv-note').value;
+            const income = document.getElementById('sv-income').value;
+            const targetPct = document.getElementById('sv-percent').value; // 🟢 ดึงค่า % ที่เด็กเลือก
+            const fileInput = document.getElementById('sv-slip');
+            
+            const setupBox = document.getElementById('sv-setup-section');
+            const isUpdatingTarget = !setupBox.classList.contains('hidden'); // เช็คว่าเด็กเปิดหน้าตั้งค่าอยู่ไหม
+
+            if(!amount || amount <= 0) return Swal.fire('แจ้งเตือน', 'กรุณาระบุจำนวนเงินที่ถูกต้อง', 'warning');
+            if((isSavingsNewUser || isUpdatingTarget) && !income) {
+                return Swal.fire('แจ้งเตือน', 'กรุณาระบุรายรับต่อเดือนให้เรียบร้อยครับ', 'warning');
+            }
+
+            const btn = document.getElementById('btn-submit-sv');
+            btn.disabled = true; 
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> กำลังบันทึกข้อมูล...';
+            btn.classList.add('opacity-75', 'cursor-wait'); // เปลี่ยนให้ปุ่มดูจางลงและเปลี่ยนเมาส์เป็นรูปนาฬิกาทราย
+
+            try {
+                let fileData = null;
+                if (fileInput.files.length > 0) {
+                    const file = fileInput.files[0];
+                    fileData = {
+                        filename: file.name,
+                        mimeType: file.type,
+                        base64: await getBase64(file)
+                    };
+                }
+
+                const user = JSON.parse(localStorage.getItem('currentUser'));
+                const payload = {
+                    studentId: user.id,
+                    studentType: savingsStudentType,
+                    monthlyIncome: (isSavingsNewUser || isUpdatingTarget) ? income : null,
+                    targetPercentage: (isSavingsNewUser || isUpdatingTarget) ? targetPct : null, // 🟢 ส่งเปอร์เซ็นต์ไปหลังบ้าน
+                    type: type,
+                    amount: amount,
+                    note: note,
+                    evidenceFile: fileData
+                };
+
+                const res = await fetch(API_URL, {
+                    method: 'POST', body: JSON.stringify({ action: 'saveSavingsTransaction', payload: payload })
+                });
+                const result = await res.json();
+                
+                if (result.success) {
+                    Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'บันทึกรายการออมเงินเรียบร้อย', timer: 1500, showConfirmButton: false });
+                    closeSavingsModal();
+                    openSavingsDashboard();
+                } else {
+                    Swal.fire('ผิดพลาด', result.message, 'error');
+                }
+            } catch (err) {
+                Swal.fire('Error', 'ไม่สามารถบันทึกข้อมูลได้', 'error');
+            } finally {
+                btn.disabled = false; 
+                btn.innerHTML = "บันทึกรายการ";
+                btn.classList.remove('opacity-75', 'cursor-wait'); // คืนค่าปุ่มให้กลับมาสวยปกติ
+            }
+        }
+
+        function renderSavingsHistory(txs) {
+            const list = document.getElementById('sv-history-list');
+            if(txs.length === 0) {
+                list.innerHTML = '<div class="text-center text-slate-400 p-6 bg-white rounded-2xl border border-dashed">ยังไม่มีประวัติการทำรายการ</div>';
+                return;
+            }
+            
+            list.innerHTML = txs.map(tx => `
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full flex items-center justify-center ${tx.type === 'ฝาก' ? 'bg-teal-50 text-teal-600' : 'bg-rose-50 text-rose-600'}">
+                            <i class="fa-solid ${tx.type === 'ฝาก' ? 'fa-arrow-down' : 'fa-arrow-up'}"></i>
+                        </div>
+                        <div>
+                            <p class="font-bold text-slate-700 text-sm">${tx.type}เงิน ${tx.note ? `<span class="text-xs font-normal text-slate-400">(${tx.note})</span>` : ''}</p>
+                            <p class="text-xs text-slate-400">${tx.timestamp.split(' ')[0]}</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="font-bold ${tx.type === 'ฝาก' ? 'text-teal-600' : 'text-rose-600'}">${tx.type === 'ฝาก' ? '+' : '-'}฿${tx.amount.toLocaleString()}</p>
+                        ${tx.evidenceUrl && tx.evidenceUrl !== 'Error Uploading' ? `<a href="${tx.evidenceUrl}" target="_blank" class="text-[10px] text-blue-500 hover:underline"><i class="fa-solid fa-paperclip"></i> ดูสลิป</a>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function getBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = error => reject(error);
+            });
+        }
+    </script>
 </body>
 </html>

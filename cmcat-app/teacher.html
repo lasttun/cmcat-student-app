@@ -1431,6 +1431,7 @@ function renderTable(students, sdqMap) {
                         <th class="p-3 font-bold text-center border-l-2 border-slate-200 print:border print:border-black">ออมเดือนนี้</th>
                         <th class="p-3 font-bold text-center border-l border-teal-100 print:border print:border-black">สะสมสุทธิ</th>
                         <th class="p-3 font-bold text-center print:border print:border-black">สถานะ</th>
+                        <th class="p-3 font-bold text-center print:hidden">หลักฐาน</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 print:divide-black">
@@ -1455,6 +1456,11 @@ function renderTable(students, sdqMap) {
                 statusRowClass = 'bg-red-50/40';
             }
 
+            // ตรวจสอบว่ามีลิงก์สลิปหรือไม่ (ถ้าไม่มีระบบจะส่งค่าว่าง หรือ undefined มา)
+            const slipBtnHtml = (s.latestSlipUrl && s.latestSlipUrl !== 'Error Uploading' && s.latestSlipUrl !== '') 
+                ? `<a href="${s.latestSlipUrl}" target="_blank" class="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 transition-all"><i class="fa-solid fa-image"></i> สลิป</a>` 
+                : `<span class="text-slate-300">-</span>`;
+
             tableHtml += `
                 <tr class="hover:bg-slate-50 transition-colors ${statusRowClass} print:bg-white print:text-black">
                     <td class="p-3 text-center text-slate-500 font-mono text-sm print:border print:border-black print:text-black">${s.studentId}</td>
@@ -1466,6 +1472,9 @@ function renderTable(students, sdqMap) {
                     <td class="p-3 text-center print:border print:border-black">
                         <div class="print:hidden">${statusBadge}</div>
                         <div class="hidden print:block font-bold text-black">${printStatus}</div>
+                    </td>
+                    <td class="p-3 text-center print:hidden">
+                        ${slipBtnHtml}
                     </td>
                 </tr>
             `;

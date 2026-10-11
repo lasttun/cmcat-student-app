@@ -10,7 +10,8 @@
 // ==========================================
 const CONFIG = {
   SHEET_ID: '19wLK2Pxn0ZGE4hy-DykS4n6ohN1Cq7ew4JopnUp5y8U',
-  CURRENT_TERM: '1_2569',
+  CURRENT_TERM: '2_2569',
+  TERM_START_DATE: '12/10/2026', // วันเปิดเทอม 2 (dd/MM/ค.ศ.) = 12 ต.ค. 2569
   TIMEZONE: "GMT+7",
   SHEETS: {
     STUDENTS: 'Students',
@@ -177,7 +178,7 @@ function fetchStudentsByRoom(roomString) {
   return { success: true, data: students };
 }
 
-/** 3. บันทึกการเช็คชื่อเข้าแถวหน้าเสาธง (Premium Bulk Lock Queue) */
+/** 3. บันทึกการเช็คชื่อเข้าแถวหน้าเสาธง (Upsert: ส่งซ้ำวันเดิมจะอัปเดตทับ ไม่เกิดแถวซ้ำ) */
 function recordAttendance(payload) {
   const { records, teacherName } = payload;
   if (!records || !Array.isArray(records) || records.length === 0) {
@@ -186,22 +187,55 @@ function recordAttendance(payload) {
 
   const lock = LockService.getScriptLock();
   try {
-    lock.waitLock(30000); 
+    lock.waitLock(30000);
 
     const sheet = getTargetSheet(ATTENDANCE_SHEET_NAME);
     if (sheet.getLastRow() === 0) {
       sheet.appendRow(['Timestamp', 'Date_TH', 'Teacher', 'Student_ID', 'Name', 'Status']);
     }
+    sheet.getRange('B:B').setNumberFormat('@'); // คอลัมน์วันที่เป็นข้อความล้วน
 
     const now = new Date();
     const dateStr = Utilities.formatDate(now, CONFIG.TIMEZONE, "dd/MM/yyyy");
-    const rows = records.map(r => [now, dateStr, teacherName, String(r.id), r.name, r.status]);
-    
-    // Bulk Insert (O(1) Sheet Operation)
-    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, 6).setValues(rows);
-    SpreadsheetApp.flush(); 
-    
-    return { success: true, count: rows.length };
+
+    // สแกนเฉพาะแถวท้ายชีต เพื่อหาแถวของวันนี้ที่มีอยู่แล้ว
+    const existingMap = new Map(); // Student_ID -> เลขแถว
+    const lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      const WINDOW = 10000;
+      const startRow = Math.max(2, lastRow - WINDOW + 1);
+      const vals = sheet.getRange(startRow, 1, lastRow - startRow + 1, 6).getDisplayValues();
+      for (let i = vals.length - 1; i >= 0; i--) {
+        if (String(vals[i][1]).trim() === dateStr) {
+          const key = String(vals[i][3]).trim();
+          if (!existingMap.has(key)) existingMap.set(key, startRow + i);
+        }
+      }
+    }
+
+    // กัน ID ซ้ำใน payload เดียวกัน (ตัวหลังสุดชนะ)
+    const unique = new Map();
+    records.forEach(r => unique.set(String(r.id).trim(), r));
+
+    const newRows = [];
+    let updated = 0;
+    unique.forEach((r, id) => {
+      const rowData = [now, dateStr, teacherName, id, r.name, r.status];
+      const existingRow = existingMap.get(id);
+      if (existingRow) {
+        sheet.getRange(existingRow, 1, 1, 6).setValues([rowData]);
+        updated++;
+      } else {
+        newRows.push(rowData);
+      }
+    });
+
+    if (newRows.length > 0) {
+      sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, 6).setValues(newRows);
+    }
+    SpreadsheetApp.flush();
+
+    return { success: true, count: unique.size, inserted: newRows.length, updated: updated };
   } catch (error) {
     console.error("recordAttendance Error:", error);
     return { success: false, message: "ระบบกำลังมีผู้ใช้งานจำนวนมาก กรุณากดบันทึกอีกครั้ง" };
@@ -733,7 +767,8 @@ function saveSavingsTransaction(payload) {
         else targetPercent = payload.targetPercentage || 10; // ทั่วไปให้กำหนดเป้าหมายเอง
         
         const targetAmount = (parseFloat(monthlyIncome) * targetPercent) / 100;
-        masterSheet.appendRow([ studentId, studentType, monthlyIncome, targetPercent, targetAmount, 0, new Date() ]);
+        const initBalance = (amount && parseFloat(amount) > 0 && type === 'ฝาก') ? parseFloat(amount) : 0;
+        masterSheet.appendRow([ studentId, studentType, monthlyIncome, targetPercent, targetAmount, initBalance, new Date() ]);
     } else if (masterRowIndex > -1) {
         currentBalance = parseFloat(masterData[masterRowIndex][5] || 0);
     }
@@ -748,6 +783,9 @@ function saveSavingsTransaction(payload) {
         
         const txId = "TX_" + Date.now();
         const txAmount = parseFloat(amount);
+        if (type === 'ถอน' && txAmount > currentBalance) {
+            return { success: false, message: "ยอดเงินไม่พอสำหรับการถอน" };
+        }
         
         txSheet.appendRow([
             txId, Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "dd/MM/yyyy HH:mm:ss"), 
@@ -893,31 +931,31 @@ function recordLibraryEntry(payload) {
 function checkIsInternshipRoom(roomName, targetDate) {
   if (!targetDate) targetDate = new Date();
   const time = targetDate.getTime();
-  const makeTime = (y, m, d) => new Date(y, m - 1, d).getTime();
-  
-  // 🟢 ลบช่องว่างออกทั้งหมดเพื่อแก้ปัญหาชื่อห้องพิมพ์ไม่ตรงกัน (เช่น "ปวส. 2/1" กับ "ปวส.2/1")
+  const startOf = (y, m, d) => new Date(y, m - 1, d, 0, 0, 0).getTime();
+  const endOf = (y, m, d) => new Date(y, m - 1, d, 23, 59, 59).getTime(); // นับรวมวันสุดท้าย
+
+  // ลบช่องว่างออกทั้งหมด (เช่น "ปวส. 2/1" กับ "ปวส.2/1")
   const room = String(roomName).replace(/\s+/g, '').trim();
-  
+
   // 1. กลุ่ม ปวช.3 ทุกห้อง (8 มิ.ย. 69 ถึง 21 ส.ค. 69)
   if (room.includes("ปวช.3")) {
-    return (time >= makeTime(2026, 6, 8) && time <= makeTime(2026, 8, 21));
+    return (time >= startOf(2026, 6, 8) && time <= endOf(2026, 8, 21));
   }
-  
-  // 2. กลุ่ม ปวส.2 ที่เริ่มฝึกงานพร้อมกันตั้งแต่วันที่ 25 พ.ค. 69
-  if (time >= makeTime(2026, 5, 25)) {
-    // 🟢 ใช้ endsWith แทน includes เพื่อป้องกันบั๊กหาคำว่า "2/1" แต่ไปโดนห้อง "2/10"
-    if (room.endsWith("ปวส.2/3")) return time <= makeTime(2026, 12, 18);
-    if (room.endsWith("ปวส.2/5") || room.endsWith("ปวส.2/14")) return time <= makeTime(2026, 12, 19);
-    if (room.endsWith("ปวส.2/10")) return time <= makeTime(2026, 12, 31);
-    if (room.endsWith("ปวส.2/8")) return time <= makeTime(2027, 1, 31);
-    
-    // ที่เหลือ ปวส.2/1, 2/2, 2/6, 2/7, 2/12, 2/13 (สิ้นสุด 21 ส.ค. 69)
-    if (room.endsWith("ปวส.2/1") || room.endsWith("ปวส.2/2") || room.endsWith("ปวส.2/6") || 
+
+  // 2. กลุ่ม ปวส.2 ที่เริ่มฝึกงานตั้งแต่วันที่ 25 พ.ค. 69
+  if (time >= startOf(2026, 5, 25)) {
+    if (room.endsWith("ปวส.2/3")) return time <= endOf(2026, 12, 18);
+    if (room.endsWith("ปวส.2/5") || room.endsWith("ปวส.2/14")) return time <= endOf(2026, 12, 19);
+    if (room.endsWith("ปวส.2/10")) return time <= endOf(2026, 12, 31);
+    if (room.endsWith("ปวส.2/8")) return time <= endOf(2027, 1, 31);
+
+    // ปวส.2/1, 2/2, 2/6, 2/7, 2/12, 2/13 (สิ้นสุด 21 ส.ค. 69)
+    if (room.endsWith("ปวส.2/1") || room.endsWith("ปวส.2/2") || room.endsWith("ปวส.2/6") ||
         room.endsWith("ปวส.2/7") || room.endsWith("ปวส.2/12") || room.endsWith("ปวส.2/13")) {
-      return time <= makeTime(2026, 8, 21);
+      return time <= endOf(2026, 8, 21);
     }
   }
-  
+
   return false;
 }
 
@@ -1477,6 +1515,21 @@ function authorizeDrive() {
   dummyFile.setTrashed(true); 
 }
 
+/**
+ * 🟢 ฟังก์ชันสร้างชีตเช็คชื่อของเทอมปัจจุบัน (รันด้วยมือ 1 ครั้งตอนเปิดเทอม)
+ * ปลอดภัยต่อการรันซ้ำ: ถ้ามีชีตอยู่แล้วจะไม่ทับข้อมูล
+ */
+function setupNewTermSheet() {
+  const sheet = getTargetSheet(ATTENDANCE_SHEET_NAME);
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(['Timestamp', 'Date_TH', 'Teacher', 'Student_ID', 'Name', 'Status']);
+    sheet.getRange(1, 1, 1, 6).setFontWeight('bold').setBackground('#f1f5f9');
+    sheet.setFrozenRows(1);
+  }
+  sheet.getRange('B:B').setNumberFormat('@');
+  Logger.log('พร้อมใช้งานชีต: ' + ATTENDANCE_SHEET_NAME + ' | เปิดเทอม: ' + CONFIG.TERM_START_DATE);
+}
+
 // ==========================================
 // 📝 E-TESTING & ITEM BANK SYSTEM
 // ==========================================
@@ -1687,6 +1740,13 @@ function submitLiveAnswer(payload) {
   if (props.getProperty('GAME_STATUS') !== 'PLAYING') {
     return { success: false, message: "หมดเวลาตอบสำหรับข้อนี้แล้ว" };
   }
+
+  const answerCache = CacheService.getScriptCache();
+  const dupKey = 'ans_' + props.getProperty('ACTIVE_GAME_ID') + '_' + String(studentId).trim() + '_' + questionIndex;
+  if (answerCache.get(dupKey)) {
+    return { success: false, message: "คุณตอบข้อนี้ไปแล้ว" };
+  }
+  answerCache.put(dupKey, '1', 3600);
 
   const questions = JSON.parse(props.getProperty('QUESTIONS_JSON'));
   const currentQ = questions[questionIndex];

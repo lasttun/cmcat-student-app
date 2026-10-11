@@ -4,11 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CMCAT Student Portal</title>
+    <link rel="icon" href="logo.webp" type="image/webp">
+    <meta name="theme-color" content="#047857">
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <style> body { font-family: 'Prompt', sans-serif; } </style>
+    <style>
+    body { font-family: 'Prompt', sans-serif; }
+    @keyframes slideUp { from { transform: translateY(24px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+</style>
 </head>
 <body class="bg-slate-50 min-h-screen">
     
@@ -20,16 +27,28 @@
             const pages = ['login-page', 'dash-page', 'exam-hub-page', 'exam-room-page', 'live-game-page', 'savings-page'];
             pages.forEach(p => {
                 const el = document.getElementById(p);
-                if(el) el.classList.add('hidden');
+                if(el) { el.classList.add('hidden'); el.classList.remove('flex'); }
             });
-            document.getElementById(pageId).classList.remove('hidden');
+            const target = document.getElementById(pageId);
+            target.classList.remove('hidden');
+            if (['exam-room-page', 'live-game-page'].includes(pageId)) target.classList.add('flex');
             window.scrollTo(0,0);
+        }
+
+        function escapeHtml(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
         }
 
         function logout() {
             localStorage.clear();
             location.reload();
         }
+
+        document.addEventListener('keydown', (e) => {
+            const loginPage = document.getElementById('login-page');
+            const btn = document.getElementById('btn-login');
+            if (e.key === 'Enter' && loginPage && !loginPage.classList.contains('hidden') && !btn.disabled) handleLogin();
+        });
 
         window.onload = () => {
             const user = localStorage.getItem('currentUser');
@@ -57,40 +76,123 @@
     <!-- ========================================== -->
     <!-- 1. LOGIN PAGE                              -->
     <!-- ========================================== -->
-    <div id="login-page" class="flex items-center justify-center min-h-screen p-4 bg-gradient-to-br from-emerald-50 to-teal-100">
-        <div class="bg-white p-6 md:p-10 rounded-[2rem] shadow-2xl w-full max-w-md border border-white/50 backdrop-blur-sm">
-            <div class="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
-                <i class="fa-solid fa-graduation-cap text-4xl text-emerald-600"></i>
-            </div>
-            <h2 class="text-2xl md:text-3xl font-bold text-slate-800 mb-2 text-center tracking-tight">ระบบดูแลผู้เรียน</h2>
-            <p class="text-center text-emerald-700 font-bold mb-1 text-sm md:text-base">วิทยาลัยเกษตรและเทคโนโลยีเชียงใหม่</p>
-            <p class="text-center text-slate-500 mb-8 text-xs md:text-sm">สำหรับนักเรียน นักศึกษา และครูที่ปรึกษา</p>
-            
-            <div class="space-y-4">
+    <div id="login-page" class="relative flex items-center justify-center min-h-[100dvh] p-4 overflow-hidden bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100">
+        <!-- ลวดลายพื้นหลัง -->
+        <div class="pointer-events-none absolute -top-24 -left-24 w-80 h-80 rounded-full bg-emerald-300/30 blur-3xl"></div>
+        <div class="pointer-events-none absolute -bottom-32 -right-24 w-96 h-96 rounded-full bg-teal-300/30 blur-3xl"></div>
+
+        <div class="relative w-full max-w-5xl grid lg:grid-cols-2 bg-white rounded-[2rem] shadow-2xl shadow-emerald-900/10 overflow-hidden border border-white animate-[slideUp_0.5s_ease-out]">
+
+            <!-- ฝั่งซ้าย: แบรนด์ (แสดงเฉพาะจอใหญ่) -->
+            <div class="hidden lg:flex relative flex-col justify-between p-10 bg-gradient-to-br from-emerald-700 via-emerald-800 to-teal-900 text-white overflow-hidden">
+                <div class="pointer-events-none absolute -top-16 -right-16 w-64 h-64 rounded-full bg-white/10"></div>
+                <div class="pointer-events-none absolute bottom-0 -left-20 w-72 h-72 rounded-full bg-white/5"></div>
+
                 <div class="relative">
-                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><i class="fa-solid fa-user text-slate-400"></i></div>
-                    <input type="text" id="login-id" placeholder="รหัสประจำตัว" class="w-full py-4 pl-12 pr-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-emerald-100 outline-none transition-all text-slate-700 font-medium">
+                    <div class="w-36 h-36 rounded-full bg-white p-2 shadow-xl shadow-black/20 flex items-center justify-center overflow-hidden">
+                        <img src="logo.webp" alt="ตราวิทยาลัยเกษตรและเทคโนโลยีเชียงใหม่" class="w-full h-full object-contain rounded-full"
+                             onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');">
+                        <i class="hidden fa-solid fa-graduation-cap text-6xl text-emerald-600"></i>
+                    </div>
+                    <h1 class="mt-8 text-3xl font-bold leading-tight tracking-tight">ระบบดูแลผู้เรียน</h1>
+                    <p class="mt-2 text-emerald-100 font-medium">วิทยาลัยเกษตรและเทคโนโลยีเชียงใหม่</p>
                 </div>
-                <div class="relative">
-                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><i class="fa-solid fa-lock text-slate-400"></i></div>
-                    <input type="password" id="login-pass" placeholder="รหัสผ่าน" class="w-full py-4 pl-12 pr-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-emerald-100 outline-none transition-all text-slate-700 font-medium">
+
+                <ul class="relative space-y-3 text-sm text-emerald-50">
+                    <li class="flex items-center gap-3"><span class="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center"><i class="fa-solid fa-calendar-check"></i></span>ติดตามการเข้าแถวหน้าเสาธง</li>
+                    <li class="flex items-center gap-3"><span class="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center"><i class="fa-solid fa-heart-pulse"></i></span>แบบประเมินพฤติกรรม SDQ</li>
+                    <li class="flex items-center gap-3"><span class="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center"><i class="fa-solid fa-laptop-code"></i></span>คลังข้อสอบ E-Testing</li>
+                    <li class="flex items-center gap-3"><span class="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center"><i class="fa-solid fa-piggy-bank"></i></span>บันทึกการออมเงิน</li>
+                </ul>
+            </div>
+
+            <!-- ฝั่งขวา: ฟอร์มเข้าสู่ระบบ -->
+            <div class="flex flex-col justify-center p-6 sm:p-10 lg:p-12">
+                <!-- โลโก้บนมือถือ -->
+                <div class="lg:hidden text-center mb-6">
+                    <div class="w-24 h-24 mx-auto rounded-full bg-white p-1.5 shadow-lg shadow-emerald-900/10 border border-emerald-100 flex items-center justify-center overflow-hidden">
+                        <img src="logo.webp" alt="ตราวิทยาลัยเกษตรและเทคโนโลยีเชียงใหม่" class="w-full h-full object-contain rounded-full"
+                             onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');">
+                        <i class="hidden fa-solid fa-graduation-cap text-4xl text-emerald-600"></i>
+                    </div>
+                    <h1 class="mt-4 text-2xl font-bold text-slate-800 tracking-tight">ระบบดูแลผู้เรียน</h1>
+                    <p class="text-emerald-700 font-semibold text-sm">วิทยาลัยเกษตรและเทคโนโลยีเชียงใหม่</p>
+                </div>
+
+                <div class="mb-6 hidden lg:block">
+                    <h2 class="text-2xl font-bold text-slate-800">ยินดีต้อนรับ 👋</h2>
+                    <p class="text-slate-500 text-sm mt-1">เข้าสู่ระบบสำหรับนักเรียน นักศึกษา และครูที่ปรึกษา</p>
+                </div>
+                <p class="lg:hidden text-center text-slate-500 text-xs mb-5">สำหรับนักเรียน นักศึกษา และครูที่ปรึกษา</p>
+
+                <div class="space-y-4">
+                    <div>
+                        <label for="login-id" class="block text-xs font-bold text-slate-500 mb-1.5 ml-1">รหัสประจำตัว</label>
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><i class="fa-solid fa-user text-slate-400"></i></div>
+                            <input type="text" id="login-id" placeholder="กรอกรหัสประจำตัว" autocomplete="username" autocapitalize="off" spellcheck="false"
+                                   class="w-full py-3.5 pl-12 pr-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 outline-none transition-all text-slate-700 font-medium">
+                        </div>
+                    </div>
+                    <div>
+                        <label for="login-pass" class="block text-xs font-bold text-slate-500 mb-1.5 ml-1">รหัสผ่าน</label>
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><i class="fa-solid fa-lock text-slate-400"></i></div>
+                            <input type="password" id="login-pass" placeholder="กรอกรหัสผ่าน" autocomplete="current-password"
+                                   class="w-full py-3.5 pl-12 pr-12 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 outline-none transition-all text-slate-700 font-medium">
+                            <button type="button" id="btn-toggle-pass" onclick="togglePassword()" aria-label="แสดงหรือซ่อนรหัสผ่าน"
+                                    class="absolute inset-y-0 right-0 px-4 text-slate-400 hover:text-emerald-600 transition-colors">
+                                <i class="fa-solid fa-eye"></i>
+                            </button>
+                        </div>
+                        <p id="caps-warning" class="hidden mt-1.5 ml-1 text-xs font-semibold text-amber-600"><i class="fa-solid fa-triangle-exclamation"></i> Caps Lock เปิดอยู่</p>
+                    </div>
+                </div>
+
+                <button onclick="handleLogin()" id="btn-login"
+                        class="w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white py-4 mt-7 rounded-2xl font-bold hover:from-emerald-700 hover:to-teal-700 hover:shadow-lg hover:shadow-emerald-600/20 active:scale-[0.98] disabled:opacity-70 disabled:cursor-wait transition-all flex justify-center items-center gap-2">
+                    เข้าสู่ระบบ <i class="fa-solid fa-arrow-right"></i>
+                </button>
+
+                <p class="text-center text-xs text-slate-400 mt-4">ลืมรหัสผ่าน? ติดต่อครูที่ปรึกษาของท่าน</p>
+
+                <!-- เครดิตผู้พัฒนา -->
+                <div class="mt-8 pt-5 border-t border-slate-100 text-center text-[11px] leading-relaxed text-slate-400">
+                    <p>พัฒนาโดย <span class="font-semibold text-slate-500">งานศูนย์ดิจิทัลและสื่อสารองค์กร</span></p>
+                    <p>วิทยาลัยเกษตรและเทคโนโลยีเชียงใหม่</p>
+                    <p class="mt-0.5">นายนัธทวัฒน์ ชาคริตนิรันดร์</p>
                 </div>
             </div>
-            
-            <button onclick="handleLogin()" id="btn-login" class="w-full bg-emerald-600 text-white py-4 mt-8 rounded-2xl font-bold hover:bg-emerald-700 hover:shadow-lg transition-all flex justify-center items-center gap-2">
-                เข้าสู่ระบบ <i class="fa-solid fa-arrow-right"></i>
-            </button>
         </div>
     </div>
+
+    <script>
+        function togglePassword() {
+            const input = document.getElementById('login-pass');
+            const icon = document.querySelector('#btn-toggle-pass i');
+            const show = input.type === 'password';
+            input.type = show ? 'text' : 'password';
+            icon.className = show ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye';
+        }
+        // เตือนเมื่อเปิด Caps Lock ขณะพิมพ์รหัสผ่าน
+        (function () {
+            const pass = document.getElementById('login-pass');
+            const warn = document.getElementById('caps-warning');
+            const check = (e) => { if (e.getModifierState) warn.classList.toggle('hidden', !e.getModifierState('CapsLock')); };
+            pass.addEventListener('keyup', check);
+            pass.addEventListener('keydown', check);
+            pass.addEventListener('blur', () => warn.classList.add('hidden'));
+        })();
+    </script>
     
     <script>
         async function handleLogin() {
-            const studentId = document.getElementById('login-id').value;
+            const studentId = document.getElementById('login-id').value.trim();
             const password = document.getElementById('login-pass').value;
             if(!studentId || !password) return Swal.fire('แจ้งเตือน', 'กรุณากรอกข้อมูลให้ครบถ้วน', 'warning');
     
             const btn = document.getElementById('btn-login');
-            btn.disabled = true; btn.innerText = 'กำลังเข้าสู่ระบบ...';
+            btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังเข้าสู่ระบบ...';
     
             try {
                 const res = await fetch(API_URL, {
@@ -125,7 +227,7 @@
                         .then(() => { window.location.href = "exam_master.html"; });
                     }
                 } else {
-                    Swal.fire('ผิดพลาด', 'รหัสประจำตัวหรือรหัสผ่านไม่ถูกต้อง', 'error');
+                    Swal.fire('ผิดพลาด', data.message || 'รหัสประจำตัวหรือรหัสผ่านไม่ถูกต้อง', 'error');
                 }
             } catch (err) {
                 Swal.fire('Error', 'ไม่สามารถเชื่อมต่อระบบได้', 'error');
@@ -577,7 +679,7 @@
 
     <script>
         let eMode = 'PRACTICE', eCategory = 'ALL', eQuestions = [], eCurrentIdx = 0, eAnswers = {};
-        let eTimer = null, eTimeLeft = 0;
+        let eTimer = null, eTimeLeft = 0, eEndTime = 0;
     
         function startExam(mode, category) {
             if (mode === 'SIMULATION' && !confirm("โหมดสอบเสมือนจริง จะเริ่มจับเวลา 3 ชั่วโมง ห้ามออกจากหน้านี้ ยืนยันหรือไม่?")) return;
@@ -605,7 +707,7 @@
                     renderQuestion(0);
                     
                     if (eMode === 'SIMULATION') {
-                        eTimeLeft = 180 * 60; 
+                        eTimeLeft = 180 * 60; eEndTime = Date.now() + eTimeLeft * 1000; 
                         document.getElementById('timer-display').classList.remove('hidden');
                         startTimer();
                     } else {
@@ -688,7 +790,7 @@
         function startTimer() {
             clearInterval(eTimer);
             eTimer = setInterval(() => {
-                eTimeLeft--;
+                eTimeLeft = Math.max(0, Math.ceil((eEndTime - Date.now()) / 1000));
                 let h = Math.floor(eTimeLeft / 3600), m = Math.floor((eTimeLeft % 3600) / 60), s = eTimeLeft % 60;
                 document.getElementById('time-left').innerText = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
                 if (eTimeLeft <= 0) { clearInterval(eTimer); Swal.fire('หมดเวลา', 'ระบบจะส่งคำตอบอัตโนมัติ', 'warning').then(processSubmit); }
@@ -816,6 +918,8 @@
 
             function startLiveGamePolling(gameId, playerName) {
                 currentLiveGameId = gameId;
+                lastQuestionIndex = -1; hasAnsweredCurrent = false;
+                clearInterval(livePollingInterval);
                 document.getElementById('live-player-name').innerText = playerName;
                 
                 showPage('live-game-page');
@@ -899,7 +1003,7 @@
         
             function leaveLiveGame() {
                 clearInterval(livePollingInterval);
-                currentLiveGameId = ''; myTotalScore = 0;
+                currentLiveGameId = ''; myTotalScore = 0; lastQuestionIndex = -1; hasAnsweredCurrent = false;
                 document.getElementById('live-score').innerText = '0 คะแนน';
                 showPage('exam-hub-page');
             }
@@ -1049,10 +1153,10 @@
                     
                     if (!isSavingsNewUser) {
                         const d = result.data;
-                        document.getElementById('sv-total-balance').innerText = d.currentBalance.toLocaleString();
+                        document.getElementById('sv-total-balance').innerText = Number(d.currentBalance || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         document.getElementById('sv-target-pct').innerText = d.targetPercentage;
-                        document.getElementById('sv-month-saved').innerText = d.currentMonthDeposit.toLocaleString();
-                        document.getElementById('sv-target-amt').innerText = d.targetAmount.toLocaleString();
+                        document.getElementById('sv-month-saved').innerText = Number(d.currentMonthDeposit || 0).toLocaleString();
+                        document.getElementById('sv-target-amt').innerText = Number(d.targetAmount || 0).toLocaleString();
                         
                         // 🟢 ประทับเวลาล่าสุดที่โหลดข้อมูลเสร็จ
                         const now = new Date();
@@ -1092,6 +1196,7 @@
 
         function openSavingsModal() {
             document.getElementById('savings-form').reset();
+            document.getElementById('sv-percent').value = savingsStudentType === 'กสศ_ปวส' ? '30' : (savingsStudentType === 'กสศ_ปวช' ? '50' : '20');
             const setupBox = document.getElementById('sv-setup-section');
             
             if(isSavingsNewUser) {
@@ -1169,6 +1274,7 @@
                 let fileData = null;
                 if (fileInput.files.length > 0) {
                     const file = fileInput.files[0];
+                    if (file.size > 5 * 1024 * 1024) return Swal.fire('ไฟล์ใหญ่เกินไป', 'กรุณาแนบรูปสลิปขนาดไม่เกิน 5 MB', 'warning');
                     fileData = {
                         filename: file.name,
                         mimeType: file.type,
@@ -1223,7 +1329,7 @@
                             <i class="fa-solid ${tx.type === 'ฝาก' ? 'fa-arrow-down' : 'fa-arrow-up'}"></i>
                         </div>
                         <div>
-                            <p class="font-bold text-slate-700 text-sm">${tx.type}เงิน ${tx.note ? `<span class="text-xs font-normal text-slate-400">(${tx.note})</span>` : ''}</p>
+                            <p class="font-bold text-slate-700 text-sm">${tx.type}เงิน ${tx.note ? `<span class="text-xs font-normal text-slate-400">(${escapeHtml(tx.note)})</span>` : ''}</p>
                             <p class="text-xs text-slate-400">${tx.timestamp.split(' ')[0]}</p>
                         </div>
                     </div>

@@ -127,10 +127,13 @@
 
                 <div class="space-y-4">
                     <div>
-                        <label for="login-id" class="block text-xs font-bold text-slate-500 mb-1.5 ml-1">รหัสประจำตัว</label>
-                        <div class="relative">
-                            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><i class="fa-solid fa-user text-slate-400"></i></div>
-                            <input type="text" id="login-id" placeholder="กรอกรหัสประจำตัว" autocomplete="username" autocapitalize="off" spellcheck="false"
+                        <div class="flex items-center gap-1.5 mb-1.5 ml-1">
+                            <label for="login-id" class="block text-xs font-bold text-slate-500">ชื่อผู้ใช้งาน</label>
+                            <i class="fa-solid fa-circle-info text-[10px] text-slate-300 hover:text-emerald-500 cursor-help transition-colors" title="ผู้เรียน: รหัสประจำตัว | บุคลากร: เบอร์ติดต่อที่ลงทะเบียนไว้"></i>
+                        </div>
+                        <div class="relative group">
+                            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><i class="fa-solid fa-user text-slate-400 group-focus-within:text-emerald-500 transition-colors"></i></div>
+                            <input type="text" id="login-id" placeholder="รหัสประจำตัว หรือ เบอร์ติดต่อ" autocomplete="username" autocapitalize="off" spellcheck="false"
                                    class="w-full py-3.5 pl-12 pr-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 outline-none transition-all text-slate-700 font-medium">
                         </div>
                     </div>
@@ -158,9 +161,9 @@
 
                 <!-- เครดิตผู้พัฒนา -->
                 <div class="mt-8 pt-5 border-t border-slate-100 text-center text-[11px] leading-relaxed text-slate-400">
-                    <p>พัฒนาโดย <span class="font-semibold text-slate-500">งานศูนย์ดิจิทัลและสื่อสารองค์กร</span></p>
-                    <p>วิทยาลัยเกษตรและเทคโนโลยีเชียงใหม่</p>
-                    <p class="mt-0.5">นายนัธทวัฒน์ ชาคริตนิรันดร์</p>
+                    <p>Developed by <span class="font-semibold text-slate-500">Digital and Corporate Communication Center</span></p>
+                    <p>Chiang Mai College of Agriculture and Technology</p>
+                    <p class="mt-0.5">Nuttawat Chakitniran</p>
                 </div>
             </div>
         </div>

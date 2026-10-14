@@ -81,7 +81,7 @@ function doPost(e) {
       case 'getRoomCalendar': return output(fetchRoomAttendanceCalendar(payload.roomString));
       case 'saveHomeroomSpeech': return output(saveHomeroomSpeech(payload)); 
       case 'getSpeechLogs': return output(getSpeechLogs()); 
-      case 'getRoomHistory': return output(fetchRoomHistory(payload.roomString)); // 🟢 คืนชีพโหลดข้อมูลรายห้องของครู
+      case 'getRoomHistory': return output(fetchRoomHistory(payload.roomString, payload.term)); // 🟢 คืนชีพโหลดข้อมูลรายห้องของครู
       case 'getExecutiveSummary': return output(getExecutiveSummary(payload)); // 🟢 คืนชีพ Dashboard ของ Admin
       case 'recordLibraryEntry': return output(recordLibraryEntry(payload)); // 🟢 อัปเดตรองรับ payload แบบ Object // 🟢 คืนชีพระบบห้องสมุด
       
@@ -338,14 +338,19 @@ function fetchSDQOverview(roomString) {
   return { success: true, data: Array.from(latestMap.values()) };
 }
 
-/** 🛡️ 8.5 ดึงประวัติการเข้าแถวของทั้งห้อง (Fast Set Lookup O(1)) */
-function fetchRoomHistory(roomString) {
+/** 🛡️ 8.5 ดึงประวัติการเข้าแถวของทั้งห้อง (รองรับเลือกเทอมย้อนหลัง เช่น "1_2569") */
+function fetchRoomHistory(roomString, term) {
   const studentResult = fetchStudentsByRoom(roomString);
   if (!studentResult.success) return { success: false, data: [] };
-  
+
   const studentIdSet = new Set(studentResult.data.map(s => s.id));
-  const sheet = getTargetSheet(ATTENDANCE_SHEET_NAME);
-  if (sheet.getLastRow() <= 1) return { success: true, data: [] };
+
+  // ตรวจรูปแบบเทอม (เช่น 1_2569) ถ้าไม่ถูกต้องหรือไม่ส่งมา ให้ใช้เทอมปัจจุบัน
+  const termKey = /^[12]_\d{4}$/.test(String(term || '')) ? String(term) : CONFIG.CURRENT_TERM;
+
+  // ใช้ getSheetByName เพื่อไม่ให้สร้างชีตเปล่าขึ้นมาเองเมื่อเลือกเทอมที่ไม่มีข้อมูล
+  const sheet = getActiveSS().getSheetByName(`Attendance_Logs_${termKey}`);
+  if (!sheet || sheet.getLastRow() <= 1) return { success: true, data: [] };
 
   const data = sheet.getDataRange().getDisplayValues();
   const history = data.slice(1)
@@ -762,8 +767,8 @@ function saveSavingsTransaction(payload) {
     // ถ้ายังไม่มีบัญชี (สร้างใหม่พร้อม Lock กฎ กสศ.)
     if (masterRowIndex === -1 && monthlyIncome) {
         let targetPercent = 0;
-        if (studentType === 'กสศ_ปวช') targetPercent = 50;
-        else if (studentType === 'กสศ_ปวส') targetPercent = 30;
+        if (studentType === 'กสศ_ปวช') targetPercent = Math.max(50, parseFloat(payload.targetPercentage) || 0);
+        else if (studentType === 'กสศ_ปวส') targetPercent = Math.max(30, parseFloat(payload.targetPercentage) || 0);
         else targetPercent = payload.targetPercentage || 10; // ทั่วไปให้กำหนดเป้าหมายเอง
         
         const targetAmount = (parseFloat(monthlyIncome) * targetPercent) / 100;
@@ -771,6 +776,16 @@ function saveSavingsTransaction(payload) {
         masterSheet.appendRow([ studentId, studentType, monthlyIncome, targetPercent, targetAmount, initBalance, new Date() ]);
     } else if (masterRowIndex > -1) {
         currentBalance = parseFloat(masterData[masterRowIndex][5] || 0);
+
+        // อัปเดตรายรับ/เป้าหมายของบัญชีที่มีอยู่แล้ว (กสศ. ไม่ต่ำกว่า 50% ปวช. / 30% ปวส.)
+        if (monthlyIncome) {
+            const accType = String(masterData[masterRowIndex][1]);
+            let newPct = parseFloat(payload.targetPercentage) || parseFloat(masterData[masterRowIndex][3]) || 10;
+            if (accType === 'กสศ_ปวช') newPct = Math.max(newPct, 50);
+            else if (accType === 'กสศ_ปวส') newPct = Math.max(newPct, 30);
+            const newTarget = (parseFloat(monthlyIncome) * newPct) / 100;
+            masterSheet.getRange(masterRowIndex + 1, 3, 1, 3).setValues([[monthlyIncome, newPct, newTarget]]);
+        }
     }
 
     // --- 3. บันทึก Transaction ---

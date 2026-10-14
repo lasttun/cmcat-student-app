@@ -260,6 +260,10 @@
                     <button onclick="exportToPDF()" id="btn-export-pdf" class="hidden bg-slate-800 text-white hover:bg-slate-900 px-4 py-2 rounded-xl shadow-sm transition-all font-bold text-xs md:text-sm flex items-center gap-2 border border-slate-700">
                         🖨️ <span class="hidden md:inline">พิมพ์ / Save PDF (A4)</span>
                     </button>
+                    <select id="report-term-select" onchange="openAttendanceReport()" class="border border-indigo-200 p-2 rounded-xl text-xs md:text-sm font-bold text-indigo-800 bg-indigo-50 outline-none flex-1 md:w-auto">
+                        <option value="2_2569">ภาคเรียนที่ 2/2569</option>
+                        <option value="1_2569">ภาคเรียนที่ 1/2569</option>
+                    </select>
                     <select id="report-type-select" onchange="renderAttendanceReportTable()" class="border border-blue-200 p-2 rounded-xl text-xs md:text-sm font-bold text-blue-800 bg-white outline-none flex-1 md:w-auto hidden">
                         <option value="term_summary">1. สรุปภาพรวม (ตลอดเทอม)</option>
                         <option value="month_summary">2. สรุปภาพรวม (ประจำเดือน)</option>
@@ -804,7 +808,8 @@ function renderTable(students, sdqMap) {
         content.innerHTML = `<div class="text-center py-12"><div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-100 border-t-blue-600 mx-auto mb-4"></div><p class="text-blue-700 font-bold">กำลังรวบรวมข้อมูลสถิติ...</p></div>`;
 
         try {
-            const rhRes = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getRoomHistory', payload: { roomString } }) });
+            const reportTerm = document.getElementById('report-term-select').value;
+            const rhRes = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getRoomHistory', payload: { roomString, term: reportTerm } }) });
             const rh = await rhRes.json();
             if (!rh.success) throw new Error('โหลดประวัติไม่สำเร็จ');
             const byId = {};
@@ -836,7 +841,15 @@ function renderTable(students, sdqMap) {
                 const monthName = new Date(year, parseInt(month)-1, 1).toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
                 monthSelect.innerHTML += `<option value="${m}">${monthName}</option>`;
             });
-            if(monthSet.size > 0) document.getElementById('report-type-select').classList.remove('hidden');
+            if(monthSet.size === 0) {
+                document.getElementById('report-type-select').classList.add('hidden');
+                document.getElementById('report-month-select').classList.add('hidden');
+                document.getElementById('btn-export-pdf').classList.add('hidden');
+                content.innerHTML = '<div class="p-8 text-center text-slate-500 bg-slate-50 rounded-2xl border border-dashed border-slate-300 font-bold">ไม่พบข้อมูลการเข้าแถวของภาคเรียนที่เลือก</div>';
+                document.getElementById('print-master-container').innerHTML = '';
+                return;
+            }
+            document.getElementById('report-type-select').classList.remove('hidden');
             renderAttendanceReportTable();
         } catch (err) { content.innerHTML = '<div class="p-8 text-center text-red-500 font-bold">❌ เกิดข้อผิดพลาดในการดึงข้อมูล</div>'; }
     }
@@ -868,7 +881,7 @@ function renderTable(students, sdqMap) {
 
         const selectedMonth = monthSelect.value;
         const selectedMonthText = monthSelect.options[monthSelect.selectedIndex]?.text || '';
-        const termYear = getAcademicTermAndYear(); // 🤖 ดึงค่าเทอมและปีการศึกษาอัตโนมัติ
+        const termYear = (document.getElementById('report-term-select').value || '').replace('_', '/') || getAcademicTermAndYear();
         
         let reportTitle = typeSelect === 'term_summary' ? `สรุปการเข้าแถวทั้งหมดประจำภาคเรียนที่ ${termYear}` :
                           typeSelect === 'month_summary' ? `สรุปการเข้าแถวประจำเดือน ${selectedMonthText}` :

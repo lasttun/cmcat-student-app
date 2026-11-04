@@ -204,6 +204,8 @@
         const icon = document.getElementById('refresh-icon'); icon.classList.add('fa-spin');
         try {
             const r = await api('getBackdateRequests', { includeRecords: true });
+            if (!r.success && String(r.message || '').includes('not implemented'))
+                throw new Error('ระบบหลังบ้านยังเป็นเวอร์ชันเก่า: ให้แอดมิน Deploy → Manage deployments → Edit → Version: New version → Deploy และตรวจว่า URL ตรงกับ API_URL ในหน้าเว็บ');
             if (!r.success) throw new Error(r.message);
             allRequests = r.data;
             policy = r.policy;

@@ -1719,9 +1719,21 @@ function renderTable(students, sdqMap) {
             const res = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getAttendancePolicy' }) });
             const r = await res.json();
             if (r.success) attPolicy = r.data;
+            else if (String(r.message || '').includes('not implemented')) showBackendOutdated();
         } catch (e) { /* ใช้ค่าเริ่มต้น */ }
         const el = document.getElementById('policy-cutoff-text');
         if (el) el.innerText = attPolicy.cutoff;
+    }
+
+    // 🩺 แจ้งเตือนเมื่อหลังบ้าน (Apps Script) ยังเป็นเวอร์ชันเก่า → ระบบเช็คย้อนหลังจะใช้ไม่ได้
+    function showBackendOutdated() {
+        if (document.getElementById('backend-outdated')) return;
+        document.body.insertAdjacentHTML('afterbegin', `
+            <div id="backend-outdated" style="position:sticky;top:0;z-index:60;background:#dc2626;color:#fff;padding:10px 16px;font-size:14px;text-align:center">
+                ⚠️ ระบบหลังบ้านยังเป็นเวอร์ชันเก่า ฟีเจอร์ขอเช็คย้อนหลังจะยังใช้ไม่ได้ —
+                แอดมิน: Apps Script → Deploy → Manage deployments → ✏️ Edit → Version: <b>New version</b> → Deploy
+                (และตรวจว่า URL ตรงกับ API_URL ในหน้าเว็บ)
+            </div>`);
     }
 
     function isNowAfterCutoff() {

@@ -90,7 +90,11 @@ function doPost(e) {
 
       // 📅 ระบบขออนุมัติเช็คชื่อย้อนหลัง + สถิติการทำงานครูที่ปรึกษา
       case 'getAttendancePolicy': return output(getAttendancePolicy());
-      case 'submitBackdateRequest': return output(submitBackdateRequest(payload));
+      case 'submitBackdateRequest': {
+        const r = submitBackdateRequest(payload);
+        if (!r.success) logSystemEvent('submitBackdateRequest', payload, r.message); // 🩺 บันทึกสาเหตุที่ส่งคำขอไม่สำเร็จ
+        return output(r);
+      }
       case 'getBackdateRequests': return output(getBackdateRequests(payload));
       case 'reviewBackdateRequest': return output(reviewBackdateRequest(payload));
       case 'cancelBackdateRequest': return output(cancelBackdateRequest(payload));
@@ -2153,7 +2157,7 @@ function submitBackdateRequest(payload) {
     return { success: true, requestId: requestId, daysLate: daysLate, requestType: row[BD.Request_Type] };
   } catch (error) {
     console.error("submitBackdateRequest Error:", error);
-    return { success: false, message: "ระบบกำลังมีผู้ใช้งานจำนวนมาก กรุณาส่งคำขออีกครั้ง" };
+    return { success: false, message: "บันทึกคำขอไม่สำเร็จ: " + error.message };
   } finally {
     lock.releaseLock();
   }
@@ -2678,4 +2682,30 @@ function getMyAttendanceGaps(payload) {
     console.error("getMyAttendanceGaps Error:", error);
     return { success: false, message: error.message };
   }
+}
+
+
+// =====================================================================
+// 🩺 SYSTEM LOG: บันทึกเหตุการณ์ที่ล้มเหลวลงชีต System_Log เพื่อตรวจสอบปัญหาได้จาก Google Sheets
+//    (เก็บเฉพาะข้อมูลที่จำเป็น ไม่เก็บรายชื่อนักเรียนทั้งหมด)
+// =====================================================================
+function logSystemEvent(action, payload, message) {
+  try {
+    const ss = getActiveSS();
+    let sheet = ss.getSheetByName('System_Log');
+    if (!sheet) {
+      sheet = ss.insertSheet('System_Log');
+      sheet.getRange(1, 1, 1, 7).setValues([['Timestamp', 'Action', 'Teacher_Email', 'Teacher_Name', 'Room', 'Target_Date', 'ผลลัพธ์/สาเหตุ']])
+        .setFontWeight('bold').setBackground('#fee2e2');
+      sheet.setFrozenRows(1);
+    }
+    const p = payload || {};
+    sheet.getRange(sheet.getLastRow() + 1, 1, 1, 7).setValues([[
+      Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "dd/MM/yyyy HH:mm:ss"), action,
+      String(p.teacherEmail || ''), String(p.teacherName || ''), String(p.roomString || ''),
+      String(p.targetDate || ''), String(message || '').substring(0, 300)
+    ]]);
+    // เก็บไว้ไม่เกิน 2,000 แถวล่าสุด
+    if (sheet.getLastRow() > 2001) sheet.deleteRows(2, sheet.getLastRow() - 2001);
+  } catch (e) { console.error('logSystemEvent failed:', e); }
 }

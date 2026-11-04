@@ -83,7 +83,7 @@
             <div class="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 md:p-6 mb-5">
                 <h2 class="font-bold text-slate-800 mb-1">✏️ แก้ไข/บันทึกเช็คชื่อย้อนหลังโดยแอดมิน</h2>
                 <p class="text-xs text-slate-500 mb-4">แก้ได้ทุกวันในภาคเรียนปัจจุบัน (ไม่จำกัด 7 วัน) ไม่ต้องรออนุมัติ • ทุกการแก้ไขถูกบันทึกในประวัติคำขอ (ประเภท "แอดมินแก้ไข")<br>
-                    ถ้าวันนั้นห้องไม่เคยเช็คเลย จะนับเป็น "ย้อนหลัง" ในสถิติของห้อง • ถ้าแก้ข้อมูลที่ครูเช็คไว้แล้ว สถิติตรงเวลา/ล่าช้าของครูจะคงเดิม</p>
+                    ถ้าวันนั้นห้องไม่เคยเช็คเลย จะนับเป็น "ย้อนหลัง" ในสถิติของห้อง • ถ้าแก้ข้อมูลที่ครูเช็คไว้แล้ว สถิติเช็คตอนเช้า/หลังเวลาของครูจะคงเดิม</p>
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
                     <div><label class="text-xs font-bold text-slate-600">ห้องเรียน</label>
                         <select id="ed-room" class="w-full mt-1 p-2.5 border border-slate-200 rounded-xl text-sm"><option value="">กำลังโหลด...</option></select></div>
@@ -116,7 +116,7 @@
                         </div>
                         <div class="flex flex-wrap gap-2">
                             <select id="stat-sort" onchange="renderTeacherTable()" class="p-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-700">
-                                <option value="rate">เรียงตาม % ตรงเวลา (น้อย→มาก)</option>
+                                <option value="rate">เรียงตาม % เช็คตอนเช้า (น้อย→มาก)</option>
                                 <option value="requests">เรียงตามจำนวนคำขอย้อนหลัง (มาก→น้อย)</option>
                                 <option value="missing">เรียงตามวันที่ไม่ได้เช็ค (มาก→น้อย)</option>
                                 <option value="name">เรียงตามชื่อ</option>
@@ -131,11 +131,11 @@
                                 <tr>
                                     <th class="p-3">ครูที่ปรึกษา</th>
                                     <th class="p-3">สัดส่วน ห้อง-วัน</th>
-                                    <th class="p-3 text-right">ตรงเวลา</th>
-                                    <th class="p-3 text-right">ล่าช้า</th>
+                                    <th class="p-3 text-right">เช็คตอนเช้า</th>
+                                    <th class="p-3 text-right">หลังเวลา</th>
                                     <th class="p-3 text-right">ย้อนหลัง</th>
                                     <th class="p-3 text-right">ไม่ได้เช็ค</th>
-                                    <th class="p-3 text-right">% ตรงเวลา</th>
+                                    <th class="p-3 text-right">% เช็คตอนเช้า</th>
                                     <th class="p-3 text-center">คำขอย้อนหลัง<br><span class="font-normal">(อนุมัติ/ไม่/รอ)</span></th>
                                     <th class="p-3 text-right">เฉลี่ยย้อน (วัน)</th>
                                     <th class="p-3 text-center">ระดับ</th>
@@ -146,7 +146,7 @@
                     </div>
                 </div>
                 <p class="text-xs text-slate-400 leading-relaxed">
-                    * <b>ตรงเวลา</b> = เช็คในวันนั้นก่อน <span class="cutoff-text">10:00</span> น. • <b>ล่าช้า</b> = เช็คในวันเดียวกันแต่หลังเวลา •
+                    * <b>เช็คตอนเช้า</b> = เช็คในวันนั้นก่อน <span class="cutoff-text">10:00</span> น. • <b>หลังเวลา</b> = เช็คในวันเดียวกันแต่หลังเวลา •
                     <b>ย้อนหลัง</b> = บันทึกหลังวันนั้น (ผ่านการอนุมัติ หรือข้อมูลเก่าก่อนมีระบบนี้) • <b>ไม่ได้เช็ค</b> = วันที่มีกิจกรรมหน้าเสาธงแต่ห้องไม่มีข้อมูลเลย (ไม่นับช่วงฝึกงานและวันนี้)
                 </p>
             </div>
@@ -162,8 +162,8 @@
     let policy = null;
 
     const SEG = [
-        { key: 'ontime', label: 'ตรงเวลา', cls: 'c-ontime' },
-        { key: 'late', label: 'ล่าช้า (วันเดียวกัน)', cls: 'c-late' },
+        { key: 'ontime', label: 'เช็คตอนเช้า', cls: 'c-ontime' },
+        { key: 'late', label: 'เช็คหลังเวลา', cls: 'c-late' },
         { key: 'backdate', label: 'ย้อนหลัง', cls: 'c-backdate' },
         { key: 'missing', label: 'ไม่ได้เช็คเลย', cls: 'c-missing' }
     ];
@@ -185,6 +185,8 @@
         const res = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action, payload }) });
         return res.json();
     };
+    // เทียบรหัสครูแบบยืดหยุ่น (Google Sheets อาจตัดเลข 0 นำหน้าของรหัสที่เป็นตัวเลข)
+    const idKey = v => { const s = String(v ?? '').trim(); return /^\d+$/.test(s) ? (s.replace(/^0+/, '') || '0') : s.toLowerCase(); };
     const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const statusBadge = st => {
         const map = { 'รออนุมัติ': 'bg-amber-100 text-amber-800 border-amber-200', 'อนุมัติ': 'bg-emerald-100 text-emerald-800 border-emerald-200', 'ไม่อนุมัติ': 'bg-red-100 text-red-700 border-red-200', 'ยกเลิก': 'bg-slate-100 text-slate-500 border-slate-200' };
@@ -227,11 +229,11 @@
         }
         // นับจำนวนคำขอทั้งหมดของครูแต่ละคน เพื่อช่วยหัวหน้างานตัดสินใจ
         const reqCount = {};
-        allRequests.forEach(q => { if (q.status !== 'ยกเลิก' && q.requestType !== 'แอดมินแก้ไข') reqCount[q.teacherEmail] = (reqCount[q.teacherEmail] || 0) + 1; });
+        allRequests.forEach(q => { if (q.status !== 'ยกเลิก' && q.requestType !== 'แอดมินแก้ไข') reqCount[idKey(q.teacherEmail)] = (reqCount[idKey(q.teacherEmail)] || 0) + 1; });
 
         box.innerHTML = list.map(q => {
             const c = q.counts;
-            const isMine = q.teacherEmail === currentUser.email;
+            const isMine = idKey(q.teacherEmail) === idKey(currentUser.email);
             const absentNames = (q.records || []).filter(r => r.status === 'ขาด').map(r => esc(r.name));
             const rows = (q.records || []).map((r, i) => `<tr class="${r.status === 'ขาด' ? 'bg-red-50' : ''}"><td class="px-2 py-1 text-slate-400">${i + 1}</td><td class="px-2 py-1 font-mono text-xs text-slate-500">${esc(r.id)}</td><td class="px-2 py-1">${esc(r.name)}</td><td class="px-2 py-1 font-bold">${esc(r.status)}</td></tr>`).join('');
             return `
@@ -244,7 +246,7 @@
                             <span class="text-xs ${q.daysLate >= 4 ? 'bg-orange-100 text-orange-800' : 'bg-amber-50 text-amber-800'} px-2 py-0.5 rounded-lg font-bold">ย้อนหลัง ${q.daysLate} วัน</span>
                         </div>
                         <p class="text-sm text-slate-600">วันที่ขอเช็ค <b>${esc(q.targetDate)}</b> • โดย <b>${esc(q.teacherName)}</b> <span class="text-xs text-slate-400">(ส่ง ${esc(q.createdAt)})</span></p>
-                        <p class="text-xs text-slate-500 mt-0.5">คำขอย้อนหลังของครูท่านนี้ในภาคเรียน: <b>${reqCount[q.teacherEmail] || 1}</b> ครั้ง</p>
+                        <p class="text-xs text-slate-500 mt-0.5">คำขอย้อนหลังของครูท่านนี้ในภาคเรียน: <b>${reqCount[idKey(q.teacherEmail)] || 1}</b> ครั้ง</p>
                         <div class="mt-3 bg-slate-50 border border-slate-100 rounded-2xl p-3 text-sm text-slate-700"><i class="fas fa-quote-left text-slate-300 mr-1"></i> ${esc(q.reason)}</div>
                         <p class="text-sm mt-3">มา <b>${c.present}</b> • สาย <b>${c.late}</b> • ลา <b>${c.leave}</b> • ขาด <b class="text-red-600">${c.absent}</b> <span class="text-slate-400">จาก ${c.total} คน</span></p>
                         ${absentNames.length ? `<p class="text-xs text-red-600 mt-1 whitespace-normal">ขาด: ${absentNames.join(', ')}</p>` : ''}
@@ -343,7 +345,7 @@
                 <p class="text-xs text-slate-500 mt-1">${sub}</p>
             </div>`;
         document.getElementById('kpi-row').innerHTML =
-            kpi('เช็คชื่อตรงเวลา (ทั้งวิทยาลัย)', pct(s.ontime, s.expected) + '%', `${s.ontime} จาก ${s.expected} ห้อง-วัน`) +
+            kpi('เช็คตอนเช้า (ทั้งวิทยาลัย)', pct(s.ontime, s.expected) + '%', `${s.ontime} จาก ${s.expected} ห้อง-วัน`) +
             kpi('คำขอเช็คย้อนหลัง (จากครู)', rq.total, `อนุมัติ ${rq.approved} • ไม่อนุมัติ ${rq.rejected} • รอ ${rq.pending} • แอดมินแก้ไข ${s.adminEdits || 0}`) +
             kpi('ห้อง-วันที่ไม่ได้เช็คเลย', s.missing, `${pct(s.missing, s.expected)}% ของทั้งหมด`) +
             kpi('วันที่มีกิจกรรมหน้าเสาธง', s.schoolDays, `ภาคเรียน ${esc(statsData.term.replace('_', '/'))}`);
@@ -356,7 +358,7 @@
     }
 
     function gradeBadge(g) {
-        const map = { 'ดีเยี่ยม': ['bg-emerald-100 text-emerald-800', 'fa-star'], 'ดี': ['bg-blue-100 text-blue-800', 'fa-thumbs-up'], 'พอใช้': ['bg-amber-100 text-amber-800', 'fa-minus-circle'], 'ควรปรับปรุง': ['bg-red-100 text-red-700', 'fa-exclamation-triangle'] };
+        const map = { 'ดีเยี่ยม': ['bg-emerald-100 text-emerald-800', 'fa-star'], 'ดี': ['bg-blue-100 text-blue-800', 'fa-thumbs-up'], 'พอใช้': ['bg-amber-100 text-amber-800', 'fa-minus-circle'], 'ควรพัฒนา': ['bg-amber-50 text-amber-800', 'fa-seedling'] };
         const [c, i] = map[g] || ['bg-slate-100 text-slate-500', 'fa-question'];
         return `<span class="px-2.5 py-1 rounded-full text-xs font-bold ${c}"><i class="fas ${i} mr-1"></i>${g}</span>`;
     }
@@ -399,16 +401,16 @@
             <div class="border border-slate-200 rounded-xl p-3 mb-2 text-left">
                 <p class="font-bold text-slate-800">${esc(r.room)} <span class="text-xs font-normal text-slate-500">(${r.expected} วัน)</span></p>
                 ${distBar(r)}
-                <p class="text-xs text-slate-600 mt-2">ตรงเวลา ${r.ontime} • ล่าช้า ${r.late} • ย้อนหลัง ${r.backdate} • <span class="text-red-600 font-bold">ไม่ได้เช็ค ${r.missing}</span></p>
+                <p class="text-xs text-slate-600 mt-2">เช็คตอนเช้า ${r.ontime} • หลังเวลา ${r.late} • ย้อนหลัง ${r.backdate} • <span class="text-red-600 font-bold">ไม่ได้เช็ค ${r.missing}</span></p>
                 ${r.missingDates.length ? `<p class="text-xs text-red-600 mt-1">วันที่ไม่ได้เช็ค (ล่าสุด): ${r.missingDates.join(', ')}</p>` : ''}
             </div>`).join('') || '<p class="text-slate-400">ไม่มีห้องที่ปรึกษา</p>';
-        const myReq = allRequests.filter(q => q.teacherEmail === email).slice(0, 10);
+        const myReq = allRequests.filter(q => idKey(q.teacherEmail) === idKey(email)).slice(0, 10);
         const reqHtml = myReq.length ? `<table class="w-full text-xs text-left mt-2">${myReq.map(q => `<tr class="border-b border-slate-100"><td class="py-1">${esc(q.targetDate)}</td><td>${esc(q.room)}</td><td>${q.daysLate} วัน</td><td class="text-slate-500 truncate max-w-[160px]">${esc(q.reason)}</td><td>${statusBadge(q.status)}</td></tr>`).join('')}</table>` : '<p class="text-xs text-slate-400">ไม่เคยขอเช็คย้อนหลัง</p>';
         Swal.fire({
             title: esc(t.name),
             width: 640,
             html: `<div class="text-left text-sm">
-                <p class="mb-3">${gradeBadge(t.grade)} <span class="ml-2">ตรงเวลา <b>${t.onTimeRate ?? '-'}%</b></span></p>
+                <p class="mb-3">${gradeBadge(t.grade)} <span class="ml-2">เช็คตอนเช้า <b>${t.onTimeRate ?? '-'}%</b></span></p>
                 <h4 class="font-bold text-slate-700 mb-2">รายห้อง</h4>${roomsHtml}
                 <h4 class="font-bold text-slate-700 mt-4">คำขอย้อนหลังล่าสุด</h4>${reqHtml}
             </div>`,
@@ -419,8 +421,8 @@
     function exportStatsExcel() {
         const rows = sortedTeachers().map((t, i) => ({
             'ลำดับ': i + 1, 'ครูที่ปรึกษา': t.name, 'ห้อง': t.rooms.map(r => r.room).join(', '),
-            'ห้อง-วันทั้งหมด': t.expected, 'ตรงเวลา': t.ontime, 'ล่าช้า (วันเดียวกัน)': t.late, 'ย้อนหลัง': t.backdate, 'ไม่ได้เช็คเลย': t.missing,
-            '% ตรงเวลา': t.onTimeRate ?? '-', 'คำขอย้อนหลังทั้งหมด': t.requests.total, 'อนุมัติ': t.requests.approved,
+            'ห้อง-วันทั้งหมด': t.expected, 'เช็คตอนเช้า': t.ontime, 'เช็คหลังเวลา': t.late, 'ย้อนหลัง': t.backdate, 'ไม่ได้เช็คเลย': t.missing,
+            '% เช็คตอนเช้า': t.onTimeRate ?? '-', 'คำขอย้อนหลังทั้งหมด': t.requests.total, 'อนุมัติ': t.requests.approved,
             'ไม่อนุมัติ': t.requests.rejected, 'รออนุมัติ': t.requests.pending, 'ยกเลิก': t.requests.cancelled,
             'เฉลี่ยย้อนหลัง (วัน)': t.requests.avgDaysLate, 'ระดับ': t.grade
         }));

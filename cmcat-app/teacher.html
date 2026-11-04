@@ -196,7 +196,7 @@
             </div>
             <!-- 📅 แถบเครื่องมือเช็คย้อนหลัง (แสดงเมื่อเลือกห้องแล้ว) -->
             <div id="backdate-toolbar" class="hidden mt-5 pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <p class="text-xs text-slate-500"><i class="fas fa-clock mr-1"></i> เช็คชื่อวันนี้ก่อน <b id="policy-cutoff-text">10:00</b> น. นับเป็น "ตรงเวลา" • ลืมเช็ควันก่อนหน้า ต้องขออนุมัติจากหัวหน้างานครูที่ปรึกษา</p>
+                <p class="text-xs text-slate-500"><i class="fas fa-clock mr-1"></i> เช็คชื่อวันนี้ก่อน <b id="policy-cutoff-text">10:00</b> น. นับเป็น "เช็คตอนเช้า" • ลืมเช็ควันก่อนหน้า ต้องขออนุมัติจากหัวหน้างานครูที่ปรึกษา</p>
                 <div class="flex gap-2 shrink-0">
                     <button onclick="startBackdateRequest()" class="flex-1 sm:flex-none bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100 px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all">📅 ขอเช็คชื่อย้อนหลัง</button>
                     <button onclick="openMyRequests()" class="flex-1 sm:flex-none bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all">📋 คำขอของฉัน</button>
@@ -213,9 +213,12 @@
             <div>
                 <h3 class="font-bold text-amber-900 text-sm md:text-base">📅 โหมดขอเช็คชื่อย้อนหลัง: <span id="backdate-banner-date"></span></h3>
                 <p class="text-xs md:text-sm text-amber-800 mt-1">เหตุผล: <span id="backdate-banner-reason"></span></p>
-                <p class="text-xs text-amber-700 mt-1">ข้อมูลจะยังไม่ถูกบันทึกลงระบบ จนกว่าหัวหน้างานครูที่ปรึกษาจะกดอนุมัติ</p>
+                <p class="text-xs text-amber-900 mt-2 font-bold bg-amber-100 rounded-lg px-2 py-1 inline-block">ขั้นที่ 2/2: ตรวจสถานะนักเรียนด้านล่าง แล้วกด "📨 ส่งคำขอ" — ยังไม่ได้ส่งจนกว่าจะกดปุ่มนี้</p>
             </div>
-            <button onclick="exitBackdateMode()" class="bg-white border border-amber-300 text-amber-800 hover:bg-amber-100 px-4 py-2 rounded-xl text-xs font-bold shrink-0">✖ ยกเลิก กลับไปเช็ควันนี้</button>
+            <div class="flex flex-col sm:flex-row gap-2 shrink-0">
+                <button onclick="submitBackdateRequest()" class="bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-sm">📨 ส่งคำขอ</button>
+                <button onclick="exitBackdateMode()" class="bg-white border border-amber-300 text-amber-800 hover:bg-amber-100 px-4 py-2 rounded-xl text-xs font-bold">✖ ยกเลิก</button>
+            </div>
         </div>
         
 <!-- 🟢 ป้ายแจ้งเตือน: เช็คชื่อเรียบร้อยแล้ว -->
@@ -340,6 +343,17 @@
             </div>
             <div class="p-4 md:p-6 overflow-y-auto flex-1 custom-scrollbar">
                 <div id="savings-report-content" class="overflow-x-auto text-sm"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 📨 แถบส่งคำขอ (ติดล่างจอ ระหว่างโหมดขอเช็คย้อนหลัง) -->
+    <div id="backdate-sticky" class="hidden fixed bottom-0 inset-x-0 z-40 bg-amber-500 text-white px-4 py-3 shadow-[0_-4px_20px_rgba(0,0,0,0.15)]" style="padding-bottom:max(0.75rem,env(safe-area-inset-bottom))">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+            <p class="text-sm font-bold">⚠️ คำขอเช็คย้อนหลัง <span id="backdate-sticky-date"></span> <u>ยังไม่ได้ส่ง</u></p>
+            <div class="flex gap-2 w-full sm:w-auto">
+                <button onclick="submitBackdateRequest()" class="flex-1 sm:flex-none bg-white text-amber-700 hover:bg-amber-50 px-6 py-2.5 rounded-xl text-sm font-extrabold">📨 ส่งคำขอ</button>
+                <button onclick="exitBackdateMode()" class="flex-1 sm:flex-none bg-amber-600 hover:bg-amber-700 border border-amber-300 px-4 py-2.5 rounded-xl text-xs font-bold">✖ ยกเลิก</button>
             </div>
         </div>
     </div>
@@ -478,6 +492,8 @@
         // Reset สถานะ
         attendanceMode = 'today'; backdateInfo = null; isEditingToday = false;
         document.getElementById('backdate-banner').classList.add('hidden');
+        document.getElementById('backdate-sticky').classList.add('hidden');
+        document.body.style.paddingBottom = '';
         alertBox.classList.add('hidden');
         isAlreadyCheckedToday = false;
         checkedByTeacherName = "";
@@ -608,7 +624,7 @@
 
 function enableEditAttendance() {
         isAlreadyCheckedToday = false;
-        isEditingToday = true; // ✏️ แก้ไขข้อมูลวันนี้ (เวลาบันทึกครั้งแรกยังคงเดิม ไม่นับว่าล่าช้า)
+        isEditingToday = true; // ✏️ แก้ไขข้อมูลวันนี้ (เวลาบันทึกครั้งแรกยังคงเดิม ไม่นับเป็นเช็คหลังเวลา)
         document.getElementById('already-checked-alert').classList.add('hidden');
         renderTable(currentStudentsData, lastSdqMap);
     }
@@ -847,8 +863,8 @@ function renderTable(students, sdqMap) {
         const ok = await Swal.fire({
             title: isEditingToday ? 'ยืนยันบันทึกการแก้ไข?' : 'ยืนยันบันทึกการเช็คชื่อ?', icon: 'question',
             html: `มา ${cnt['มา']} • สาย ${cnt['สาย']} • ลา ${cnt['ลา']} • ขาด <b style="color:#dc2626">${cnt['ขาด']}</b> คน` +
-                  (isEditingToday ? `<div style="margin-top:12px;padding:10px;border-radius:12px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;font-size:13px">✏️ เป็นการแก้ไขข้อมูลของวันนี้ ระบบจะเก็บเวลาที่บันทึกครั้งแรกไว้ ไม่นับเป็น "บันทึกล่าช้า"</div>` : '') +
-                  (!isEditingToday && isNowAfterCutoff() ? `<div style="margin-top:12px;padding:10px;border-radius:12px;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;font-size:13px">⏰ ขณะนี้เลยเวลา ${attPolicy.cutoff} น. แล้ว ระบบจะบันทึกเป็น <b>"บันทึกล่าช้า"</b> และนับในสถิติของครูที่ปรึกษา</div>` : ''),
+                  (isEditingToday ? `<div style="margin-top:12px;padding:10px;border-radius:12px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;font-size:13px">✏️ เป็นการแก้ไขข้อมูลของวันนี้ ระบบจะเก็บเวลาที่บันทึกครั้งแรกไว้ ไม่นับเป็น "เช็คหลังเวลา"</div>` : '') +
+                  (!isEditingToday && isNowAfterCutoff() ? `<div style="margin-top:12px;padding:10px;border-radius:12px;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;font-size:13px">⏰ ขณะนี้เลยเวลา ${attPolicy.cutoff} น. แล้ว ระบบจะบันทึกเป็น <b>"เช็คหลังเวลา"</b> และนับในสถิติของครูที่ปรึกษา</div>` : ''),
             showCancelButton: true, confirmButtonText: 'บันทึก', cancelButtonText: 'ตรวจอีกครั้ง', confirmButtonColor: '#059669'
         });
         if (!ok.isConfirmed) return;
@@ -1779,7 +1795,7 @@ function renderTable(students, sdqMap) {
                     <label style="font-weight:bold">เหตุผลที่ไม่ได้เช็คในวันนั้น <span style="color:#dc2626">*</span></label>
                     <textarea id="bd-reason" class="swal2-textarea" style="width:100%;margin:6px 0 0" placeholder="เช่น ไปราชการ/อบรม, ระบบขัดข้อง, ลาป่วย..."></textarea>
                 </div>`,
-            showCancelButton: true, confirmButtonText: 'ถัดไป: กรอกการเช็คชื่อ', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#d97706',
+            showCancelButton: true, confirmButtonText: 'ถัดไป (ขั้นที่ 1/2) →', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#d97706',
             preConfirm: () => {
                 const iso = document.getElementById('bd-date').value;
                 const reason = document.getElementById('bd-reason').value.trim();
@@ -1815,13 +1831,20 @@ function renderTable(students, sdqMap) {
         document.getElementById('backdate-banner-date').innerText = `${display}${hadRecord ? ' (ขอแก้ไขข้อมูลเดิม)' : ''}`;
         document.getElementById('backdate-banner-reason').innerText = form.reason;
         document.getElementById('backdate-banner').classList.remove('hidden');
+        document.getElementById('backdate-sticky-date').innerText = display;
+        document.getElementById('backdate-sticky').classList.remove('hidden');
+        document.body.style.paddingBottom = '90px';
         renderTable(currentStudentsData, lastSdqMap);
+        Swal.mixin({ toast: true, position: 'top', showConfirmButton: false, timer: 4000 })
+            .fire({ icon: 'info', title: 'ขั้นที่ 2: ตรวจสถานะนักเรียน แล้วกด "📨 ส่งคำขอ"' });
         document.getElementById('backdate-banner').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     function exitBackdateMode() { loadStudents(); }
+    window.addEventListener('beforeunload', e => { if (attendanceMode === 'backdate') { e.preventDefault(); e.returnValue = ''; } });
 
     async function submitBackdateRequest() {
+        if (attendanceMode !== 'backdate' || !backdateInfo) return;
         const cnt = { 'มา': 0, 'สาย': 0, 'ลา': 0, 'ขาด': 0 };
         currentStudentsData.forEach(s => { if (cnt[s.status] !== undefined) cnt[s.status]++; });
         const ok = await Swal.fire({
@@ -1830,7 +1853,8 @@ function renderTable(students, sdqMap) {
             showCancelButton: true, confirmButtonText: 'ส่งคำขอ', cancelButtonText: 'ตรวจอีกครั้ง', confirmButtonColor: '#d97706'
         });
         if (!ok.isConfirmed) return;
-        const btn = document.getElementById('btn-save-att'); btn.disabled = true; btn.innerHTML = 'กำลังส่งคำขอ...';
+        const btn = document.getElementById('btn-save-att'); if (btn) { btn.disabled = true; btn.innerHTML = 'กำลังส่งคำขอ...'; }
+        Swal.fire({ title: 'กำลังส่งคำขอ...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
         try {
             const res = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'submitBackdateRequest', payload: {
                 teacherName: currentUser.name, teacherEmail: currentUser.email,
@@ -1845,7 +1869,7 @@ function renderTable(students, sdqMap) {
             loadStudents();
         } catch (e) {
             Swal.fire('ส่งคำขอไม่สำเร็จ', e.message, 'error');
-            btn.disabled = false; btn.innerHTML = '📨 ส่งคำขออนุมัติเช็คย้อนหลัง';
+            if (btn) { btn.disabled = false; btn.innerHTML = '📨 ส่งคำขออนุมัติเช็คย้อนหลัง'; }
         }
     }
 
@@ -1935,8 +1959,8 @@ function renderTable(students, sdqMap) {
         };
 
         const SEG = [
-            { key: 'onTime', st: 'ontime', label: 'ตรงเวลา', cls: 'c-ontime' },
-            { key: 'late', st: 'late', label: 'บันทึกล่าช้า', cls: 'c-late' },
+            { key: 'onTime', st: 'ontime', label: 'เช็คตอนเช้า', cls: 'c-ontime' },
+            { key: 'late', st: 'late', label: 'เช็คหลังเวลา', cls: 'c-late' },
             { key: 'backdate', st: 'backdate', label: 'ย้อนหลัง', cls: 'c-backdate' },
             { key: 'missingCount', st: 'missing', label: 'ยังไม่มีข้อมูล', cls: 'c-missing' }
         ];
@@ -1944,7 +1968,7 @@ function renderTable(students, sdqMap) {
         const monthName = iso => new Date(iso + 'T12:00:00').toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
         const dow = iso => new Date(iso + 'T12:00:00').toLocaleDateString('th-TH', { weekday: 'narrow' });
 
-        // 💬 ข้อความให้กำลังใจตาม % ตรงเวลา (ไม่เปรียบเทียบกับครูคนอื่น)
+        // 💬 ข้อความให้กำลังใจตาม % เช็คตอนเช้า (ไม่เปรียบเทียบกับครูคนอื่น)
         const cheer = rm => {
             if (rm.expected === 0) return '';
             if (rm.onTimeRate >= 90) return '🌟 ยอดเยี่ยมครับ! การเช็คชื่อสม่ำเสมอช่วยให้เห็นนักเรียนที่ต้องดูแลได้ทันเวลา';
@@ -1960,7 +1984,7 @@ function renderTable(students, sdqMap) {
                 const t = rm.today.savedAt.split(' ')[1];
                 return rm.today.status === 'late'
                     ? `<div class="rounded-xl p-3 bg-amber-50 border border-amber-200 text-sm text-amber-800">⏰ วันนี้เช็คแล้วเวลา <b>${t} น.</b> (หลัง ${pol.cutoff} น.) พรุ่งนี้ลองเช็คให้เร็วขึ้นนะครับ</div>`
-                    : `<div class="rounded-xl p-3 bg-emerald-50 border border-emerald-200 text-sm text-emerald-800">✅ วันนี้เช็คแล้วเวลา <b>${t} น.</b> ตรงเวลา ขอบคุณครับ</div>`;
+                    : `<div class="rounded-xl p-3 bg-emerald-50 border border-emerald-200 text-sm text-emerald-800">✅ วันนี้เช็คแล้วเวลา <b>${t} น.</b> (เช็คตอนเช้า) ขอบคุณครับ</div>`;
             }
             return `<div class="rounded-xl p-3 bg-blue-50 border border-blue-200 text-sm text-blue-800" data-countdown="1">⏳ วันนี้ยังไม่ได้เช็คชื่อ • <span class="countdown-text"></span></div>`;
         };
@@ -2005,7 +2029,7 @@ function renderTable(students, sdqMap) {
                    </div>`;
 
             const streakHtml = rm.expected === 0 ? '' : (rm.streak > 0
-                ? `<span class="text-xs font-bold bg-orange-50 text-orange-700 border border-orange-200 px-2.5 py-1 rounded-full">🔥 ตรงเวลาติดต่อกัน ${rm.streak} วัน${rm.bestStreak > rm.streak ? ` • สูงสุด ${rm.bestStreak}` : ''}</span>`
+                ? `<span class="text-xs font-bold bg-orange-50 text-orange-700 border border-orange-200 px-2.5 py-1 rounded-full">🔥 เช็คตอนเช้าติดต่อกัน ${rm.streak} วัน${rm.bestStreak > rm.streak ? ` • สูงสุด ${rm.bestStreak}` : ''}</span>`
                 : (rm.bestStreak > 0 ? `<span class="text-xs bg-slate-50 text-slate-500 border border-slate-200 px-2.5 py-1 rounded-full">🔥 สถิติสูงสุด ${rm.bestStreak} วัน • เริ่มนับใหม่ได้ตั้งแต่วันนี้</span>` : ''));
 
             return `
@@ -2016,9 +2040,9 @@ function renderTable(students, sdqMap) {
                 </div>
                 ${todayBox(rm)}
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 text-center">
-                    <div class="bg-slate-50 rounded-xl p-2"><p class="text-[10px] text-slate-500">% ตรงเวลา</p><p class="text-xl font-extrabold text-slate-800">${rateTxt}</p></div>
-                    <div class="bg-slate-50 rounded-xl p-2"><p class="text-[10px] text-slate-500">ตรงเวลา</p><p class="text-xl font-extrabold text-slate-800">${rm.onTime}</p></div>
-                    <div class="bg-slate-50 rounded-xl p-2"><p class="text-[10px] text-slate-500">ล่าช้า / ย้อนหลัง</p><p class="text-xl font-extrabold text-slate-800">${rm.late} / ${rm.backdate}</p></div>
+                    <div class="bg-slate-50 rounded-xl p-2"><p class="text-[10px] text-slate-500">% เช็คตอนเช้า</p><p class="text-xl font-extrabold text-slate-800">${rateTxt}</p></div>
+                    <div class="bg-slate-50 rounded-xl p-2"><p class="text-[10px] text-slate-500">เช็คตอนเช้า</p><p class="text-xl font-extrabold text-slate-800">${rm.onTime}</p></div>
+                    <div class="bg-slate-50 rounded-xl p-2"><p class="text-[10px] text-slate-500">หลังเวลา / ย้อนหลัง</p><p class="text-xl font-extrabold text-slate-800">${rm.late} / ${rm.backdate}</p></div>
                     <div class="bg-slate-50 rounded-xl p-2"><p class="text-[10px] text-slate-500">ยังไม่มีข้อมูล</p><p class="text-xl font-extrabold ${missCount ? 'text-amber-600' : 'text-slate-800'}">${missCount}</p></div>
                 </div>
                 ${bar}
@@ -2039,7 +2063,7 @@ function renderTable(students, sdqMap) {
                 </div>
                 <div id="gaps-body" class="grid grid-cols-1 ${myGaps.rooms.length > 1 ? 'lg:grid-cols-2' : ''} gap-4">${roomCards}</div>
                 <div class="mt-4 text-[11px] text-slate-500 bg-slate-50 border border-slate-100 rounded-xl p-3 leading-relaxed">
-                    ⚖️ เริ่มนับสถิติตั้งแต่ <b>${pol.statsStart}</b> • ตรงเวลา = บันทึกครั้งแรกก่อน ${pol.cutoff} น. • ไม่นับวันงดกิจกรรม ช่วงฝึกงาน และวันนี้ถ้ายังไม่ได้เช็ค • ข้อมูล ณ ${myGaps.generatedAt}
+                    ⚖️ เริ่มนับสถิติตั้งแต่ <b>${pol.statsStart}</b> • เช็คตอนเช้า = บันทึกครั้งแรกก่อน ${pol.cutoff} น. • ไม่นับวันงดกิจกรรม ช่วงฝึกงาน และวันนี้ถ้ายังไม่ได้เช็ค • ข้อมูล ณ ${myGaps.generatedAt}
                 </div>
             </div>`;
         panel.classList.remove('hidden');
@@ -2055,8 +2079,8 @@ function renderTable(students, sdqMap) {
         const cut = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m);
         const diff = Math.floor((cut - now) / 60000);
         const txt = diff > 0
-            ? `เหลือเวลาอีก <b>${diff >= 60 ? Math.floor(diff / 60) + ' ชม. ' : ''}${diff % 60} นาที</b> ก่อน ${attPolicy.cutoff} น. เพื่อนับเป็น "ตรงเวลา"`
-            : `เลย ${attPolicy.cutoff} น. แล้ว ยังเช็คได้ตามปกติ (นับเป็นบันทึกล่าช้า) ดีกว่าไม่มีข้อมูลครับ`;
+            ? `เหลือเวลาอีก <b>${diff >= 60 ? Math.floor(diff / 60) + ' ชม. ' : ''}${diff % 60} นาที</b> ก่อน ${attPolicy.cutoff} น. เพื่อนับเป็น "เช็คตอนเช้า"`
+            : `เลย ${attPolicy.cutoff} น. แล้ว ยังเช็คได้ตามปกติ (นับเป็นเช็คหลังเวลา) ดีกว่าไม่มีข้อมูลครับ`;
         els.forEach(el => el.innerHTML = txt);
     }
     setInterval(updateCountdowns, 30000);
@@ -2111,7 +2135,7 @@ function renderTable(students, sdqMap) {
         const rm = myGaps.rooms[ri], d = rm.days[di];
         const full = new Date(d.iso + 'T12:00:00').toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
         const info = {
-            ontime: ['✅ เช็คตรงเวลา', '#059669'], late: ['⏰ บันทึกล่าช้า (หลัง ' + myGaps.policy.cutoff + ' น.)', '#d97706'],
+            ontime: ['✅ เช็คตอนเช้า', '#059669'], late: ['⏰ เช็คหลังเวลา (หลัง ' + myGaps.policy.cutoff + ' น.)', '#d97706'],
             backdate: ['📅 เช็คย้อนหลัง (ได้รับอนุมัติ/แอดมินบันทึกแทน)', '#7c3aed'], missing: ['❗ ยังไม่มีข้อมูลการเช็คชื่อ', '#dc2626'],
             prestart: [d.checked ? '✔️ มีข้อมูลเช็คชื่อ (ก่อนเริ่มนับสถิติ)' : '— ไม่มีข้อมูล (ก่อนเริ่มนับสถิติ ไม่นำมาคิด)', '#64748b'],
             noassembly: ['🌧️ งดกิจกรรมหน้าเสาธง' + (d.note ? ' — ' + escapeHtml(d.note) : ''), '#64748b']
@@ -2167,7 +2191,7 @@ function renderTable(students, sdqMap) {
                 <ul style="padding-left:18px;margin:0 0 12px;list-style:disc">
                     <li>เลือกห้อง แล้วกดปุ่ม <b>"✏️ แก้ไขการเช็คชื่อ"</b> ในกรอบสีเขียว</li>
                     <li>เปลี่ยนสถานะนักเรียนที่ผิด แล้วกด <b>"บันทึกการแก้ไขของวันนี้"</b></li>
-                    <li>แก้ได้หลายครั้งจนถึงเที่ยงคืน ระบบจะเก็บ<b>เวลาที่บันทึกครั้งแรก</b>ไว้ จึง<b>ไม่ถูกนับว่าล่าช้า</b> แม้แก้หลัง ${cutoff} น.</li>
+                    <li>แก้ได้หลายครั้งจนถึงเที่ยงคืน ระบบจะเก็บ<b>เวลาที่บันทึกครั้งแรก</b>ไว้ จึง<b>ไม่ถูกนับเป็นเช็คหลังเวลา</b> แม้แก้หลัง ${cutoff} น.</li>
                 </ul>
                 <p style="font-weight:bold;color:#b45309;margin-bottom:4px">2) ลืมเช็ค หรือเช็คผิดของวันก่อนหน้า (ไม่เกิน ${maxDays} วัน)</p>
                 <ul style="padding-left:18px;margin:0 0 12px;list-style:disc">
@@ -2180,7 +2204,7 @@ function renderTable(students, sdqMap) {
                     <li>แจ้งหัวหน้างานครูที่ปรึกษาหรือแอดมิน พร้อมหลักฐาน (เช่น ใบลา/บันทึกข้อความ) ให้แก้ไขแทน</li>
                 </ul>
                 <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:10px;font-size:13px;color:#475569">
-                    📊 <b>สถิติที่ถูกบันทึก:</b> เช็คก่อน ${cutoff} น. = ตรงเวลา • เช็คหลัง ${cutoff} น. ในวันเดียวกัน = บันทึกล่าช้า • ขอเช็คย้อนหลัง = ย้อนหลัง • ไม่ได้เช็คเลย = ขาดการเช็ค<br>
+                    📊 <b>สถิติที่ถูกบันทึก:</b> เช็คก่อน ${cutoff} น. = เช็คตอนเช้า • เช็คหลัง ${cutoff} น. ในวันเดียวกัน = เช็คหลังเวลา • ขอเช็คย้อนหลัง = ย้อนหลัง • ไม่ได้เช็คเลย = ขาดการเช็ค<br>
                     ห้องที่อยู่ในช่วงฝึกงานไม่ต้องเช็คชื่อ และไม่ถูกนับในสถิติ
                 </div>
             </div>`

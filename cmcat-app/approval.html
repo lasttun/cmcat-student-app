@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>อนุมัติเช็คชื่อย้อนหลัง & สถิติครูที่ปรึกษา | CMCAT</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Prompt', sans-serif; background-color: #f8fafc; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        /* แท่งสัดส่วน ห้อง-วัน (เว้นช่อง 2px ระหว่างส่วน) */
+        .dist-bar { display: flex; gap: 2px; height: 12px; width: 100%; min-width: 140px; border-radius: 4px; overflow: hidden; background: #f1f5f9; }
+        .dist-bar > span { display: block; height: 100%; }
+        .c-ontime { background: #10b981; } .c-late { background: #f59e0b; } .c-backdate { background: #8b5cf6; } .c-missing { background: #ef4444; }
+        .tab-btn.active { background: #0f172a; color: #fff; box-shadow: 0 4px 14px rgba(15,23,42,.15); }
+    </style>
+</head>
+<body class="pb-12">
+
+    <nav class="bg-white/90 backdrop-blur-md p-4 shadow-sm sticky top-0 z-40 border-b border-slate-200/60 flex justify-between items-center gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+            <div class="bg-amber-500 p-2.5 rounded-xl shadow-lg shadow-amber-200 shrink-0"><i class="fas fa-user-check text-white text-lg"></i></div>
+            <div class="min-w-0">
+                <h1 class="font-bold text-base md:text-lg leading-tight text-slate-800 truncate">อนุมัติเช็คชื่อย้อนหลัง & สถิติครูที่ปรึกษา</h1>
+                <p id="user-line" class="text-xs text-slate-500 truncate">-</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+            <a href="teacher.html" class="bg-emerald-600 text-white hover:bg-emerald-700 px-3 py-2 rounded-xl text-xs md:text-sm font-bold flex items-center gap-1.5"><i class="fas fa-clipboard-list"></i><span class="hidden sm:inline">ระบบเช็คชื่อ</span></a>
+            <a id="link-admin" href="admin.html" class="hidden bg-slate-100 text-slate-700 hover:bg-slate-200 px-3 py-2 rounded-xl text-xs md:text-sm font-bold flex items-center gap-1.5"><i class="fas fa-chart-line"></i><span class="hidden sm:inline">Dashboard</span></a>
+            <button onclick="logout()" class="bg-slate-800 text-white hover:bg-red-600 px-3 py-2 rounded-xl text-xs md:text-sm font-bold flex items-center gap-1.5"><i class="fas fa-sign-out-alt"></i><span class="hidden sm:inline">ออกจากระบบ</span></button>
+        </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto p-4 md:p-6">
+        <!-- Tabs -->
+        <div class="flex gap-2 mb-6 overflow-x-auto custom-scrollbar pb-1">
+            <button class="tab-btn active px-5 py-2.5 rounded-xl font-bold text-sm whitespace-nowrap bg-white border border-slate-200 text-slate-600" data-tab="pending" onclick="switchTab('pending')">⏳ รออนุมัติ <span id="pending-count" class="ml-1 bg-red-600 text-white text-xs rounded-full px-2 py-0.5">0</span></button>
+            <button class="tab-btn px-5 py-2.5 rounded-xl font-bold text-sm whitespace-nowrap bg-white border border-slate-200 text-slate-600" data-tab="history" onclick="switchTab('history')">🗂️ ประวัติคำขอทั้งหมด</button>
+            <button class="tab-btn px-5 py-2.5 rounded-xl font-bold text-sm whitespace-nowrap bg-white border border-slate-200 text-slate-600" data-tab="stats" onclick="switchTab('stats')">📊 สถิติการทำงานครูที่ปรึกษา</button>
+            <button id="tab-btn-edit" class="tab-btn hidden px-5 py-2.5 rounded-xl font-bold text-sm whitespace-nowrap bg-white border border-slate-200 text-slate-600" data-tab="edit" onclick="switchTab('edit')">✏️ แก้ไขเช็คชื่อ (แอดมิน)</button>
+        </div>
+
+        <!-- ⏳ PENDING -->
+        <section id="tab-pending">
+            <div class="flex justify-between items-center mb-4">
+                <p class="text-sm text-slate-500">ตรวจสอบเหตุผลและข้อมูลการเช็คชื่อ ก่อนอนุมัติ ข้อมูลจะถูกบันทึกลงระบบเข้าแถวทันทีเมื่อกดอนุมัติ</p>
+                <button onclick="loadRequests()" class="bg-white border border-slate-200 px-3 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 shrink-0"><i class="fas fa-sync-alt" id="refresh-icon"></i> รีเฟรช</button>
+            </div>
+            <div id="pending-list" class="space-y-4"><p class="text-center text-slate-400 py-16">กำลังโหลด...</p></div>
+        </section>
+
+        <!-- 🗂️ HISTORY -->
+        <section id="tab-history" class="hidden">
+            <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="p-4 md:p-5 border-b border-slate-100 flex flex-col md:flex-row gap-3 md:items-center justify-between">
+                    <h2 class="font-bold text-slate-800">ประวัติคำขอเช็คชื่อย้อนหลัง</h2>
+                    <div class="flex gap-2">
+                        <select id="hist-status" onchange="renderHistory()" class="p-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-700">
+                            <option value="">ทุกสถานะ</option><option>รออนุมัติ</option><option>อนุมัติ</option><option>ไม่อนุมัติ</option><option>ยกเลิก</option>
+                        </select>
+                        <input id="hist-search" onkeyup="renderHistory()" placeholder="ค้นหาชื่อครู / ห้อง..." class="p-2 border border-slate-200 rounded-xl text-xs w-44">
+                    </div>
+                </div>
+                <div class="overflow-x-auto custom-scrollbar">
+                    <table class="w-full text-sm text-left whitespace-nowrap">
+                        <thead class="bg-slate-50 text-slate-500 text-xs">
+                            <tr><th class="p-3">ส่งเมื่อ</th><th class="p-3">ครู</th><th class="p-3">ห้อง</th><th class="p-3">วันที่ขอเช็ค</th><th class="p-3 text-center">ย้อนหลัง</th><th class="p-3">ประเภท</th><th class="p-3">เหตุผล</th><th class="p-3 text-center">สถานะ</th><th class="p-3">ผู้พิจารณา</th></tr>
+                        </thead>
+                        <tbody id="hist-body" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ✏️ ADMIN EDIT -->
+        <section id="tab-edit" class="hidden">
+            <div class="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 md:p-6 mb-5">
+                <h2 class="font-bold text-slate-800 mb-1">✏️ แก้ไข/บันทึกเช็คชื่อย้อนหลังโดยแอดมิน</h2>
+                <p class="text-xs text-slate-500 mb-4">แก้ได้ทุกวันในภาคเรียนปัจจุบัน (ไม่จำกัด 7 วัน) ไม่ต้องรออนุมัติ • ทุกการแก้ไขถูกบันทึกในประวัติคำขอ (ประเภท "แอดมินแก้ไข")<br>
+                    ถ้าวันนั้นห้องไม่เคยเช็คเลย จะนับเป็น "ย้อนหลัง" ในสถิติของห้อง • ถ้าแก้ข้อมูลที่ครูเช็คไว้แล้ว สถิติตรงเวลา/ล่าช้าของครูจะคงเดิม</p>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+                    <div><label class="text-xs font-bold text-slate-600">ห้องเรียน</label>
+                        <select id="ed-room" class="w-full mt-1 p-2.5 border border-slate-200 rounded-xl text-sm"><option value="">กำลังโหลด...</option></select></div>
+                    <div><label class="text-xs font-bold text-slate-600">วันที่</label>
+                        <input type="date" id="ed-date" class="w-full mt-1 p-2.5 border border-slate-200 rounded-xl text-sm"></div>
+                    <div class="md:col-span-2"><button onclick="loadEditRoster()" class="w-full bg-slate-800 hover:bg-slate-900 text-white px-4 py-2.5 rounded-xl text-sm font-bold"><i class="fas fa-search"></i> โหลดรายชื่อและข้อมูลวันนั้น</button></div>
+                </div>
+            </div>
+            <div id="ed-roster"></div>
+        </section>
+
+        <!-- 📊 STATS -->
+        <section id="tab-stats" class="hidden">
+            <div id="stats-loading" class="text-center text-slate-400 py-16">กำลังประมวลผลสถิติ...</div>
+            <div id="stats-content" class="hidden space-y-6">
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-4" id="kpi-row"></div>
+
+                <div class="bg-white p-5 md:p-6 rounded-3xl border border-slate-200 shadow-sm">
+                    <h3 class="font-bold text-slate-800 mb-1">สัดส่วนการเช็คชื่อทั้งวิทยาลัย (ห้อง × วัน)</h3>
+                    <p class="text-xs text-slate-500 mb-4" id="overall-caption"></p>
+                    <div class="dist-bar" style="height:22px" id="overall-bar"></div>
+                    <div class="flex flex-wrap gap-x-5 gap-y-2 mt-3 text-xs text-slate-600" id="overall-legend"></div>
+                </div>
+
+                <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="p-4 md:p-5 border-b border-slate-100 flex flex-col md:flex-row gap-3 md:items-center justify-between">
+                        <div>
+                            <h3 class="font-bold text-slate-800">ผลการปฏิบัติงานรายครูที่ปรึกษา</h3>
+                            <p class="text-xs text-slate-500">เรียงจากควรติดตามมากที่สุด • คลิกแถวเพื่อดูรายห้องและวันที่ไม่ได้เช็ค</p>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <select id="stat-sort" onchange="renderTeacherTable()" class="p-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-700">
+                                <option value="rate">เรียงตาม % ตรงเวลา (น้อย→มาก)</option>
+                                <option value="requests">เรียงตามจำนวนคำขอย้อนหลัง (มาก→น้อย)</option>
+                                <option value="missing">เรียงตามวันที่ไม่ได้เช็ค (มาก→น้อย)</option>
+                                <option value="name">เรียงตามชื่อ</option>
+                            </select>
+                            <input id="stat-search" onkeyup="renderTeacherTable()" placeholder="ค้นหาชื่อครู / ห้อง..." class="p-2 border border-slate-200 rounded-xl text-xs w-44">
+                            <button onclick="exportStatsExcel()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-xl text-xs font-bold"><i class="fas fa-file-excel"></i> Excel</button>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto custom-scrollbar">
+                        <table class="w-full text-sm text-left whitespace-nowrap">
+                            <thead class="bg-slate-50 text-slate-500 text-xs">
+                                <tr>
+                                    <th class="p-3">ครูที่ปรึกษา</th>
+                                    <th class="p-3">สัดส่วน ห้อง-วัน</th>
+                                    <th class="p-3 text-right">ตรงเวลา</th>
+                                    <th class="p-3 text-right">ล่าช้า</th>
+                                    <th class="p-3 text-right">ย้อนหลัง</th>
+                                    <th class="p-3 text-right">ไม่ได้เช็ค</th>
+                                    <th class="p-3 text-right">% ตรงเวลา</th>
+                                    <th class="p-3 text-center">คำขอย้อนหลัง<br><span class="font-normal">(อนุมัติ/ไม่/รอ)</span></th>
+                                    <th class="p-3 text-right">เฉลี่ยย้อน (วัน)</th>
+                                    <th class="p-3 text-center">ระดับ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="teacher-body" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <p class="text-xs text-slate-400 leading-relaxed">
+                    * <b>ตรงเวลา</b> = เช็คในวันนั้นก่อน <span class="cutoff-text">10:00</span> น. • <b>ล่าช้า</b> = เช็คในวันเดียวกันแต่หลังเวลา •
+                    <b>ย้อนหลัง</b> = บันทึกหลังวันนั้น (ผ่านการอนุมัติ หรือข้อมูลเก่าก่อนมีระบบนี้) • <b>ไม่ได้เช็ค</b> = วันที่มีกิจกรรมหน้าเสาธงแต่ห้องไม่มีข้อมูลเลย (ไม่นับช่วงฝึกงานและวันนี้)
+                </p>
+            </div>
+        </section>
+    </div>
+
+<script>
+    const API_URL = "https://script.google.com/macros/s/AKfycbztsC4Wng1zDAVyNmHka6N00m1os6aHGqcZV2LW1l1NBrlATIWPLzwdORzU4lP_P6_p/exec";
+    const currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
+    const currentRole = localStorage.getItem('currentRole');
+    let allRequests = [];
+    let statsData = null;
+    let policy = null;
+
+    const SEG = [
+        { key: 'ontime', label: 'ตรงเวลา', cls: 'c-ontime' },
+        { key: 'late', label: 'ล่าช้า (วันเดียวกัน)', cls: 'c-late' },
+        { key: 'backdate', label: 'ย้อนหลัง', cls: 'c-backdate' },
+        { key: 'missing', label: 'ไม่ได้เช็คเลย', cls: 'c-missing' }
+    ];
+
+    window.onload = () => {
+        if (!currentUser || !['homeroom_head', 'admin', 'ผู้บริหาร'].includes(currentRole)) {
+            Swal.fire('ปฏิเสธการเข้าถึง', 'หน้านี้สำหรับหัวหน้างานครูที่ปรึกษาและผู้บริหารเท่านั้น', 'error').then(() => { window.location.href = 'index.html'; });
+            return;
+        }
+        document.getElementById('user-line').innerText = `${currentUser.name} | ${currentRole === 'homeroom_head' ? 'หัวหน้างานครูที่ปรึกษา' : 'ผู้บริหาร'}`;
+        if (currentRole !== 'homeroom_head') {
+            document.getElementById('link-admin').classList.remove('hidden');
+            document.getElementById('tab-btn-edit').classList.remove('hidden'); // ✏️ เฉพาะแอดมิน/ผู้บริหาร
+        }
+        loadRequests();
+    };
+
+    const api = async (action, payload = {}) => {
+        const res = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action, payload }) });
+        return res.json();
+    };
+    const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const statusBadge = st => {
+        const map = { 'รออนุมัติ': 'bg-amber-100 text-amber-800 border-amber-200', 'อนุมัติ': 'bg-emerald-100 text-emerald-800 border-emerald-200', 'ไม่อนุมัติ': 'bg-red-100 text-red-700 border-red-200', 'ยกเลิก': 'bg-slate-100 text-slate-500 border-slate-200' };
+        return `<span class="px-2.5 py-1 rounded-full text-xs font-bold border ${map[st] || ''}">${esc(st)}</span>`;
+    };
+
+    function switchTab(tab) {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+        ['pending', 'history', 'stats', 'edit'].forEach(t => document.getElementById('tab-' + t).classList.toggle('hidden', t !== tab));
+        if (tab === 'edit') initEditTab();
+        if (tab === 'stats' && !statsData) loadStats();
+        if (tab === 'history') renderHistory();
+    }
+
+    // ---------------- คำขอ ----------------
+    async function loadRequests() {
+        const icon = document.getElementById('refresh-icon'); icon.classList.add('fa-spin');
+        try {
+            const r = await api('getBackdateRequests', { includeRecords: true });
+            if (!r.success) throw new Error(r.message);
+            allRequests = r.data;
+            policy = r.policy;
+            document.querySelectorAll('.cutoff-text').forEach(el => el.innerText = r.policy.cutoff);
+            renderPending();
+            renderHistory();
+        } catch (e) {
+            document.getElementById('pending-list').innerHTML = `<p class="text-center text-red-500 py-16">❌ ${esc(e.message)}</p>`;
+        } finally { icon.classList.remove('fa-spin'); }
+    }
+
+    function renderPending() {
+        const list = allRequests.filter(q => q.status === 'รออนุมัติ');
+        document.getElementById('pending-count').innerText = list.length;
+        const box = document.getElementById('pending-list');
+        if (list.length === 0) {
+            box.innerHTML = `<div class="bg-white border border-dashed border-slate-300 rounded-3xl p-12 text-center text-slate-400"><i class="fas fa-check-circle text-4xl text-emerald-300 mb-3"></i><p class="font-bold">ไม่มีคำขอรออนุมัติ</p></div>`;
+            return;
+        }
+        // นับจำนวนคำขอทั้งหมดของครูแต่ละคน เพื่อช่วยหัวหน้างานตัดสินใจ
+        const reqCount = {};
+        allRequests.forEach(q => { if (q.status !== 'ยกเลิก' && q.requestType !== 'แอดมินแก้ไข') reqCount[q.teacherEmail] = (reqCount[q.teacherEmail] || 0) + 1; });
+
+        box.innerHTML = list.map(q => {
+            const c = q.counts;
+            const isMine = q.teacherEmail === currentUser.email;
+            const absentNames = (q.records || []).filter(r => r.status === 'ขาด').map(r => esc(r.name));
+            const rows = (q.records || []).map((r, i) => `<tr class="${r.status === 'ขาด' ? 'bg-red-50' : ''}"><td class="px-2 py-1 text-slate-400">${i + 1}</td><td class="px-2 py-1 font-mono text-xs text-slate-500">${esc(r.id)}</td><td class="px-2 py-1">${esc(r.name)}</td><td class="px-2 py-1 font-bold">${esc(r.status)}</td></tr>`).join('');
+            return `
+            <div class="bg-white rounded-3xl border ${q.daysLate >= 4 ? 'border-orange-300' : 'border-slate-200'} shadow-sm p-5">
+                <div class="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                    <div class="min-w-0">
+                        <div class="flex flex-wrap items-center gap-2 mb-1">
+                            <span class="font-bold text-lg text-slate-800">${esc(q.room)}</span>
+                            <span class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-lg">${esc(q.requestType)}</span>
+                            <span class="text-xs ${q.daysLate >= 4 ? 'bg-orange-100 text-orange-800' : 'bg-amber-50 text-amber-800'} px-2 py-0.5 rounded-lg font-bold">ย้อนหลัง ${q.daysLate} วัน</span>
+                        </div>
+                        <p class="text-sm text-slate-600">วันที่ขอเช็ค <b>${esc(q.targetDate)}</b> • โดย <b>${esc(q.teacherName)}</b> <span class="text-xs text-slate-400">(ส่ง ${esc(q.createdAt)})</span></p>
+                        <p class="text-xs text-slate-500 mt-0.5">คำขอย้อนหลังของครูท่านนี้ในภาคเรียน: <b>${reqCount[q.teacherEmail] || 1}</b> ครั้ง</p>
+                        <div class="mt-3 bg-slate-50 border border-slate-100 rounded-2xl p-3 text-sm text-slate-700"><i class="fas fa-quote-left text-slate-300 mr-1"></i> ${esc(q.reason)}</div>
+                        <p class="text-sm mt-3">มา <b>${c.present}</b> • สาย <b>${c.late}</b> • ลา <b>${c.leave}</b> • ขาด <b class="text-red-600">${c.absent}</b> <span class="text-slate-400">จาก ${c.total} คน</span></p>
+                        ${absentNames.length ? `<p class="text-xs text-red-600 mt-1 whitespace-normal">ขาด: ${absentNames.join(', ')}</p>` : ''}
+                        <details class="mt-2"><summary class="text-xs text-blue-600 cursor-pointer font-bold">ดูรายชื่อทั้งหมด</summary>
+                            <div class="max-h-60 overflow-y-auto custom-scrollbar mt-2 border border-slate-100 rounded-xl"><table class="w-full text-sm">${rows}</table></div>
+                        </details>
+                    </div>
+                    <div class="flex md:flex-col gap-2 shrink-0">
+                        ${isMine
+                            ? `<span class="text-xs text-slate-500 bg-slate-100 px-3 py-2 rounded-xl">คำขอของท่านเอง<br>ให้ผู้อื่นพิจารณา</span>`
+                            : `<button onclick="review('${q.requestId}','approve')" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm"><i class="fas fa-check"></i> อนุมัติ</button>
+                               <button onclick="review('${q.requestId}','reject')" class="flex-1 bg-white border border-red-300 text-red-600 hover:bg-red-50 px-5 py-2.5 rounded-xl font-bold text-sm"><i class="fas fa-times"></i> ไม่อนุมัติ</button>`}
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    async function review(requestId, decision) {
+        const q = allRequests.find(x => x.requestId === requestId);
+        const isApprove = decision === 'approve';
+        const { value: note, isConfirmed } = await Swal.fire({
+            title: isApprove ? 'อนุมัติคำขอนี้?' : 'ไม่อนุมัติคำขอนี้?',
+            html: `${esc(q.room)} • วันที่ ${esc(q.targetDate)}<br><small>${isApprove ? 'ข้อมูลการเช็คชื่อจะถูกบันทึกลงระบบทันที' : 'ข้อมูลการเช็คชื่อจะไม่ถูกบันทึก ครูจะเห็นเหตุผลที่ท่านระบุ'}</small>`,
+            input: 'textarea',
+            inputPlaceholder: isApprove ? 'หมายเหตุ (ถ้ามี)' : 'เหตุผลที่ไม่อนุมัติ (จำเป็น)',
+            showCancelButton: true,
+            confirmButtonText: isApprove ? 'ยืนยันอนุมัติ' : 'ยืนยันไม่อนุมัติ',
+            cancelButtonText: 'กลับ',
+            confirmButtonColor: isApprove ? '#059669' : '#dc2626',
+            inputValidator: v => (!isApprove && (!v || v.trim().length < 3)) ? 'กรุณาระบุเหตุผล' : undefined
+        });
+        if (!isConfirmed) return;
+        Swal.fire({ title: 'กำลังดำเนินการ...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        try {
+            const r = await api('reviewBackdateRequest', { requestId, decision, note: note || '', reviewerEmail: currentUser.email });
+            if (!r.success) throw new Error(r.message);
+            Swal.fire({ icon: 'success', title: r.status === 'อนุมัติ' ? 'อนุมัติแล้ว' : 'บันทึกผล "ไม่อนุมัติ" แล้ว', timer: 1500, showConfirmButton: false });
+            statsData = null; // ให้คำนวณสถิติใหม่
+            loadRequests();
+        } catch (e) { Swal.fire('ผิดพลาด', e.message, 'error'); }
+    }
+
+    function renderHistory() {
+        const st = document.getElementById('hist-status').value;
+        const term = document.getElementById('hist-search').value.trim().toLowerCase();
+        const list = allRequests.filter(q => (!st || q.status === st) && (!term || `${q.teacherName} ${q.room}`.toLowerCase().includes(term)));
+        document.getElementById('hist-body').innerHTML = list.length === 0
+            ? '<tr><td colspan="9" class="p-8 text-center text-slate-400">ไม่พบข้อมูล</td></tr>'
+            : list.map(q => `
+                <tr class="hover:bg-slate-50">
+                    <td class="p-3 text-xs text-slate-500">${esc(q.createdAt)}</td>
+                    <td class="p-3 font-bold text-slate-700">${esc(q.teacherName)}</td>
+                    <td class="p-3">${esc(q.room)}</td>
+                    <td class="p-3">${esc(q.targetDate)}</td>
+                    <td class="p-3 text-center">${q.daysLate} วัน</td>
+                    <td class="p-3 text-xs">${q.requestType === 'แอดมินแก้ไข' ? '<span class="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-lg font-bold">✏️ แอดมินแก้ไข</span>' : esc(q.requestType)}</td>
+                    <td class="p-3 text-xs text-slate-600 max-w-[260px] truncate" title="${esc(q.reason)}">${esc(q.reason)}</td>
+                    <td class="p-3 text-center">${statusBadge(q.status)}</td>
+                    <td class="p-3 text-xs text-slate-500">${esc(q.reviewer)}${q.reviewNote ? `<br><span class="text-slate-400" title="${esc(q.reviewNote)}">${esc(q.reviewNote).slice(0, 40)}</span>` : ''}</td>
+                </tr>`).join('');
+    }
+
+    // ---------------- สถิติ ----------------
+    async function loadStats() {
+        document.getElementById('stats-loading').classList.remove('hidden');
+        document.getElementById('stats-content').classList.add('hidden');
+        try {
+            const r = await api('getAdvisorPerformanceStats');
+            if (!r.success) throw new Error(r.message);
+            statsData = r.data;
+            document.querySelectorAll('.cutoff-text').forEach(el => el.innerText = r.data.policy.cutoff);
+            renderStats();
+            document.getElementById('stats-loading').classList.add('hidden');
+            document.getElementById('stats-content').classList.remove('hidden');
+        } catch (e) {
+            document.getElementById('stats-loading').innerHTML = `<span class="text-red-500">❌ ${esc(e.message)}</span>`;
+        }
+    }
+
+    const pct = (a, b) => b > 0 ? Math.round(a / b * 100) : 0;
+    function distBar(s) {
+        const total = s.ontime + s.late + s.backdate + s.missing;
+        if (!total) return '<div class="dist-bar"></div>';
+        return `<div class="dist-bar">${SEG.filter(g => s[g.key] > 0).map(g =>
+            `<span class="${g.cls}" style="width:${s[g.key] / total * 100}%" title="${g.label}: ${s[g.key]} (${pct(s[g.key], total)}%)"></span>`).join('')}</div>`;
+    }
+
+    function renderStats() {
+        const s = statsData.summary;
+        const rq = s.requests;
+        const kpi = (label, value, sub) => `
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                <p class="text-xs font-bold text-slate-500 mb-1">${label}</p>
+                <p class="text-3xl font-extrabold text-slate-800">${value}</p>
+                <p class="text-xs text-slate-500 mt-1">${sub}</p>
+            </div>`;
+        document.getElementById('kpi-row').innerHTML =
+            kpi('เช็คชื่อตรงเวลา (ทั้งวิทยาลัย)', pct(s.ontime, s.expected) + '%', `${s.ontime} จาก ${s.expected} ห้อง-วัน`) +
+            kpi('คำขอเช็คย้อนหลัง (จากครู)', rq.total, `อนุมัติ ${rq.approved} • ไม่อนุมัติ ${rq.rejected} • รอ ${rq.pending} • แอดมินแก้ไข ${s.adminEdits || 0}`) +
+            kpi('ห้อง-วันที่ไม่ได้เช็คเลย', s.missing, `${pct(s.missing, s.expected)}% ของทั้งหมด`) +
+            kpi('วันที่มีกิจกรรมหน้าเสาธง', s.schoolDays, `ภาคเรียน ${esc(statsData.term.replace('_', '/'))}`);
+
+        document.getElementById('overall-caption').innerText = `รวม ${s.expected} ห้อง-วัน (นับเฉพาะห้องที่มีครูที่ปรึกษา ไม่รวมช่วงฝึกงาน)`;
+        document.getElementById('overall-bar').outerHTML = distBar(s).replace('class="dist-bar"', 'class="dist-bar" style="height:22px" id="overall-bar"');
+        document.getElementById('overall-legend').innerHTML = SEG.map(g =>
+            `<span class="flex items-center gap-1.5"><span class="${g.cls} inline-block w-3 h-3 rounded-sm"></span>${g.label} <b class="text-slate-800">${s[g.key]}</b> (${pct(s[g.key], s.expected)}%)</span>`).join('');
+        renderTeacherTable();
+    }
+
+    function gradeBadge(g) {
+        const map = { 'ดีเยี่ยม': ['bg-emerald-100 text-emerald-800', 'fa-star'], 'ดี': ['bg-blue-100 text-blue-800', 'fa-thumbs-up'], 'พอใช้': ['bg-amber-100 text-amber-800', 'fa-minus-circle'], 'ควรปรับปรุง': ['bg-red-100 text-red-700', 'fa-exclamation-triangle'] };
+        const [c, i] = map[g] || ['bg-slate-100 text-slate-500', 'fa-question'];
+        return `<span class="px-2.5 py-1 rounded-full text-xs font-bold ${c}"><i class="fas ${i} mr-1"></i>${g}</span>`;
+    }
+
+    function sortedTeachers() {
+        const term = document.getElementById('stat-search').value.trim().toLowerCase();
+        const sort = document.getElementById('stat-sort').value;
+        let list = statsData.teachers.filter(t => !term || `${t.name} ${t.rooms.map(r => r.room).join(' ')}`.toLowerCase().includes(term));
+        const rate = t => t.onTimeRate === null ? 999 : t.onTimeRate;
+        if (sort === 'rate') list.sort((a, b) => rate(a) - rate(b) || b.requests.total - a.requests.total);
+        else if (sort === 'requests') list.sort((a, b) => b.requests.total - a.requests.total);
+        else if (sort === 'missing') list.sort((a, b) => b.missing - a.missing);
+        else list.sort((a, b) => a.name.localeCompare(b.name, 'th'));
+        return list;
+    }
+
+    function renderTeacherTable() {
+        const list = sortedTeachers();
+        document.getElementById('teacher-body').innerHTML = list.length === 0
+            ? '<tr><td colspan="10" class="p-8 text-center text-slate-400">ไม่พบข้อมูล</td></tr>'
+            : list.map(t => `
+                <tr class="hover:bg-slate-50 cursor-pointer" onclick="showTeacherDetail('${esc(t.email)}')">
+                    <td class="p-3"><p class="font-bold text-slate-800">${esc(t.name)}</p><p class="text-xs text-slate-400">${t.rooms.map(r => esc(r.room)).join(', ') || '-'}</p></td>
+                    <td class="p-3 w-48">${distBar(t)}</td>
+                    <td class="p-3 text-right">${t.ontime}</td>
+                    <td class="p-3 text-right">${t.late}</td>
+                    <td class="p-3 text-right">${t.backdate}</td>
+                    <td class="p-3 text-right ${t.missing > 0 ? 'font-bold text-red-600' : ''}">${t.missing}</td>
+                    <td class="p-3 text-right font-bold">${t.onTimeRate === null ? '-' : t.onTimeRate + '%'}</td>
+                    <td class="p-3 text-center">${t.requests.total} <span class="text-xs text-slate-400">(${t.requests.approved}/${t.requests.rejected}/${t.requests.pending})</span></td>
+                    <td class="p-3 text-right">${t.requests.total ? t.requests.avgDaysLate : '-'}</td>
+                    <td class="p-3 text-center">${gradeBadge(t.grade)}</td>
+                </tr>`).join('');
+    }
+
+    function showTeacherDetail(email) {
+        const t = statsData.teachers.find(x => x.email === email);
+        if (!t) return;
+        const roomsHtml = t.rooms.map(r => `
+            <div class="border border-slate-200 rounded-xl p-3 mb-2 text-left">
+                <p class="font-bold text-slate-800">${esc(r.room)} <span class="text-xs font-normal text-slate-500">(${r.expected} วัน)</span></p>
+                ${distBar(r)}
+                <p class="text-xs text-slate-600 mt-2">ตรงเวลา ${r.ontime} • ล่าช้า ${r.late} • ย้อนหลัง ${r.backdate} • <span class="text-red-600 font-bold">ไม่ได้เช็ค ${r.missing}</span></p>
+                ${r.missingDates.length ? `<p class="text-xs text-red-600 mt-1">วันที่ไม่ได้เช็ค (ล่าสุด): ${r.missingDates.join(', ')}</p>` : ''}
+            </div>`).join('') || '<p class="text-slate-400">ไม่มีห้องที่ปรึกษา</p>';
+        const myReq = allRequests.filter(q => q.teacherEmail === email).slice(0, 10);
+        const reqHtml = myReq.length ? `<table class="w-full text-xs text-left mt-2">${myReq.map(q => `<tr class="border-b border-slate-100"><td class="py-1">${esc(q.targetDate)}</td><td>${esc(q.room)}</td><td>${q.daysLate} วัน</td><td class="text-slate-500 truncate max-w-[160px]">${esc(q.reason)}</td><td>${statusBadge(q.status)}</td></tr>`).join('')}</table>` : '<p class="text-xs text-slate-400">ไม่เคยขอเช็คย้อนหลัง</p>';
+        Swal.fire({
+            title: esc(t.name),
+            width: 640,
+            html: `<div class="text-left text-sm">
+                <p class="mb-3">${gradeBadge(t.grade)} <span class="ml-2">ตรงเวลา <b>${t.onTimeRate ?? '-'}%</b></span></p>
+                <h4 class="font-bold text-slate-700 mb-2">รายห้อง</h4>${roomsHtml}
+                <h4 class="font-bold text-slate-700 mt-4">คำขอย้อนหลังล่าสุด</h4>${reqHtml}
+            </div>`,
+            confirmButtonText: 'ปิด', confirmButtonColor: '#0f172a'
+        });
+    }
+
+    function exportStatsExcel() {
+        const rows = sortedTeachers().map((t, i) => ({
+            'ลำดับ': i + 1, 'ครูที่ปรึกษา': t.name, 'ห้อง': t.rooms.map(r => r.room).join(', '),
+            'ห้อง-วันทั้งหมด': t.expected, 'ตรงเวลา': t.ontime, 'ล่าช้า (วันเดียวกัน)': t.late, 'ย้อนหลัง': t.backdate, 'ไม่ได้เช็คเลย': t.missing,
+            '% ตรงเวลา': t.onTimeRate ?? '-', 'คำขอย้อนหลังทั้งหมด': t.requests.total, 'อนุมัติ': t.requests.approved,
+            'ไม่อนุมัติ': t.requests.rejected, 'รออนุมัติ': t.requests.pending, 'ยกเลิก': t.requests.cancelled,
+            'เฉลี่ยย้อนหลัง (วัน)': t.requests.avgDaysLate, 'ระดับ': t.grade
+        }));
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'สถิติครูที่ปรึกษา');
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(allRequests.map(q => ({
+            'เลขที่': q.requestId, 'ส่งเมื่อ': q.createdAt, 'ครู': q.teacherName, 'ห้อง': q.room, 'วันที่ขอเช็ค': q.targetDate,
+            'ย้อนหลัง (วัน)': q.daysLate, 'ประเภท': q.requestType, 'เหตุผล': q.reason, 'สถานะ': q.status,
+            'ผู้พิจารณา': q.reviewer, 'พิจารณาเมื่อ': q.reviewedAt, 'หมายเหตุ': q.reviewNote
+        }))), 'ประวัติคำขอ');
+        XLSX.writeFile(wb, `สถิติครูที่ปรึกษา_${statsData.term}_${new Date().toLocaleDateString('th-TH').replace(/\//g, '-')}.xlsx`);
+    }
+
+    // ---------------- ✏️ แอดมินแก้ไขเช็คชื่อ ----------------
+    let editState = null; // { room, iso, dateStr, students:[{id,name,status}], original }
+    const ED_OPTS = [
+        { val: 'มา', cls: 'peer-checked:bg-emerald-500' }, { val: 'สาย', cls: 'peer-checked:bg-orange-500' },
+        { val: 'ลา', cls: 'peer-checked:bg-yellow-500' }, { val: 'ขาด', cls: 'peer-checked:bg-red-500' }
+    ];
+    const toIso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const normHistDate = raw => { const p = String(raw || '').trim().split('/'); if (p.length !== 3) return ''; let y = parseInt(p[2]); if (y > 2500) y -= 543; return `${p[0].padStart(2, '0')}/${p[1].padStart(2, '0')}/${y}`; };
+
+    async function initEditTab() {
+        const dateEl = document.getElementById('ed-date');
+        const y = new Date(); y.setDate(y.getDate() - 1);
+        dateEl.max = toIso(y);
+        if (policy && policy.termStart) { const [d, m, yy] = policy.termStart.split('/'); dateEl.min = `${yy}-${m}-${d}`; }
+        if (!dateEl.value) dateEl.value = toIso(y);
+        const sel = document.getElementById('ed-room');
+        if (sel.dataset.loaded) return;
+        const r = await api('getRoomData');
+        if (r.success) { sel.innerHTML = '<option value="">-- เลือกห้อง --</option>' + r.data.map(x => `<option>${esc(x)}</option>`).join(''); sel.dataset.loaded = '1'; }
+        else sel.innerHTML = '<option value="">โหลดรายชื่อห้องไม่สำเร็จ</option>';
+    }
+
+    async function loadEditRoster() {
+        const room = document.getElementById('ed-room').value;
+        const iso = document.getElementById('ed-date').value;
+        const box = document.getElementById('ed-roster');
+        if (!room || !iso) return Swal.fire('ข้อมูลไม่ครบ', 'กรุณาเลือกห้องและวันที่', 'warning');
+        const dateEl = document.getElementById('ed-date');
+        if ((dateEl.min && iso < dateEl.min) || iso > dateEl.max) return Swal.fire('วันที่ไม่ถูกต้อง', 'เลือกได้ตั้งแต่วันเปิดภาคเรียนถึงเมื่อวาน (วันนี้ให้แก้ผ่านหน้าเช็คชื่อปกติ)', 'warning');
+        box.innerHTML = '<p class="text-center text-slate-400 py-10">กำลังโหลด...</p>';
+        try {
+            const [rs, rh] = await Promise.all([api('getStudentsInRoom', { roomString: room }), api('getRoomHistory', { roomString: room })]);
+            if (!rs.success) throw new Error(rs.message);
+            const [yy, mm, dd] = iso.split('-');
+            const dateStr = `${dd}/${mm}/${yy}`;
+            const hist = (rh.success ? rh.data : []).filter(r => normHistDate(r[1]) === dateStr);
+            const byId = {}; hist.forEach(r => { if (!byId[String(r[3]).trim()]) byId[String(r[3]).trim()] = r; });
+            const students = rs.data.map(s => ({ ...s, status: byId[s.id] ? String(byId[s.id][5]).trim() : 'มา', had: !!byId[s.id] }));
+            const original = hist.length ? String(hist[0][2]) : '';
+            editState = { room, iso, dateStr, students, original };
+            renderEditRoster();
+        } catch (e) { box.innerHTML = `<p class="text-center text-red-500 py-10">❌ ${esc(e.message)}</p>`; }
+    }
+
+    function renderEditRoster() {
+        const st = editState;
+        const display = new Date(st.iso + 'T12:00:00').toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        const info = st.original
+            ? `<div class="bg-blue-50 border border-blue-200 text-blue-800 rounded-2xl p-3 text-sm mb-4">ℹ️ วันนี้มีข้อมูลเดิม บันทึกโดย <b>${esc(st.original)}</b> — การบันทึกจะเป็นการ "แก้ไข" ข้อมูลเดิม</div>`
+            : `<div class="bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl p-3 text-sm mb-4">⚠️ วันนี้ห้องนี้ <b>ยังไม่มีข้อมูลการเช็คชื่อ</b> — การบันทึกจะนับเป็น "ย้อนหลัง" ในสถิติของห้อง</div>`;
+        const rows = st.students.map((s, i) => `
+            <tr class="hover:bg-slate-50">
+                <td class="p-2 text-center text-slate-400 text-xs">${i + 1}</td>
+                <td class="p-2"><p class="font-bold text-slate-800 text-sm">${esc(s.name)}</p><p class="text-[11px] text-slate-400 font-mono">${esc(s.id)}${s.had ? '' : ' • ไม่มีข้อมูลเดิม'}</p></td>
+                <td class="p-2"><div class="flex gap-1 bg-slate-100 p-1 rounded-xl max-w-[280px]">
+                    ${ED_OPTS.map(o => `<label class="flex-1 cursor-pointer"><input type="radio" name="ed_${i}" value="${o.val}" class="hidden peer" ${s.status === o.val ? 'checked' : ''} onchange="editState.students[${i}].status='${o.val}'">
+                        <div class="py-1.5 rounded-lg text-xs font-bold text-center bg-white border border-slate-200 text-slate-500 peer-checked:text-white peer-checked:border-transparent ${o.cls}">${o.val}</div></label>`).join('')}
+                </div></td>
+            </tr>`).join('');
+        document.getElementById('ed-roster').innerHTML = `
+            <div class="bg-white rounded-3xl border border-slate-200 shadow-sm p-5">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-3">
+                    <h3 class="font-bold text-slate-800">${esc(st.room)} • ${display}</h3>
+                    <div class="flex gap-2">
+                        <button onclick="edSetAll('มา')" class="bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-bold">✅ มาทุกคน</button>
+                        <button onclick="edSetAll('ขาด')" class="bg-red-100 text-red-700 px-3 py-1.5 rounded-lg text-xs font-bold">❌ ขาดทุกคน</button>
+                    </div>
+                </div>
+                ${info}
+                <div class="overflow-x-auto custom-scrollbar max-h-[55vh] overflow-y-auto border border-slate-100 rounded-2xl"><table class="w-full">${rows}</table></div>
+                <label class="block text-sm font-bold text-slate-700 mt-4">เหตุผลการแก้ไข <span class="text-red-500">*</span></label>
+                <textarea id="ed-reason" rows="2" class="w-full mt-1 p-3 border border-slate-200 rounded-xl text-sm" placeholder="เช่น ครูแจ้งด้วยเอกสาร/ใบลา, ระบบขัดข้องวันนั้น, แก้ไขตามคำสั่งฝ่ายกิจการฯ..."></textarea>
+                <button onclick="saveAdminEdit()" id="ed-save" class="mt-4 w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-8 py-3 rounded-2xl shadow-sm"><i class="fas fa-save"></i> บันทึกการแก้ไข</button>
+            </div>`;
+    }
+
+    function edSetAll(status) { editState.students.forEach(s => s.status = status); renderEditRoster(); }
+
+    async function saveAdminEdit() {
+        const reason = document.getElementById('ed-reason').value.trim();
+        if (reason.length < 5) return Swal.fire('กรุณาระบุเหตุผล', 'เหตุผลการแก้ไขอย่างน้อย 5 ตัวอักษร (จะถูกบันทึกในประวัติ)', 'warning');
+        const cnt = { 'มา': 0, 'สาย': 0, 'ลา': 0, 'ขาด': 0 };
+        editState.students.forEach(s => cnt[s.status]++);
+        const ok = await Swal.fire({ title: 'ยืนยันบันทึกการแก้ไข?', icon: 'question',
+            html: `${esc(editState.room)} • วันที่ ${editState.dateStr}<br>มา ${cnt['มา']} • สาย ${cnt['สาย']} • ลา ${cnt['ลา']} • ขาด <b style="color:#dc2626">${cnt['ขาด']}</b>`,
+            showCancelButton: true, confirmButtonText: 'บันทึก', cancelButtonText: 'กลับ', confirmButtonColor: '#4f46e5' });
+        if (!ok.isConfirmed) return;
+        const btn = document.getElementById('ed-save'); btn.disabled = true; btn.innerText = 'กำลังบันทึก...';
+        try {
+            const r = await api('adminEditAttendance', { adminEmail: currentUser.email, roomString: editState.room, targetDate: editState.iso, reason,
+                records: editState.students.map(s => ({ id: s.id, name: s.name, status: s.status })) });
+            if (!r.success) throw new Error(r.message);
+            await Swal.fire({ icon: 'success', title: 'บันทึกแล้ว', html: `เลขที่อ้างอิง <b>${r.requestId}</b> (${r.wasExisting ? 'แก้ไขข้อมูลเดิม' : 'บันทึกแทนวันที่ไม่มีข้อมูล'})`, confirmButtonColor: '#059669' });
+            statsData = null;
+            loadRequests();
+            loadEditRoster();
+        } catch (e) { Swal.fire('บันทึกไม่สำเร็จ', e.message, 'error'); btn.disabled = false; btn.innerText = 'บันทึกการแก้ไข'; }
+    }
+
+    function logout() { localStorage.clear(); window.location.href = 'index.html'; }
+</script>
+</body>
+</html>

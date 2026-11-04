@@ -62,7 +62,7 @@
                     loadHistory(data.id);
                 } else if (role === 'admin') {
                     window.location.href = "admin.html";
-                } else if (role === 'teacher') {
+                } else if (role === 'teacher' || role === 'homeroom_head') {
                     window.location.href = "teacher.html";
                 } else if (role === 'บรรณารักษ์') {
                     window.location.href = "admin-library.html";
@@ -217,7 +217,7 @@
                         Swal.fire({ icon: 'success', title: 'ยินดีต้อนรับผู้บริหาร', text: `เข้าสู่ระบบในชื่อ: ${data.user.name}`, timer: 1500, showConfirmButton: false })
                         .then(() => { window.location.href = "admin.html"; });
                     }
-                    else if (data.role === 'teacher') {
+                    else if (data.role === 'teacher' || data.role === 'homeroom_head') {
                         Swal.fire({ icon: 'success', title: 'สวัสดีครับคุณครู', text: `เข้าสู่ระบบในชื่อ: ${data.user.name}`, timer: 1500, showConfirmButton: false })
                         .then(() => { window.location.href = "teacher.html"; });
                     }

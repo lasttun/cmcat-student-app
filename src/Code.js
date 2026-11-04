@@ -18,8 +18,19 @@ const CONFIG = {
     TEACHERS: 'Teachers',
     SDQ: 'SDQ_Results',
     SAVINGS_MASTER: 'Savings_Master', // 💰 เพิ่ม Sheet จัดการบัญชีและเป้าหมาย
-    SAVINGS_TX: 'Savings_Transactions' // 💰 เพิ่ม Sheet เก็บประวัติการฝาก-ถอน
-  }
+    SAVINGS_TX: 'Savings_Transactions', // 💰 เพิ่ม Sheet เก็บประวัติการฝาก-ถอน
+    BACKDATE: 'Backdate_Requests' // 📅 เพิ่ม Sheet คำขอเช็คชื่อย้อนหลัง
+  },
+  // 📅 นโยบายการเช็คชื่อ (ปรับได้ตามที่วิทยาลัยกำหนด)
+  ATTENDANCE_POLICY: {
+    ON_TIME_CUTOFF: '10:00',      // เช็คชื่อวันนี้หลังเวลานี้ = "บันทึกล่าช้า" (ยังบันทึกได้ แต่ถูกนับสถิติ)
+    BACKDATE_MAX_DAYS: 7,         // ขอเช็คย้อนหลังได้ไม่เกินกี่วัน
+    MIN_ROOMS_FOR_SCHOOL_DAY: 3   // วันที่มีห้องเช็คชื่อ >= ค่านี้ ถือเป็น "วันที่มีกิจกรรมหน้าเสาธง"
+  },
+  // บทบาท (คอลัมน์ G ชีต Teachers) ที่มีสิทธิ์อนุมัติคำขอเช็คย้อนหลัง
+  APPROVER_ROLES: ['หัวหน้างานครูที่ปรึกษา', 'admin', 'ผู้บริหาร'],
+  // บทบาทที่แก้ไขเช็คชื่อย้อนหลังได้โดยตรง (ไม่จำกัดจำนวนวัน ไม่ต้องรออนุมัติ แต่ถูกบันทึกประวัติทุกครั้ง)
+  ADMIN_EDIT_ROLES: ['admin', 'ผู้บริหาร']
 };
 
 const ATTENDANCE_SHEET_NAME = `Attendance_Logs_${CONFIG.CURRENT_TERM}`;
@@ -74,6 +85,15 @@ function doPost(e) {
       case 'getRoomData': return output(fetchRoomList());
       case 'getStudentsInRoom': return output(fetchStudentsByRoom(payload.roomString));
       case 'saveAttendance': return output(recordAttendance(payload));
+
+      // 📅 ระบบขออนุมัติเช็คชื่อย้อนหลัง + สถิติการทำงานครูที่ปรึกษา
+      case 'getAttendancePolicy': return output(getAttendancePolicy());
+      case 'submitBackdateRequest': return output(submitBackdateRequest(payload));
+      case 'getBackdateRequests': return output(getBackdateRequests(payload));
+      case 'reviewBackdateRequest': return output(reviewBackdateRequest(payload));
+      case 'cancelBackdateRequest': return output(cancelBackdateRequest(payload));
+      case 'getAdvisorPerformanceStats': return output(getAdvisorPerformanceStats());
+      case 'adminEditAttendance': return output(adminEditAttendance(payload));
       case 'saveSDQData': return output(recordSDQ(payload));
       case 'getSDQDashboard': return output(fetchSDQOverview(payload.roomString));
       case 'getHistory': return output(fetchStudentAttendanceHistory(payload.studentId));
@@ -178,7 +198,9 @@ function fetchStudentsByRoom(roomString) {
   return { success: true, data: students };
 }
 
-/** 3. บันทึกการเช็คชื่อเข้าแถวหน้าเสาธง (Upsert: ส่งซ้ำวันเดิมจะอัปเดตทับ ไม่เกิดแถวซ้ำ) */
+/** 3. บันทึกการเช็คชื่อเข้าแถวหน้าเสาธง "วันนี้" (Upsert: ส่งซ้ำวันเดิมจะอัปเดตทับ ไม่เกิดแถวซ้ำ)
+ *  📅 ถ้าบันทึกหลังเวลา ON_TIME_CUTOFF จะถูกติดป้าย "บันทึกล่าช้า" (ยังบันทึกได้ตามปกติ แต่ถูกนับในสถิติ)
+ *  การเช็คชื่อ "วันก่อนหน้า" ต้องส่งผ่าน submitBackdateRequest และรอหัวหน้างานอนุมัติเท่านั้น */
 function recordAttendance(payload) {
   const { records, teacherName } = payload;
   if (!records || !Array.isArray(records) || records.length === 0) {
@@ -189,59 +211,145 @@ function recordAttendance(payload) {
   try {
     lock.waitLock(30000);
 
-    const sheet = getTargetSheet(ATTENDANCE_SHEET_NAME);
-    if (sheet.getLastRow() === 0) {
-      sheet.appendRow(['Timestamp', 'Date_TH', 'Teacher', 'Student_ID', 'Name', 'Status']);
-    }
-    sheet.getRange('B:B').setNumberFormat('@'); // คอลัมน์วันที่เป็นข้อความล้วน
-
+    const sheet = ensureAttendanceSheet();
     const now = new Date();
     const dateStr = Utilities.formatDate(now, CONFIG.TIMEZONE, "dd/MM/yyyy");
+    const entryType = isAfterCutoff(now) ? ENTRY_TYPE.LATE : ENTRY_TYPE.ON_TIME;
 
-    // สแกนเฉพาะแถวท้ายชีต เพื่อหาแถวของวันนี้ที่มีอยู่แล้ว
-    const existingMap = new Map(); // Student_ID -> เลขแถว
-    const lastRow = sheet.getLastRow();
-    if (lastRow > 1) {
-      const WINDOW = 10000;
-      const startRow = Math.max(2, lastRow - WINDOW + 1);
-      const vals = sheet.getRange(startRow, 1, lastRow - startRow + 1, 6).getDisplayValues();
-      for (let i = vals.length - 1; i >= 0; i--) {
-        if (String(vals[i][1]).trim() === dateStr) {
-          const key = String(vals[i][3]).trim();
-          if (!existingMap.has(key)) existingMap.set(key, startRow + i);
-        }
-      }
-    }
-
-    // กัน ID ซ้ำใน payload เดียวกัน (ตัวหลังสุดชนะ)
-    const unique = new Map();
-    records.forEach(r => unique.set(String(r.id).trim(), r));
-
-    const newRows = [];
-    let updated = 0;
-    unique.forEach((r, id) => {
-      const rowData = [now, dateStr, teacherName, id, r.name, r.status];
-      const existingRow = existingMap.get(id);
-      if (existingRow) {
-        sheet.getRange(existingRow, 1, 1, 6).setValues([rowData]);
-        updated++;
-      } else {
-        newRows.push(rowData);
-      }
+    const result = upsertAttendanceForDate(sheet, dateStr, records, teacherName, {
+      entryType: entryType, refId: '', editEntryType: null
     });
-
-    if (newRows.length > 0) {
-      sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, 6).setValues(newRows);
-    }
     SpreadsheetApp.flush();
 
-    return { success: true, count: unique.size, inserted: newRows.length, updated: updated };
+    return { success: true, count: result.count, inserted: result.inserted, updated: result.updated, entryType: entryType };
   } catch (error) {
     console.error("recordAttendance Error:", error);
     return { success: false, message: "ระบบกำลังมีผู้ใช้งานจำนวนมาก กรุณากดบันทึกอีกครั้ง" };
   } finally {
     lock.releaseLock();
   }
+}
+
+// ==========================================
+// 📅 ATTENDANCE HELPERS (ใช้ร่วมกันระหว่างเช็คปกติ และเช็คย้อนหลังที่ได้รับอนุมัติ)
+// ==========================================
+const ATT_HEADER = ['Timestamp', 'Date_TH', 'Teacher', 'Student_ID', 'Name', 'Status', 'Entry_Type', 'Ref_Request_ID', 'Last_Edited'];
+const ATT_COLS = ATT_HEADER.length; // 9 คอลัมน์ (G-I เพิ่มใหม่ ไม่กระทบโค้ดเดิมที่อ่านถึงคอลัมน์ F)
+const ENTRY_TYPE = {
+  ON_TIME: 'ปกติ',
+  LATE: 'บันทึกล่าช้า',
+  BACKDATE: 'ย้อนหลัง (อนุมัติ)',
+  BACKDATE_EDIT: 'แก้ไขย้อนหลัง (อนุมัติ)'
+};
+const REQ_STATUS = { PENDING: 'รออนุมัติ', APPROVED: 'อนุมัติ', REJECTED: 'ไม่อนุมัติ', CANCELLED: 'ยกเลิก' };
+const VALID_ATT_STATUS = ['มา', 'สาย', 'ลา', 'ขาด'];
+
+/** เตรียมชีตเข้าแถว + เติมหัวคอลัมน์ใหม่ (G-I) ให้ชีตเดิมอัตโนมัติ */
+function ensureAttendanceSheet() {
+  const sheet = getTargetSheet(ATTENDANCE_SHEET_NAME);
+  if (sheet.getMaxColumns() < ATT_COLS) sheet.insertColumnsAfter(sheet.getMaxColumns(), ATT_COLS - sheet.getMaxColumns());
+  if (sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, ATT_COLS).setValues([ATT_HEADER]);
+  } else if (!String(sheet.getRange(1, 7).getValue()).trim()) {
+    sheet.getRange(1, 7, 1, 3).setValues([ATT_HEADER.slice(6)]);
+  }
+  sheet.getRange('B:B').setNumberFormat('@'); // คอลัมน์วันที่เป็นข้อความล้วน
+  return sheet;
+}
+
+/** แปลง "dd/MM/yyyy" (รองรับปี พ.ศ.) เป็นเลขวัน yyyymmdd สำหรับเปรียบเทียบ */
+function dateStrToKey(dateStr) {
+  const p = String(dateStr || '').trim().split('/');
+  if (p.length !== 3) return 0;
+  let y = parseInt(p[2], 10);
+  if (y > 2500) y -= 543;
+  return y * 10000 + parseInt(p[1], 10) * 100 + parseInt(p[0], 10);
+}
+
+/** ปรับรูปแบบวันที่ให้เป็น dd/MM/yyyy (ค.ศ.) มาตรฐานเดียวกัน */
+function normalizeDateStr(dateStr) {
+  const k = dateStrToKey(dateStr);
+  if (!k) return '';
+  const y = Math.floor(k / 10000), m = Math.floor(k / 100) % 100, d = k % 100;
+  return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
+}
+
+/** จำนวนวันระหว่าง 2 dateKey (b - a) */
+function diffDaysByKey(a, b) {
+  const toUTC = k => Date.UTC(Math.floor(k / 10000), Math.floor(k / 100) % 100 - 1, k % 100);
+  return Math.round((toUTC(b) - toUTC(a)) / 86400000);
+}
+
+function todayKey() {
+  return dateStrToKey(Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "dd/MM/yyyy"));
+}
+
+function isAfterCutoff(dateObj) {
+  return Utilities.formatDate(dateObj, CONFIG.TIMEZONE, "HH:mm") > CONFIG.ATTENDANCE_POLICY.ON_TIME_CUTOFF;
+}
+
+/** จำแนกประเภทการบันทึกจากเวลาที่บันทึกจริง (ใช้กับข้อมูลเก่าที่ยังไม่มีคอลัมน์ Entry_Type ด้วย) */
+function classifyByTimestamp(ts, dateStr) {
+  const t = (ts instanceof Date) ? ts : new Date(ts);
+  if (!ts || isNaN(t.getTime())) return ENTRY_TYPE.ON_TIME; // ไม่ทราบเวลา → ให้ประโยชน์แก่ครู
+  const tsDateStr = Utilities.formatDate(t, CONFIG.TIMEZONE, "dd/MM/yyyy");
+  if (tsDateStr === normalizeDateStr(dateStr)) return isAfterCutoff(t) ? ENTRY_TYPE.LATE : ENTRY_TYPE.ON_TIME;
+  return dateStrToKey(tsDateStr) > dateStrToKey(dateStr) ? ENTRY_TYPE.BACKDATE : ENTRY_TYPE.ON_TIME;
+}
+
+/**
+ * Upsert แถวเข้าแถวของวันที่กำหนด
+ * - แถวใหม่: Timestamp = ตอนนี้, Entry_Type = opts.entryType
+ * - แถวเดิม: เก็บ Timestamp ครั้งแรกไว้ (การแก้ไขไม่ทำให้กลายเป็น "ล่าช้า") แล้วบันทึกเวลาแก้ไขในคอลัมน์ I
+ *            ถ้ามี opts.editEntryType (กรณีอนุมัติแก้ไขย้อนหลัง) จะเปลี่ยน Entry_Type ตามนั้น
+ */
+function upsertAttendanceForDate(sheet, dateStr, records, teacherName, opts) {
+  const now = new Date();
+  const existingMap = new Map(); // Student_ID -> { row, ts, type, ref }
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    const WINDOW = 15000;
+    const startRow = Math.max(2, lastRow - WINDOW + 1);
+    const n = lastRow - startRow + 1;
+    const disp = sheet.getRange(startRow, 1, n, 4).getDisplayValues();
+    const raw = sheet.getRange(startRow, 1, n, ATT_COLS).getValues();
+    const targetKey = dateStrToKey(dateStr);
+    for (let i = n - 1; i >= 0; i--) {
+      if (dateStrToKey(disp[i][1]) === targetKey) {
+        const key = String(disp[i][3]).trim();
+        if (!existingMap.has(key)) {
+          existingMap.set(key, { row: startRow + i, ts: raw[i][0], type: String(raw[i][6] || '').trim(), ref: String(raw[i][7] || '').trim() });
+        }
+      }
+    }
+  }
+
+  const unique = new Map(); // กัน ID ซ้ำใน payload เดียวกัน (ตัวหลังสุดชนะ)
+  records.forEach(r => unique.set(String(r.id).trim(), r));
+
+  const newRows = [];
+  let updated = 0;
+  unique.forEach((r, id) => {
+    const ex = existingMap.get(id);
+    if (ex) {
+      const keepType = ex.type || classifyByTimestamp(ex.ts, dateStr);
+      const rowData = [
+        ex.ts || now, dateStr, teacherName, id, r.name, r.status,
+        opts.editEntryType || keepType,
+        opts.refId || ex.ref || '',
+        now
+      ];
+      sheet.getRange(ex.row, 1, 1, ATT_COLS).setValues([rowData]);
+      updated++;
+    } else {
+      newRows.push([now, dateStr, teacherName, id, r.name, r.status, opts.entryType, opts.refId || '', '']);
+    }
+  });
+
+  if (newRows.length > 0) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, ATT_COLS).setValues(newRows);
+  }
+  return { count: unique.size, inserted: newRows.length, updated: updated };
 }
 
 /** 4. บันทึกผลประเมิน SDQ (Optimized Bulk Insert) */
@@ -454,8 +562,9 @@ function handleLogin(payload) {
                 const rawRole = String(tData[i][6] || '').trim();
                 let computedRole = 'teacher';
                 
-                if (rawRole === 'admin' || rawRole === 'ผู้บริหาร') computedRole = 'admin'; 
+                if (rawRole === 'admin' || rawRole === 'ผู้บริหาร') computedRole = 'admin';
                 else if (rawRole === 'ครูที่ปรึกษา') computedRole = 'teacher';
+                else if (rawRole === 'หัวหน้างานครูที่ปรึกษา') computedRole = 'homeroom_head'; // 📅 ผู้อนุมัติเช็คย้อนหลัง
                 else computedRole = rawRole; 
 
                 const myRooms = tData[i][5] ? String(tData[i][5]).split(',').map(r => r.trim()).filter(r => r !== "") : [];
@@ -1853,3 +1962,536 @@ function getExamDashboard() {
   }
 }
 
+
+
+// =====================================================================
+// 📅 BACKDATE APPROVAL SYSTEM (ระบบขออนุมัติเช็คชื่อย้อนหลัง)
+//    ครูส่งคำขอ → หัวหน้างานครูที่ปรึกษาอนุมัติ → ระบบจึงบันทึกลงชีตเข้าแถว
+//    ทุกคำขอถูกเก็บไว้ในชีต Backdate_Requests เพื่อใช้ทำสถิติ
+// =====================================================================
+
+const BD_HEADER = [
+  'Request_ID', 'Created_At', 'Teacher_Name', 'Teacher_Email', 'Room', 'Target_Date', 'Days_Late',
+  'Reason', 'Request_Type', 'Total', 'Present', 'Late', 'Leave', 'Absent', 'Records_JSON',
+  'Status', 'Reviewer', 'Reviewed_At', 'Review_Note'
+];
+const BD = {}; BD_HEADER.forEach((h, i) => BD[h] = i); // ชื่อคอลัมน์ → index
+
+function getBackdateSheet() {
+  const sheet = getTargetSheet(CONFIG.SHEETS.BACKDATE);
+  if (sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, BD_HEADER.length).setValues([BD_HEADER])
+      .setFontWeight('bold').setBackground('#f1f5f9');
+    sheet.setFrozenRows(1);
+    sheet.getRange('F:F').setNumberFormat('@');
+  }
+  return sheet;
+}
+
+/** ค้นหาครูจากอีเมล/รหัสผู้ใช้ (คอลัมน์ A ชีต Teachers) */
+function findTeacherByEmail(email) {
+  const key = String(email || '').trim();
+  if (!key) return null;
+  const tSheet = getActiveSS().getSheetByName(CONFIG.SHEETS.TEACHERS);
+  if (!tSheet) return null;
+  const tData = tSheet.getDataRange().getValues();
+  for (let i = 1; i < tData.length; i++) {
+    if (String(tData[i][0]).trim() === key) {
+      return {
+        email: key,
+        name: String(tData[i][1]).trim(),
+        role: String(tData[i][6] || '').trim(),
+        rooms: tData[i][5] ? String(tData[i][5]).split(',').map(r => r.trim()).filter(Boolean) : []
+      };
+    }
+  }
+  return null;
+}
+
+function formatTs(v) {
+  if (!v) return '';
+  const d = (v instanceof Date) ? v : new Date(v);
+  return isNaN(d.getTime()) ? String(v) : Utilities.formatDate(d, CONFIG.TIMEZONE, "dd/MM/yyyy HH:mm");
+}
+
+function backdateRowToObj(r, includeRecords) {
+  const obj = {
+    requestId: String(r[BD.Request_ID]),
+    createdAt: formatTs(r[BD.Created_At]),
+    teacherName: String(r[BD.Teacher_Name]),
+    teacherEmail: String(r[BD.Teacher_Email]),
+    room: String(r[BD.Room]),
+    targetDate: normalizeDateStr(r[BD.Target_Date]) || String(r[BD.Target_Date]),
+    daysLate: Number(r[BD.Days_Late]) || 0,
+    reason: String(r[BD.Reason]),
+    requestType: String(r[BD.Request_Type]),
+    counts: { total: Number(r[BD.Total]) || 0, present: Number(r[BD.Present]) || 0, late: Number(r[BD.Late]) || 0, leave: Number(r[BD.Leave]) || 0, absent: Number(r[BD.Absent]) || 0 },
+    status: String(r[BD.Status]),
+    reviewer: String(r[BD.Reviewer] || ''),
+    reviewedAt: formatTs(r[BD.Reviewed_At]),
+    reviewNote: String(r[BD.Review_Note] || '')
+  };
+  if (includeRecords) {
+    try { obj.records = JSON.parse(r[BD.Records_JSON] || '[]'); } catch (e) { obj.records = []; }
+  }
+  return obj;
+}
+
+/** ส่งนโยบายให้หน้าเว็บใช้ (เวลาตัดรอบ / จำนวนวันย้อนหลังสูงสุด) */
+function getAttendancePolicy() {
+  return {
+    success: true,
+    data: {
+      cutoff: CONFIG.ATTENDANCE_POLICY.ON_TIME_CUTOFF,
+      maxDays: CONFIG.ATTENDANCE_POLICY.BACKDATE_MAX_DAYS,
+      termStart: normalizeDateStr(CONFIG.TERM_START_DATE),
+      today: Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "dd/MM/yyyy")
+    }
+  };
+}
+
+/** 📝 ครูส่งคำขอเช็คชื่อย้อนหลัง (ยังไม่บันทึกลงชีตเข้าแถวจนกว่าจะอนุมัติ) */
+function submitBackdateRequest(payload) {
+  const { teacherEmail, roomString, targetDate, reason, records } = payload || {};
+
+  // --- ตรวจข้อมูลพื้นฐาน ---
+  if (!teacherEmail || !roomString || !targetDate) return { success: false, message: "ข้อมูลคำขอไม่ครบถ้วน" };
+  if (!reason || String(reason).trim().length < 5) return { success: false, message: "กรุณาระบุเหตุผลที่ต้องเช็คย้อนหลัง (อย่างน้อย 5 ตัวอักษร)" };
+  if (!Array.isArray(records) || records.length === 0) return { success: false, message: "ไม่พบรายชื่อนักเรียนในคำขอ" };
+
+  const teacher = findTeacherByEmail(teacherEmail);
+  if (!teacher) return { success: false, message: "ไม่พบข้อมูลครูผู้ส่งคำขอในระบบ" };
+  const isAdmin = ['admin', 'ผู้บริหาร'].includes(teacher.role);
+  if (!isAdmin && !teacher.rooms.some(r => normalizeRoom(r) === normalizeRoom(roomString))) {
+    return { success: false, message: "ท่านไม่ใช่ครูที่ปรึกษาของห้องนี้" };
+  }
+
+  // --- ตรวจวันที่ (รับรูปแบบ yyyy-MM-dd จาก input type=date) ---
+  const m = String(targetDate).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return { success: false, message: "รูปแบบวันที่ไม่ถูกต้อง" };
+  const dateStr = `${m[3]}/${m[2]}/${m[1]}`;
+  const targetKey = dateStrToKey(dateStr);
+  const daysLate = diffDaysByKey(targetKey, todayKey());
+  const maxDays = CONFIG.ATTENDANCE_POLICY.BACKDATE_MAX_DAYS;
+
+  if (daysLate <= 0) return { success: false, message: "วันนี้หรือวันในอนาคต ให้ใช้การเช็คชื่อปกติ ไม่ต้องขออนุมัติ" };
+  if (daysLate > maxDays) return { success: false, message: `ขอเช็คย้อนหลังได้ไม่เกิน ${maxDays} วัน กรุณาติดต่อหัวหน้างานครูที่ปรึกษาโดยตรง` };
+  if (targetKey < dateStrToKey(CONFIG.TERM_START_DATE)) return { success: false, message: "วันที่เลือกอยู่ก่อนวันเปิดภาคเรียนปัจจุบัน" };
+
+  const targetDateObj = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10), 12, 0, 0);
+  if (checkIsInternshipRoom(roomString, targetDateObj)) return { success: false, message: "ในวันดังกล่าวห้องนี้อยู่ในช่วงฝึกงาน ไม่ต้องเช็คชื่อ" };
+
+  // --- กรองเฉพาะนักเรียนที่อยู่ในห้องจริง และสถานะถูกต้อง ---
+  const roster = fetchStudentsByRoom(roomString);
+  if (!roster.success) return roster;
+  const rosterMap = new Map(roster.data.map(s => [s.id, s.name]));
+  const clean = [];
+  const seen = new Set();
+  records.forEach(r => {
+    const id = String(r.id || '').trim();
+    const st = String(r.status || '').trim();
+    if (rosterMap.has(id) && VALID_ATT_STATUS.includes(st) && !seen.has(id)) {
+      seen.add(id);
+      clean.push({ id: id, name: rosterMap.get(id), status: st });
+    }
+  });
+  if (clean.length === 0) return { success: false, message: "ไม่มีข้อมูลนักเรียนที่ถูกต้องในคำขอ" };
+
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000);
+    const sheet = getBackdateSheet();
+    const roomKey = normalizeRoom(roomString);
+
+    // --- ห้ามส่งคำขอซ้ำ (ห้อง+วันเดียวกันที่ยังรออนุมัติ) ---
+    if (sheet.getLastRow() > 1) {
+      const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, BD_HEADER.length).getDisplayValues();
+      const dup = rows.find(r => normalizeRoom(r[BD.Room]) === roomKey && dateStrToKey(r[BD.Target_Date]) === targetKey && r[BD.Status] === REQ_STATUS.PENDING);
+      if (dup) return { success: false, message: `มีคำขอของห้องนี้ วันที่ ${dateStr} รออนุมัติอยู่แล้ว (เลขที่ ${dup[BD.Request_ID]})` };
+    }
+
+    // --- ตรวจว่าวันนั้นเคยเช็คแล้วหรือยัง (ถ้าเคย = คำขอ "แก้ไขย้อนหลัง") ---
+    let alreadyChecked = false;
+    const attSheet = getActiveSS().getSheetByName(ATTENDANCE_SHEET_NAME);
+    if (attSheet && attSheet.getLastRow() > 1) {
+      const lr = attSheet.getLastRow();
+      const startRow = Math.max(2, lr - 15000 + 1);
+      const vals = attSheet.getRange(startRow, 1, lr - startRow + 1, 4).getDisplayValues();
+      alreadyChecked = vals.some(v => dateStrToKey(v[1]) === targetKey && rosterMap.has(String(v[3]).trim()));
+    }
+
+    const cnt = { 'มา': 0, 'สาย': 0, 'ลา': 0, 'ขาด': 0 };
+    clean.forEach(r => cnt[r.status]++);
+
+    const now = new Date();
+    const requestId = 'BD' + Utilities.formatDate(now, CONFIG.TIMEZONE, "yyMMddHHmmss") + Math.floor(Math.random() * 90 + 10);
+    const row = new Array(BD_HEADER.length).fill('');
+    row[BD.Request_ID] = requestId;
+    row[BD.Created_At] = now;
+    row[BD.Teacher_Name] = teacher.name;
+    row[BD.Teacher_Email] = teacher.email;
+    row[BD.Room] = roomString;
+    row[BD.Target_Date] = dateStr;
+    row[BD.Days_Late] = daysLate;
+    row[BD.Reason] = String(reason).trim().substring(0, 500);
+    row[BD.Request_Type] = alreadyChecked ? 'แก้ไขย้อนหลัง' : 'เช็คย้อนหลัง';
+    row[BD.Total] = clean.length;
+    row[BD.Present] = cnt['มา'];
+    row[BD.Late] = cnt['สาย'];
+    row[BD.Leave] = cnt['ลา'];
+    row[BD.Absent] = cnt['ขาด'];
+    row[BD.Records_JSON] = JSON.stringify(clean);
+    row[BD.Status] = REQ_STATUS.PENDING;
+
+    sheet.getRange(sheet.getLastRow() + 1, 1, 1, BD_HEADER.length).setValues([row]);
+    SpreadsheetApp.flush();
+
+    return { success: true, requestId: requestId, daysLate: daysLate, requestType: row[BD.Request_Type] };
+  } catch (error) {
+    console.error("submitBackdateRequest Error:", error);
+    return { success: false, message: "ระบบกำลังมีผู้ใช้งานจำนวนมาก กรุณาส่งคำขออีกครั้ง" };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** 📋 ดึงรายการคำขอ (กรองตามสถานะ / อีเมลครู ได้) เรียงใหม่สุดก่อน */
+function getBackdateRequests(payload) {
+  try {
+    const p = payload || {};
+    const sheet = getActiveSS().getSheetByName(CONFIG.SHEETS.BACKDATE);
+    const policy = getAttendancePolicy().data;
+    if (!sheet || sheet.getLastRow() <= 1) return { success: true, data: [], pendingCount: 0, policy: policy };
+
+    const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, BD_HEADER.length).getValues();
+    let pendingCount = 0;
+    const list = [];
+    rows.forEach(r => {
+      if (!r[BD.Request_ID]) return;
+      if (String(r[BD.Status]) === REQ_STATUS.PENDING) pendingCount++;
+      if (p.status && String(r[BD.Status]) !== p.status) return;
+      if (p.teacherEmail && String(r[BD.Teacher_Email]).trim() !== String(p.teacherEmail).trim()) return;
+      list.push(backdateRowToObj(r, p.includeRecords !== false));
+    });
+    list.reverse();
+    return { success: true, data: list, pendingCount: pendingCount, policy: policy };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+}
+
+/** ✅ หัวหน้างานครูที่ปรึกษา อนุมัติ / ไม่อนุมัติ คำขอ */
+function reviewBackdateRequest(payload) {
+  const { requestId, decision, note, reviewerEmail } = payload || {};
+  if (!requestId || !['approve', 'reject'].includes(decision)) return { success: false, message: "คำสั่งไม่ถูกต้อง" };
+
+  const reviewer = findTeacherByEmail(reviewerEmail);
+  if (!reviewer || !CONFIG.APPROVER_ROLES.includes(reviewer.role)) {
+    return { success: false, message: "ท่านไม่มีสิทธิ์อนุมัติคำขอเช็คชื่อย้อนหลัง" };
+  }
+  if (decision === 'reject' && (!note || String(note).trim().length < 3)) {
+    return { success: false, message: "กรุณาระบุเหตุผลที่ไม่อนุมัติ" };
+  }
+
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000);
+    const sheet = getBackdateSheet();
+    if (sheet.getLastRow() <= 1) return { success: false, message: "ไม่พบคำขอ" };
+    const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, BD_HEADER.length).getValues();
+    const idx = rows.findIndex(r => String(r[BD.Request_ID]) === String(requestId));
+    if (idx < 0) return { success: false, message: "ไม่พบคำขอเลขที่นี้" };
+    const r = rows[idx];
+    const rowNum = idx + 2;
+
+    if (String(r[BD.Status]) !== REQ_STATUS.PENDING) return { success: false, message: `คำขอนี้ถูกดำเนินการไปแล้ว (สถานะ: ${r[BD.Status]})` };
+    if (String(r[BD.Teacher_Email]).trim() === reviewer.email) return { success: false, message: "ไม่สามารถอนุมัติคำขอของตนเองได้" };
+
+    if (decision === 'approve') {
+      let records = [];
+      try { records = JSON.parse(r[BD.Records_JSON] || '[]'); } catch (e) { records = []; }
+      if (records.length === 0) return { success: false, message: "คำขอนี้ไม่มีข้อมูลนักเรียน" };
+
+      const attSheet = ensureAttendanceSheet();
+      const dateStr = normalizeDateStr(r[BD.Target_Date]) || String(r[BD.Target_Date]);
+      upsertAttendanceForDate(attSheet, dateStr, records, String(r[BD.Teacher_Name]), {
+        entryType: ENTRY_TYPE.BACKDATE,
+        editEntryType: ENTRY_TYPE.BACKDATE_EDIT,
+        refId: String(r[BD.Request_ID])
+      });
+    }
+
+    sheet.getRange(rowNum, BD.Status + 1, 1, 4).setValues([[
+      decision === 'approve' ? REQ_STATUS.APPROVED : REQ_STATUS.REJECTED,
+      reviewer.name,
+      new Date(),
+      String(note || '').trim().substring(0, 500)
+    ]]);
+    SpreadsheetApp.flush();
+
+    return { success: true, status: decision === 'approve' ? REQ_STATUS.APPROVED : REQ_STATUS.REJECTED };
+  } catch (error) {
+    console.error("reviewBackdateRequest Error:", error);
+    return { success: false, message: "เกิดข้อผิดพลาด: " + error.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** ↩️ ครูยกเลิกคำขอของตนเอง (เฉพาะที่ยังรออนุมัติ) */
+function cancelBackdateRequest(payload) {
+  const { requestId, teacherEmail } = payload || {};
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000);
+    const sheet = getBackdateSheet();
+    if (sheet.getLastRow() <= 1) return { success: false, message: "ไม่พบคำขอ" };
+    const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, BD_HEADER.length).getValues();
+    const idx = rows.findIndex(r => String(r[BD.Request_ID]) === String(requestId));
+    if (idx < 0) return { success: false, message: "ไม่พบคำขอ" };
+    if (String(rows[idx][BD.Teacher_Email]).trim() !== String(teacherEmail || '').trim()) return { success: false, message: "ยกเลิกได้เฉพาะคำขอของตนเอง" };
+    if (String(rows[idx][BD.Status]) !== REQ_STATUS.PENDING) return { success: false, message: "คำขอนี้ถูกดำเนินการไปแล้ว" };
+    sheet.getRange(idx + 2, BD.Status + 1, 1, 4).setValues([[REQ_STATUS.CANCELLED, '', new Date(), 'ครูยกเลิกคำขอเอง']]);
+    SpreadsheetApp.flush();
+    return { success: true };
+  } catch (error) {
+    return { success: false, message: error.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * 📊 สถิติการทำงานของครูที่ปรึกษา (ภาคเรียนปัจจุบัน)
+ * แต่ละ "ห้อง-วัน" ที่มีกิจกรรมหน้าเสาธง จะถูกจัดเป็น 1 ใน 4 กลุ่ม:
+ *   ตรงเวลา (ก่อน ON_TIME_CUTOFF) | ล่าช้าในวันเดียวกัน | ย้อนหลัง (ผ่านการอนุมัติ/ข้อมูลเก่า) | ไม่ได้เช็คเลย
+ * รวมกับสถิติคำขอเช็คย้อนหลังของครูแต่ละคน
+ */
+function getAdvisorPerformanceStats() {
+  try {
+    const ss = getActiveSS();
+    const cutoff = CONFIG.ATTENDANCE_POLICY.ON_TIME_CUTOFF;
+    const tKey = todayKey();
+    const termStartKey = dateStrToKey(CONFIG.TERM_START_DATE);
+
+    // 1. นักเรียน → ห้อง
+    const sData = ss.getSheetByName(CONFIG.SHEETS.STUDENTS).getDataRange().getDisplayValues();
+    sData.shift();
+    const stuRoom = {};          // Student_ID → roomKey
+    const roomDisplay = {};      // roomKey → ชื่อห้องสำหรับแสดงผล
+    sData.forEach(r => {
+      if (!r[0] || !r[3]) return;
+      const name = `${r[3]} ${r[4]}/${r[5]}`.trim();
+      const key = normalizeRoom(name);
+      stuRoom[String(r[0]).trim()] = key;
+      roomDisplay[key] = name;
+    });
+
+    // 2. ชีตเข้าแถว → สรุปเป็นราย "ห้อง-วัน"
+    const roomDay = {}; // roomKey → { dateKey → { minTs, backdate } }
+    const attSheet = ss.getSheetByName(ATTENDANCE_SHEET_NAME);
+    if (attSheet && attSheet.getLastRow() > 1) {
+      const n = attSheet.getLastRow() - 1;
+      const cols = Math.min(ATT_COLS, attSheet.getLastColumn());
+      const disp = attSheet.getRange(2, 1, n, 4).getDisplayValues();
+      const raw = attSheet.getRange(2, 1, n, cols).getValues();
+      for (let i = 0; i < n; i++) {
+        const roomKey = stuRoom[String(disp[i][3]).trim()];
+        const dKey = dateStrToKey(disp[i][1]);
+        if (!roomKey || !dKey || dKey > tKey) continue;
+        if (!roomDay[roomKey]) roomDay[roomKey] = {};
+        let cell = roomDay[roomKey][dKey];
+        if (!cell) cell = roomDay[roomKey][dKey] = { minTs: null, backdate: false };
+        const type = cols >= 7 ? String(raw[i][6] || '').trim() : '';
+        if (type === ENTRY_TYPE.BACKDATE) cell.backdate = true;
+        const ts = raw[i][0] instanceof Date ? raw[i][0] : new Date(raw[i][0]);
+        if (!isNaN(ts.getTime()) && (!cell.minTs || ts < cell.minTs)) cell.minTs = ts;
+      }
+    }
+
+    // จำแนกประเภทแต่ละห้อง-วัน (คำนวณครั้งเดียวต่อห้อง-วัน เพื่อความเร็ว)
+    const dayRoomCount = {}; // dateKey → จำนวนห้องที่เช็คตรงเวลา/ล่าช้าในวันนั้น
+    Object.keys(roomDay).forEach(rk => {
+      Object.keys(roomDay[rk]).forEach(dk => {
+        const c = roomDay[rk][dk];
+        const k = parseInt(dk, 10);
+        const dStr = normalizeDateStr(`${k % 100}/${Math.floor(k / 100) % 100}/${Math.floor(k / 10000)}`);
+        c.cls = c.backdate ? 'backdate' : ({ [ENTRY_TYPE.ON_TIME]: 'ontime', [ENTRY_TYPE.LATE]: 'late', [ENTRY_TYPE.BACKDATE]: 'backdate' })[classifyByTimestamp(c.minTs, dStr)];
+        if (c.cls === 'ontime' || c.cls === 'late') dayRoomCount[dk] = (dayRoomCount[dk] || 0) + 1;
+      });
+    });
+
+    // วันที่มีกิจกรรมหน้าเสาธงจริง = วันที่มีห้องเช็คในวันนั้น >= MIN_ROOMS
+    const schoolDays = Object.keys(dayRoomCount)
+      .filter(dk => dayRoomCount[dk] >= CONFIG.ATTENDANCE_POLICY.MIN_ROOMS_FOR_SCHOOL_DAY && parseInt(dk, 10) >= termStartKey)
+      .map(dk => parseInt(dk, 10)).sort((a, b) => a - b);
+
+    // 3. สถิติรายห้อง
+    const roomStats = {};
+    const roomStat = (rk) => {
+      if (roomStats[rk]) return roomStats[rk];
+      const s = { room: roomDisplay[rk] || rk, ontime: 0, late: 0, backdate: 0, missing: 0, expected: 0, missingDates: [] };
+      const days = roomDay[rk] || {};
+      schoolDays.forEach(dk => {
+        const c = days[dk];
+        const dObj = new Date(Math.floor(dk / 10000), Math.floor(dk / 100) % 100 - 1, dk % 100, 12);
+        if (!c && checkIsInternshipRoom(s.room, dObj)) return; // ช่วงฝึกงานไม่นับ
+        if (!c && dk === tKey) return;                          // วันนี้ยังเช็คได้อยู่ ไม่นับว่าขาด
+        s.expected++;
+        if (!c) { s.missing++; s.missingDates.push(Utilities.formatDate(dObj, CONFIG.TIMEZONE, "dd/MM/yyyy")); }
+        else s[c.cls]++;
+      });
+      return roomStats[rk] = s;
+    };
+
+    // 4. สถิติคำขอเช็คย้อนหลังรายครู
+    const reqByTeacher = {};
+    let adminEdits = 0;
+    const bdSheet = ss.getSheetByName(CONFIG.SHEETS.BACKDATE);
+    if (bdSheet && bdSheet.getLastRow() > 1) {
+      bdSheet.getRange(2, 1, bdSheet.getLastRow() - 1, BD_HEADER.length).getValues().forEach(r => {
+        if (!r[BD.Request_ID]) return;
+        if (String(r[BD.Request_Type]) === ADMIN_EDIT_TYPE) { adminEdits++; return; } // แอดมินแก้ไขแทน ไม่นับเป็นคำขอของครู
+        const key = String(r[BD.Teacher_Email]).trim() || String(r[BD.Teacher_Name]).trim();
+        const q = reqByTeacher[key] = reqByTeacher[key] || { total: 0, approved: 0, rejected: 0, pending: 0, cancelled: 0, sumDaysLate: 0 };
+        q.total++;
+        q.sumDaysLate += Number(r[BD.Days_Late]) || 0;
+        const st = String(r[BD.Status]);
+        if (st === REQ_STATUS.APPROVED) q.approved++;
+        else if (st === REQ_STATUS.REJECTED) q.rejected++;
+        else if (st === REQ_STATUS.PENDING) q.pending++;
+        else if (st === REQ_STATUS.CANCELLED) q.cancelled++;
+      });
+    }
+
+    // 5. รวมเป็นรายครู
+    const tData = ss.getSheetByName(CONFIG.SHEETS.TEACHERS).getDataRange().getDisplayValues();
+    const teachers = [];
+    tData.slice(1).forEach(r => {
+      const email = String(r[0]).trim();
+      const name = String(r[1]).trim();
+      if (!email || !name) return;
+      const roomKeys = (r[5] ? String(r[5]).split(',') : []).map(x => normalizeRoom(x)).filter(Boolean);
+      const req = reqByTeacher[email] || reqByTeacher[name] || { total: 0, approved: 0, rejected: 0, pending: 0, cancelled: 0, sumDaysLate: 0 };
+      if (roomKeys.length === 0 && req.total === 0) return;
+
+      const agg = { ontime: 0, late: 0, backdate: 0, missing: 0, expected: 0 };
+      const rooms = roomKeys.map(rk => {
+        const s = roomStat(rk);
+        ['ontime', 'late', 'backdate', 'missing', 'expected'].forEach(k => agg[k] += s[k]);
+        return { room: s.room, ontime: s.ontime, late: s.late, backdate: s.backdate, missing: s.missing, expected: s.expected, missingDates: s.missingDates.slice(-10) };
+      });
+      const onTimeRate = agg.expected > 0 ? Math.round((agg.ontime / agg.expected) * 100) : null;
+      let grade = 'ไม่มีข้อมูล';
+      if (onTimeRate !== null) grade = onTimeRate >= 90 ? 'ดีเยี่ยม' : onTimeRate >= 75 ? 'ดี' : onTimeRate >= 60 ? 'พอใช้' : 'ควรปรับปรุง';
+
+      teachers.push({
+        email: email, name: name, position: String(r[2] || ''), rooms: rooms,
+        ...agg, onTimeRate: onTimeRate, grade: grade,
+        requests: { total: req.total, approved: req.approved, rejected: req.rejected, pending: req.pending, cancelled: req.cancelled,
+                    avgDaysLate: req.total > 0 ? Math.round((req.sumDaysLate / req.total) * 10) / 10 : 0 }
+      });
+    });
+
+    // 6. ภาพรวม (นับห้องละครั้ง ไม่ซ้ำแม้ครูหลายคนดูแลห้องเดียวกัน)
+    const summary = { ontime: 0, late: 0, backdate: 0, missing: 0, expected: 0, schoolDays: schoolDays.length,
+                      requests: { total: 0, approved: 0, rejected: 0, pending: 0, cancelled: 0 }, adminEdits: adminEdits };
+    Object.values(roomStats).forEach(s => ['ontime', 'late', 'backdate', 'missing', 'expected'].forEach(k => summary[k] += s[k]));
+    Object.values(reqByTeacher).forEach(q => ['total', 'approved', 'rejected', 'pending', 'cancelled'].forEach(k => summary.requests[k] += q[k]));
+
+    return { success: true, data: { teachers: teachers, summary: summary, policy: { cutoff: cutoff, maxDays: CONFIG.ATTENDANCE_POLICY.BACKDATE_MAX_DAYS }, term: CONFIG.CURRENT_TERM } };
+  } catch (error) {
+    console.error("getAdvisorPerformanceStats Error:", error);
+    return { success: false, message: error.message };
+  }
+}
+
+
+// =====================================================================
+// ✏️ ADMIN DIRECT EDIT (แอดมินแก้ไขเช็คชื่อย้อนหลังได้ทุกวันในภาคเรียน)
+//    - ไม่จำกัด BACKDATE_MAX_DAYS และไม่ต้องรออนุมัติ
+//    - ทุกครั้งถูกบันทึกในชีต Backdate_Requests (ประเภท "แอดมินแก้ไข") เพื่อตรวจสอบย้อนหลังได้
+//    - สถิติ: ถ้าวันนั้นห้องไม่เคยเช็คเลย → นับเป็น "ย้อนหลัง" ของห้องนั้น
+//             ถ้าแก้ข้อมูลที่ครูเช็คไว้แล้ว → คงสถานะเดิมของวันนั้น (ตรงเวลา/ล่าช้า) ไม่ลงโทษครู
+// =====================================================================
+const ADMIN_EDIT_TYPE = 'แอดมินแก้ไข';
+
+function adminEditAttendance(payload) {
+  const { adminEmail, roomString, targetDate, reason, records } = payload || {};
+  const admin = findTeacherByEmail(adminEmail);
+  if (!admin || !CONFIG.ADMIN_EDIT_ROLES.includes(admin.role)) return { success: false, message: "เฉพาะแอดมิน/ผู้บริหารเท่านั้นที่แก้ไขได้" };
+  if (!roomString || !targetDate) return { success: false, message: "กรุณาเลือกห้องและวันที่" };
+  if (!reason || String(reason).trim().length < 5) return { success: false, message: "กรุณาระบุเหตุผลการแก้ไข (อย่างน้อย 5 ตัวอักษร)" };
+  if (!Array.isArray(records) || records.length === 0) return { success: false, message: "ไม่พบรายชื่อนักเรียน" };
+
+  const m = String(targetDate).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return { success: false, message: "รูปแบบวันที่ไม่ถูกต้อง" };
+  const dateStr = `${m[3]}/${m[2]}/${m[1]}`;
+  const targetKey = dateStrToKey(dateStr);
+  const daysLate = diffDaysByKey(targetKey, todayKey());
+  if (daysLate <= 0) return { success: false, message: "วันนี้/อนาคต ให้แก้ไขผ่านหน้าเช็คชื่อปกติ" };
+  if (targetKey < dateStrToKey(CONFIG.TERM_START_DATE)) return { success: false, message: "แก้ไขได้เฉพาะวันที่อยู่ในภาคเรียนปัจจุบัน" };
+
+  const roster = fetchStudentsByRoom(roomString);
+  if (!roster.success || roster.data.length === 0) return { success: false, message: "ไม่พบนักเรียนในห้องนี้" };
+  const rosterMap = new Map(roster.data.map(s => [s.id, s.name]));
+  const clean = [], seen = new Set();
+  records.forEach(r => {
+    const id = String(r.id || '').trim(), st = String(r.status || '').trim();
+    if (rosterMap.has(id) && VALID_ATT_STATUS.includes(st) && !seen.has(id)) { seen.add(id); clean.push({ id: id, name: rosterMap.get(id), status: st }); }
+  });
+  if (clean.length === 0) return { success: false, message: "ไม่มีข้อมูลนักเรียนที่ถูกต้อง" };
+
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000);
+    const bdSheet = getBackdateSheet();
+    const roomKey = normalizeRoom(roomString);
+    if (bdSheet.getLastRow() > 1) {
+      const rows = bdSheet.getRange(2, 1, bdSheet.getLastRow() - 1, BD_HEADER.length).getDisplayValues();
+      const dup = rows.find(r => normalizeRoom(r[BD.Room]) === roomKey && dateStrToKey(r[BD.Target_Date]) === targetKey && r[BD.Status] === REQ_STATUS.PENDING);
+      if (dup) return { success: false, message: `มีคำขอของครูสำหรับห้อง/วันนี้รออนุมัติอยู่ (เลขที่ ${dup[BD.Request_ID]}) กรุณาพิจารณาคำขอนั้นก่อน` };
+    }
+
+    // ผู้บันทึกในชีตเข้าแถว: ใช้ชื่อครูเดิมของวันนั้น (ถ้ามี) ไม่เช่นนั้นใช้ชื่อแอดมิน
+    const attSheet = ensureAttendanceSheet();
+    let originalTeacher = '';
+    const lr = attSheet.getLastRow();
+    if (lr > 1) {
+      const startRow = Math.max(2, lr - 15000 + 1);
+      const vals = attSheet.getRange(startRow, 1, lr - startRow + 1, 4).getDisplayValues();
+      const hit = vals.find(v => dateStrToKey(v[1]) === targetKey && rosterMap.has(String(v[3]).trim()));
+      if (hit) originalTeacher = String(hit[2]).trim();
+    }
+
+    const now = new Date();
+    const requestId = 'AE' + Utilities.formatDate(now, CONFIG.TIMEZONE, "yyMMddHHmmss") + Math.floor(Math.random() * 90 + 10);
+    upsertAttendanceForDate(attSheet, dateStr, clean, originalTeacher || `${admin.name} (แอดมิน)`, {
+      entryType: ENTRY_TYPE.BACKDATE,   // วันที่ไม่เคยเช็ค → นับเป็นย้อนหลัง
+      editEntryType: null,              // วันที่ครูเช็คแล้ว → คงประเภทเดิม
+      refId: requestId
+    });
+
+    const cnt = { 'มา': 0, 'สาย': 0, 'ลา': 0, 'ขาด': 0 };
+    clean.forEach(r => cnt[r.status]++);
+    const row = new Array(BD_HEADER.length).fill('');
+    row[BD.Request_ID] = requestId; row[BD.Created_At] = now;
+    row[BD.Teacher_Name] = admin.name; row[BD.Teacher_Email] = admin.email;
+    row[BD.Room] = roomString; row[BD.Target_Date] = dateStr; row[BD.Days_Late] = daysLate;
+    row[BD.Reason] = String(reason).trim().substring(0, 500);
+    row[BD.Request_Type] = ADMIN_EDIT_TYPE;
+    row[BD.Total] = clean.length; row[BD.Present] = cnt['มา']; row[BD.Late] = cnt['สาย']; row[BD.Leave] = cnt['ลา']; row[BD.Absent] = cnt['ขาด'];
+    row[BD.Records_JSON] = JSON.stringify(clean);
+    row[BD.Status] = REQ_STATUS.APPROVED; row[BD.Reviewer] = admin.name; row[BD.Reviewed_At] = now;
+    row[BD.Review_Note] = originalTeacher ? `แก้ไขข้อมูลเดิมของ ${originalTeacher}` : 'บันทึกแทน (วันนั้นไม่มีข้อมูล)';
+    bdSheet.getRange(bdSheet.getLastRow() + 1, 1, 1, BD_HEADER.length).setValues([row]);
+    SpreadsheetApp.flush();
+
+    return { success: true, requestId: requestId, wasExisting: !!originalTeacher, count: clean.length };
+  } catch (error) {
+    console.error("adminEditAttendance Error:", error);
+    return { success: false, message: "เกิดข้อผิดพลาด: " + error.message };
+  } finally {
+    lock.releaseLock();
+  }
+}

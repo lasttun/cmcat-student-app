@@ -119,6 +119,10 @@
             <button onclick="openSpeechModule()" class="bg-indigo-600 text-white hover:bg-indigo-700 px-3 py-2 md:px-4 md:py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all shadow-sm flex items-center gap-1.5 shrink-0 border border-indigo-500">
                 📢 <span class="hidden sm:inline">บันทึกอบรมหน้าเสาธง</span>
             </button>
+            <a href="approval.html" id="btn-goto-approval" class="hidden relative bg-amber-500 text-white hover:bg-amber-600 px-3 py-2 md:px-4 md:py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all shadow-sm flex items-center gap-1.5 shrink-0 border border-amber-400">
+                ✅ <span class="hidden sm:inline">อนุมัติเช็คย้อนหลัง</span>
+                <span id="approval-badge" class="hidden absolute -top-2 -right-2 bg-red-600 text-white text-[10px] font-bold rounded-full min-w-[20px] h-5 px-1 flex items-center justify-center border-2 border-white">0</span>
+            </a>
             <a href="admin.html" id="btn-goto-admin" class="hidden bg-slate-800 text-white hover:bg-slate-900 px-3 py-2 md:px-4 md:py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all shadow-sm flex items-center gap-1.5 shrink-0 border border-slate-700">
                 📊 <span class="hidden sm:inline">Dashboard</span>
             </a>
@@ -176,6 +180,24 @@
             <div id="room-cards-container" class="flex flex-wrap gap-3 md:gap-4">
                 <div class="animate-pulse flex gap-3"><div class="h-14 w-32 bg-slate-200 rounded-2xl"></div><div class="h-14 w-32 bg-slate-200 rounded-2xl"></div></div>
             </div>
+            <!-- 📅 แถบเครื่องมือเช็คย้อนหลัง (แสดงเมื่อเลือกห้องแล้ว) -->
+            <div id="backdate-toolbar" class="hidden mt-5 pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <p class="text-xs text-slate-500"><i class="fas fa-clock mr-1"></i> เช็คชื่อวันนี้ก่อน <b id="policy-cutoff-text">10:00</b> น. นับเป็น "ตรงเวลา" • ลืมเช็ควันก่อนหน้า ต้องขออนุมัติจากหัวหน้างานครูที่ปรึกษา</p>
+                <div class="flex gap-2 shrink-0">
+                    <button onclick="startBackdateRequest()" class="flex-1 sm:flex-none bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100 px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all">📅 ขอเช็คชื่อย้อนหลัง</button>
+                    <button onclick="openMyRequests()" class="flex-1 sm:flex-none bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all">📋 คำขอของฉัน</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 📅 แบนเนอร์โหมดขอเช็คย้อนหลัง -->
+        <div id="backdate-banner" class="hidden mb-6 bg-amber-50 border-2 border-amber-300 p-4 md:p-5 rounded-2xl shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+            <div>
+                <h3 class="font-bold text-amber-900 text-sm md:text-base">📅 โหมดขอเช็คชื่อย้อนหลัง: <span id="backdate-banner-date"></span></h3>
+                <p class="text-xs md:text-sm text-amber-800 mt-1">เหตุผล: <span id="backdate-banner-reason"></span></p>
+                <p class="text-xs text-amber-700 mt-1">ข้อมูลจะยังไม่ถูกบันทึกลงระบบ จนกว่าหัวหน้างานครูที่ปรึกษาจะกดอนุมัติ</p>
+            </div>
+            <button onclick="exitBackdateMode()" class="bg-white border border-amber-300 text-amber-800 hover:bg-amber-100 px-4 py-2 rounded-xl text-xs font-bold shrink-0">✖ ยกเลิก กลับไปเช็ควันนี้</button>
         </div>
         
 <!-- 🟢 ป้ายแจ้งเตือน: เช็คชื่อเรียบร้อยแล้ว -->
@@ -301,6 +323,17 @@
         </div>
     </div>
 
+    <!-- 📋 Modal คำขอเช็คย้อนหลังของฉัน -->
+    <div id="my-requests-modal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-[2rem] w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-amber-50">
+                <h2 class="text-lg font-bold text-slate-800">📋 คำขอเช็คชื่อย้อนหลังของฉัน</h2>
+                <button onclick="document.getElementById('my-requests-modal').classList.add('hidden')" class="bg-white text-slate-400 hover:text-red-500 w-8 h-8 rounded-full shadow-sm font-bold">&times;</button>
+            </div>
+            <div id="my-requests-content" class="p-5 overflow-y-auto flex-1 custom-scrollbar"></div>
+        </div>
+    </div>
+
 <script>
     // 1. Config & State
     const API_URL = "https://script.google.com/macros/s/AKfycbztsC4Wng1zDAVyNmHka6N00m1os6aHGqcZV2LW1l1NBrlATIWPLzwdORzU4lP_P6_p/exec";
@@ -348,7 +381,7 @@
     window.onload = () => {
         const role = localStorage.getItem('currentRole');
         // 🔓 อนุญาตให้ผู้ใช้งานที่ระบุสิทธิ์ตามฐานข้อมูลวิทยาลัยเข้าใช้งานได้ทั้งหมด
-        if(!currentUser || (role !== 'teacher' && role !== 'admin' && role !== 'ครูที่ปรึกษา' && role !== 'ผู้บริหาร')) {
+        if(!currentUser || (role !== 'teacher' && role !== 'admin' && role !== 'ครูที่ปรึกษา' && role !== 'ผู้บริหาร' && role !== 'homeroom_head')) {
             Swal.fire('กรุณาล็อกอิน', 'เซสชั่นหมดอายุ กรุณาล็อกอินใหม่', 'warning').then(() => { window.location.href = "index.html"; });
             return;
         }
@@ -357,6 +390,13 @@
         if (role === 'admin' || role === 'ผู้บริหาร') {
             document.getElementById('btn-goto-admin').classList.remove('hidden');
         }
+        
+        // 📅 หัวหน้างานครูที่ปรึกษา / ผู้บริหาร เห็นปุ่มอนุมัติเช็คย้อนหลัง พร้อมจำนวนที่รออยู่
+        if (role === 'homeroom_head' || role === 'admin' || role === 'ผู้บริหาร') {
+            document.getElementById('btn-goto-approval').classList.remove('hidden');
+            refreshApprovalBadge();
+        }
+        loadAttendancePolicy();
         
         document.getElementById('teacher-name-display').innerText = `${currentUser.name} | ${currentUser.position}`;
         fetchRooms();
@@ -395,6 +435,7 @@
     function selectRoom(roomName) {
         document.getElementById('room-select').value = roomName; // เก็บค่าลับๆ ไว้ให้ระบบ PDF ดึงไปใช้ต่อ
         renderRoomCards(currentUser.rooms || [], roomName); // รีเฟรชสีปุ่ม
+        document.getElementById('backdate-toolbar').classList.remove('hidden');
         loadStudents();
     }
 
@@ -412,6 +453,8 @@
         const reqId = ++loadReqId;
 
         // Reset สถานะ
+        attendanceMode = 'today'; backdateInfo = null;
+        document.getElementById('backdate-banner').classList.add('hidden');
         alertBox.classList.add('hidden');
         isAlreadyCheckedToday = false;
         checkedByTeacherName = "";
@@ -436,6 +479,7 @@
                 const dataHist = await resHist.json(); 
                 if(dataHist.success) historyData = dataHist.data;
             } catch(e) { console.warn("API getRoomHistory อาจยังไม่มีในฝั่ง Backend"); }
+            lastHistoryData = historyData; // 📅 เก็บไว้ใช้เติมข้อมูลเดิมตอนขอเช็คย้อนหลัง
 
             // 🛠️ แก้ไข: สร้างวันที่รูปแบบ "DD/MM/YYYY" (ค.ศ.) ให้ตรงกับระบบหลังบ้าน
             const todayDate = new Date();
@@ -550,8 +594,11 @@ function renderTable(students, sdqMap) {
         let dashboardHtml = '';
         let p = 0, l = 0, lv = 0, a = 0, intern = 0;
         
+        const isBackdate = attendanceMode === 'backdate';
         // 🟢 ให้แดชบอร์ดทำงานก็ต่อเมื่อมีการบันทึกเช็คชื่อของวันนี้ไปแล้วเท่านั้น
-        if (isAlreadyCheckedToday) {
+        if (isBackdate) {
+            dashboardHtml = '';
+        } else if (isAlreadyCheckedToday) {
             students.forEach(std => {
                 const status = std.status || 'มา';
                 if(status === 'มา') p++;
@@ -702,7 +749,11 @@ function renderTable(students, sdqMap) {
 
         html += `</tbody></table></div></div>
         <div class="mt-10 flex flex-col sm:flex-row justify-center gap-4">
-            ${isAlreadyCheckedToday || isInternshipRoom
+            ${isBackdate
+            ? `<button onclick="submitBackdateRequest()" id="btn-save-att" class="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold py-4 px-10 rounded-2xl shadow-lg shadow-amber-200 hover:-translate-y-1 transition-all duration-300 flex items-center justify-center gap-3 text-base md:text-lg w-full sm:w-auto border border-amber-400/50">
+                📨 ส่งคำขออนุมัติเช็คย้อนหลัง (${backdateInfo.display})
+               </button>`
+            : isAlreadyCheckedToday || isInternshipRoom
             ? `<button disabled class="bg-slate-200 text-slate-400 font-bold py-4 px-10 rounded-2xl flex items-center justify-center gap-3 text-base md:text-lg w-full sm:w-auto cursor-not-allowed border border-slate-300 transition-all duration-300">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
                 ${isInternshipRoom ? 'ห้องฝึกงาน - ไม่ต้องบันทึกเช็คชื่อ' : 'วันนี้บันทึกเรียบร้อยแล้ว'}
@@ -770,7 +821,8 @@ function renderTable(students, sdqMap) {
         currentStudentsData.forEach(s => { if (cnt[s.status] !== undefined) cnt[s.status]++; });
         const ok = await Swal.fire({
             title: 'ยืนยันบันทึกการเช็คชื่อ?', icon: 'question',
-            html: `มา ${cnt['มา']} • สาย ${cnt['สาย']} • ลา ${cnt['ลา']} • ขาด <b style="color:#dc2626">${cnt['ขาด']}</b> คน`,
+            html: `มา ${cnt['มา']} • สาย ${cnt['สาย']} • ลา ${cnt['ลา']} • ขาด <b style="color:#dc2626">${cnt['ขาด']}</b> คน` +
+                  (isNowAfterCutoff() ? `<div style="margin-top:12px;padding:10px;border-radius:12px;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;font-size:13px">⏰ ขณะนี้เลยเวลา ${attPolicy.cutoff} น. แล้ว ระบบจะบันทึกเป็น <b>"บันทึกล่าช้า"</b> และนับในสถิติของครูที่ปรึกษา</div>` : ''),
             showCancelButton: true, confirmButtonText: 'บันทึก', cancelButtonText: 'ตรวจอีกครั้ง', confirmButtonColor: '#059669'
         });
         if (!ok.isConfirmed) return;
@@ -1626,6 +1678,182 @@ function renderTable(students, sdqMap) {
         const top = MODAL_IDS.slice().reverse().find(id => !document.getElementById(id).classList.contains('hidden'));
         if (top) document.getElementById(top).classList.add('hidden');
     });
+
+    // =====================================================================
+    // 📅 ระบบขออนุมัติเช็คชื่อย้อนหลัง
+    // =====================================================================
+    let attendanceMode = 'today';     // 'today' | 'backdate'
+    let backdateInfo = null;          // { iso, display, reason }
+    let lastHistoryData = [];
+    let attPolicy = { cutoff: '10:00', maxDays: 7 };
+
+    async function loadAttendancePolicy() {
+        try {
+            const res = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getAttendancePolicy' }) });
+            const r = await res.json();
+            if (r.success) attPolicy = r.data;
+        } catch (e) { /* ใช้ค่าเริ่มต้น */ }
+        const el = document.getElementById('policy-cutoff-text');
+        if (el) el.innerText = attPolicy.cutoff;
+    }
+
+    function isNowAfterCutoff() {
+        const d = new Date();
+        const hhmm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        return hhmm > attPolicy.cutoff;
+    }
+
+    async function refreshApprovalBadge() {
+        try {
+            const res = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getBackdateRequests', payload: { status: 'รออนุมัติ', includeRecords: false } }) });
+            const r = await res.json();
+            const badge = document.getElementById('approval-badge');
+            if (r.success && r.pendingCount > 0) { badge.innerText = r.pendingCount; badge.classList.remove('hidden'); }
+            else badge.classList.add('hidden');
+        } catch (e) {}
+    }
+
+    const toIso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const isoToDdMmYyyy = iso => { const [y, m, d] = iso.split('-'); return `${d}/${m}/${y}`; };
+    function normHistDate(raw) {
+        const p = String(raw || '').trim().split('/');
+        if (p.length !== 3) return '';
+        let y = parseInt(p[2]); if (y > 2500) y -= 543;
+        return `${p[0].padStart(2, '0')}/${p[1].padStart(2, '0')}/${y}`;
+    }
+
+    async function startBackdateRequest() {
+        const roomString = document.getElementById('room-select').value;
+        if (!roomString) return Swal.fire('กรุณาเลือกห้อง', 'เลือกห้องเรียนก่อนขอเช็คย้อนหลัง', 'info');
+
+        const today = new Date();
+        const maxD = new Date(today); maxD.setDate(today.getDate() - 1);
+        const minD = new Date(today); minD.setDate(today.getDate() - attPolicy.maxDays);
+
+        const { value: form } = await Swal.fire({
+            title: '📅 ขอเช็คชื่อย้อนหลัง',
+            html: `
+                <div style="text-align:left;font-size:14px">
+                    <p style="margin-bottom:12px;color:#64748b">ห้อง <b>${roomString}</b> • ย้อนหลังได้ไม่เกิน ${attPolicy.maxDays} วัน<br>คำขอจะถูกส่งให้หัวหน้างานครูที่ปรึกษาอนุมัติก่อนบันทึกจริง</p>
+                    <label style="font-weight:bold">วันที่ต้องการเช็คชื่อ</label>
+                    <input type="date" id="bd-date" class="swal2-input" style="width:100%;margin:6px 0 14px" min="${toIso(minD)}" max="${toIso(maxD)}" value="${toIso(maxD)}">
+                    <label style="font-weight:bold">เหตุผลที่ไม่ได้เช็คในวันนั้น <span style="color:#dc2626">*</span></label>
+                    <textarea id="bd-reason" class="swal2-textarea" style="width:100%;margin:6px 0 0" placeholder="เช่น ไปราชการ/อบรม, ระบบขัดข้อง, ลาป่วย..."></textarea>
+                </div>`,
+            showCancelButton: true, confirmButtonText: 'ถัดไป: กรอกการเช็คชื่อ', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#d97706',
+            preConfirm: () => {
+                const iso = document.getElementById('bd-date').value;
+                const reason = document.getElementById('bd-reason').value.trim();
+                if (!iso) return Swal.showValidationMessage('กรุณาเลือกวันที่');
+                if (iso < toIso(minD) || iso > toIso(maxD)) return Swal.showValidationMessage(`เลือกได้ตั้งแต่ ${isoToDdMmYyyy(toIso(minD))} ถึง ${isoToDdMmYyyy(toIso(maxD))}`);
+                if (reason.length < 5) return Swal.showValidationMessage('กรุณาระบุเหตุผลอย่างน้อย 5 ตัวอักษร');
+                return { iso, reason };
+            }
+        });
+        if (!form) return;
+
+        const [y, m, d] = form.iso.split('-').map(Number);
+        const targetDate = new Date(y, m - 1, d);
+        if (checkIsInternshipRoom(roomString, targetDate)) {
+            return Swal.fire('ไม่ต้องเช็คชื่อ', 'ในวันดังกล่าวห้องนี้อยู่ในช่วงฝึกงาน', 'info');
+        }
+
+        const dateStr = isoToDdMmYyyy(form.iso);
+        const display = targetDate.toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+
+        // เติมสถานะเดิมของวันนั้น (ถ้าเคยเช็คแล้ว = ขอแก้ไข) ไม่เช่นนั้นตั้งต้นเป็น "มา"
+        let hadRecord = false;
+        currentStudentsData = currentStudentsData.map(s => {
+            const rec = lastHistoryData.find(r => normHistDate(r[1]) === dateStr && String(r[3]).trim() === String(s.id).trim());
+            if (rec) hadRecord = true;
+            return { ...s, status: rec ? String(rec[5]).trim() : 'มา' };
+        });
+
+        attendanceMode = 'backdate';
+        backdateInfo = { iso: form.iso, display, reason: form.reason, isEdit: hadRecord };
+        isAlreadyCheckedToday = false;
+        document.getElementById('already-checked-alert').classList.add('hidden');
+        document.getElementById('backdate-banner-date').innerText = `${display}${hadRecord ? ' (ขอแก้ไขข้อมูลเดิม)' : ''}`;
+        document.getElementById('backdate-banner-reason').innerText = form.reason;
+        document.getElementById('backdate-banner').classList.remove('hidden');
+        renderTable(currentStudentsData, lastSdqMap);
+        document.getElementById('backdate-banner').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function exitBackdateMode() { loadStudents(); }
+
+    async function submitBackdateRequest() {
+        const cnt = { 'มา': 0, 'สาย': 0, 'ลา': 0, 'ขาด': 0 };
+        currentStudentsData.forEach(s => { if (cnt[s.status] !== undefined) cnt[s.status]++; });
+        const ok = await Swal.fire({
+            title: 'ส่งคำขอเช็คย้อนหลัง?', icon: 'question',
+            html: `วันที่ <b>${backdateInfo.display}</b><br>มา ${cnt['มา']} • สาย ${cnt['สาย']} • ลา ${cnt['ลา']} • ขาด <b style="color:#dc2626">${cnt['ขาด']}</b> คน<br><small style="color:#64748b">คำขอนี้จะถูกบันทึกเป็นสถิติการเช็คย้อนหลังของท่าน</small>`,
+            showCancelButton: true, confirmButtonText: 'ส่งคำขอ', cancelButtonText: 'ตรวจอีกครั้ง', confirmButtonColor: '#d97706'
+        });
+        if (!ok.isConfirmed) return;
+        const btn = document.getElementById('btn-save-att'); btn.disabled = true; btn.innerHTML = 'กำลังส่งคำขอ...';
+        try {
+            const res = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'submitBackdateRequest', payload: {
+                teacherName: currentUser.name, teacherEmail: currentUser.email,
+                roomString: document.getElementById('room-select').value,
+                targetDate: backdateInfo.iso, reason: backdateInfo.reason,
+                records: currentStudentsData.filter(s => s.status !== 'ฝึกงาน').map(s => ({ id: s.id, name: s.name, status: s.status }))
+            } }) });
+            const r = await res.json();
+            if (!r.success) throw new Error(r.message);
+            await Swal.fire({ icon: 'success', title: 'ส่งคำขอแล้ว', html: `เลขที่คำขอ <b>${r.requestId}</b><br>(${r.requestType} ${r.daysLate} วัน) • รอหัวหน้างานครูที่ปรึกษาอนุมัติ`, confirmButtonColor: '#059669' });
+            loadStudents();
+        } catch (e) {
+            Swal.fire('ส่งคำขอไม่สำเร็จ', e.message, 'error');
+            btn.disabled = false; btn.innerHTML = '📨 ส่งคำขออนุมัติเช็คย้อนหลัง';
+        }
+    }
+
+    async function openMyRequests() {
+        const modal = document.getElementById('my-requests-modal');
+        const box = document.getElementById('my-requests-content');
+        modal.classList.remove('hidden');
+        box.innerHTML = '<p class="text-center text-slate-400 py-10">กำลังโหลด...</p>';
+        try {
+            const res = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getBackdateRequests', payload: { teacherEmail: currentUser.email, includeRecords: false } }) });
+            const r = await res.json();
+            if (!r.success) throw new Error(r.message);
+            if (r.data.length === 0) { box.innerHTML = '<p class="text-center text-slate-400 py-10">ยังไม่เคยส่งคำขอเช็คย้อนหลัง 👍</p>'; return; }
+            const badge = st => ({
+                'รออนุมัติ': 'bg-amber-100 text-amber-800 border-amber-200',
+                'อนุมัติ': 'bg-emerald-100 text-emerald-800 border-emerald-200',
+                'ไม่อนุมัติ': 'bg-red-100 text-red-700 border-red-200',
+                'ยกเลิก': 'bg-slate-100 text-slate-500 border-slate-200'
+            }[st] || 'bg-slate-100 text-slate-600');
+            box.innerHTML = `<p class="text-xs text-slate-500 mb-3">ทั้งหมด ${r.data.length} คำขอ • อนุมัติ ${r.data.filter(x => x.status === 'อนุมัติ').length} • ไม่อนุมัติ ${r.data.filter(x => x.status === 'ไม่อนุมัติ').length}</p>` +
+                r.data.map(q => `
+                <div class="border border-slate-200 rounded-2xl p-4 mb-3">
+                    <div class="flex justify-between items-start gap-2">
+                        <div>
+                            <p class="font-bold text-slate-800">${q.room} • วันที่ ${q.targetDate} <span class="text-xs font-normal text-slate-400">(ย้อนหลัง ${q.daysLate} วัน, ${q.requestType})</span></p>
+                            <p class="text-xs text-slate-500 mt-1">ส่งเมื่อ ${q.createdAt} • เลขที่ ${q.requestId}</p>
+                            <p class="text-sm text-slate-600 mt-1">เหตุผล: ${escapeHtml(q.reason)}</p>
+                            ${q.reviewer ? `<p class="text-xs text-slate-500 mt-1">ผู้พิจารณา: ${q.reviewer} (${q.reviewedAt})${q.reviewNote ? ' • ' + escapeHtml(q.reviewNote) : ''}</p>` : ''}
+                        </div>
+                        <span class="px-3 py-1 rounded-full text-xs font-bold border shrink-0 ${badge(q.status)}">${q.status}</span>
+                    </div>
+                    ${q.status === 'รออนุมัติ' ? `<button onclick="cancelMyRequest('${q.requestId}')" class="mt-2 text-xs text-red-600 hover:underline font-bold">ยกเลิกคำขอนี้</button>` : ''}
+                </div>`).join('');
+        } catch (e) { box.innerHTML = `<p class="text-center text-red-500 py-10">❌ ${e.message}</p>`; }
+    }
+
+    async function cancelMyRequest(requestId) {
+        const ok = await Swal.fire({ title: 'ยกเลิกคำขอ?', icon: 'warning', showCancelButton: true, confirmButtonText: 'ยกเลิกคำขอ', cancelButtonText: 'ไม่', confirmButtonColor: '#dc2626' });
+        if (!ok.isConfirmed) return;
+        const res = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'cancelBackdateRequest', payload: { requestId, teacherEmail: currentUser.email } }) });
+        const r = await res.json();
+        if (!r.success) return Swal.fire('ผิดพลาด', r.message, 'error');
+        openMyRequests();
+    }
+
+    function escapeHtml(str) {
+        return String(str || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
 
     function logout() { localStorage.clear(); window.location.href = "index.html"; }
 </script>

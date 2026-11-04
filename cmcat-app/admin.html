@@ -6,6 +6,7 @@
     <title>ระบบบริหารจัดการ | CMCAT Executive</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style> 
         @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap');
@@ -43,6 +44,11 @@
             <!-- 🟢 ปุ่มมาใหม่: ทะลุไปหน้า Dashboard รายงานพูดหน้าเสาธง -->
             <a href="admin_speech.html" class="bg-indigo-600 text-white hover:bg-indigo-700 px-3 py-2 md:px-4 md:py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all flex items-center gap-1.5 shadow-sm border border-indigo-500">
                 📢 <span class="hidden sm:inline">รายงานหน้าเสาธง</span>
+            </a>
+            <!-- 📅 ปุ่มไปหน้าอนุมัติเช็คย้อนหลัง + สถิติครูที่ปรึกษา -->
+            <a href="approval.html" class="relative bg-amber-500 text-white hover:bg-amber-600 px-3 py-2 md:px-4 md:py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all flex items-center gap-1.5 shadow-sm border border-amber-400">
+                ✅ <span class="hidden sm:inline">เช็คย้อนหลัง/สถิติครู</span>
+                <span id="approval-badge" class="hidden absolute -top-2 -right-2 bg-red-600 text-white text-[10px] font-bold rounded-full min-w-[20px] h-5 px-1 flex items-center justify-center border-2 border-slate-900">0</span>
             </a>
             <a href="teacher.html" class="bg-emerald-600 text-white hover:bg-emerald-700 px-3 py-2 md:px-4 md:py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all flex items-center gap-1.5 shadow-sm border border-emerald-500">
                 📝 <span class="hidden sm:inline">ระบบเช็คชื่อ</span>
@@ -156,8 +162,18 @@
                 Swal.fire('ปฏิเสธการเข้าถึง', 'สำหรับผู้บริหารเท่านั้น', 'error').then(() => { window.location.href = "index.html"; });
                 return;
             }
+            loadApprovalBadge();
             await loadExecutiveData();
         };
+
+        async function loadApprovalBadge() {
+            try {
+                const res = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getBackdateRequests', payload: { status: 'รออนุมัติ', includeRecords: false } }) });
+                const r = await res.json();
+                const b = document.getElementById('approval-badge');
+                if (r.success && r.pendingCount > 0) { b.innerText = r.pendingCount; b.classList.remove('hidden'); }
+            } catch (e) {}
+        }
 
         function logout() { localStorage.clear(); window.location.href = "index.html"; }
 

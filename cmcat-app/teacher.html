@@ -196,7 +196,7 @@
             </div>
             <!-- 📅 แถบเครื่องมือเช็คย้อนหลัง (แสดงเมื่อเลือกห้องแล้ว) -->
             <div id="backdate-toolbar" class="hidden mt-5 pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <p class="text-xs text-slate-500"><i class="fas fa-clock mr-1"></i> เช็คชื่อวันนี้ก่อน <b id="policy-cutoff-text">10:00</b> น. นับเป็น "เช็คตอนเช้า" • ลืมเช็ควันก่อนหน้า ต้องขออนุมัติจากหัวหน้างานครูที่ปรึกษา</p>
+                <p class="text-xs text-slate-500"><i class="fas fa-clock mr-1"></i> เช็คชื่อวันนี้ก่อน <b id="policy-cutoff-text">10:00</b> น. แสดงเป็น "เช็คตอนเช้า" • วันที่ผ่านมาแล้ว ส่งคำขอเช็คย้อนหลังได้ภายใน 7 วัน</p>
                 <div class="flex gap-2 shrink-0">
                     <button onclick="startBackdateRequest()" class="flex-1 sm:flex-none bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100 px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all">📅 ขอเช็คชื่อย้อนหลัง</button>
                     <button onclick="openMyRequests()" class="flex-1 sm:flex-none bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all">📋 คำขอของฉัน</button>
@@ -864,7 +864,7 @@ function renderTable(students, sdqMap) {
             title: isEditingToday ? 'ยืนยันบันทึกการแก้ไข?' : 'ยืนยันบันทึกการเช็คชื่อ?', icon: 'question',
             html: `มา ${cnt['มา']} • สาย ${cnt['สาย']} • ลา ${cnt['ลา']} • ขาด <b style="color:#dc2626">${cnt['ขาด']}</b> คน` +
                   (isEditingToday ? `<div style="margin-top:12px;padding:10px;border-radius:12px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;font-size:13px">✏️ เป็นการแก้ไขข้อมูลของวันนี้ ระบบจะเก็บเวลาที่บันทึกครั้งแรกไว้ ไม่นับเป็น "เช็คหลังเวลา"</div>` : '') +
-                  (!isEditingToday && isNowAfterCutoff() ? `<div style="margin-top:12px;padding:10px;border-radius:12px;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;font-size:13px">⏰ ขณะนี้เลยเวลา ${attPolicy.cutoff} น. แล้ว ระบบจะบันทึกเป็น <b>"เช็คหลังเวลา"</b> และนับในสถิติของครูที่ปรึกษา</div>` : ''),
+                  (!isEditingToday && isNowAfterCutoff() ? `<div style="margin-top:12px;padding:10px;border-radius:12px;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;font-size:13px">🕙 บันทึกหลัง ${attPolicy.cutoff} น. ระบบจะแสดงเป็น <b>"เช็คหลังเวลา"</b> ขอบคุณที่ช่วยให้ข้อมูลวันนี้ครบถ้วนครับ</div>` : ''),
             showCancelButton: true, confirmButtonText: 'บันทึก', cancelButtonText: 'ตรวจอีกครั้ง', confirmButtonColor: '#059669'
         });
         if (!ok.isConfirmed) return;
@@ -1974,7 +1974,7 @@ function renderTable(students, sdqMap) {
             if (rm.onTimeRate >= 90) return '🌟 ยอดเยี่ยมครับ! การเช็คชื่อสม่ำเสมอช่วยให้เห็นนักเรียนที่ต้องดูแลได้ทันเวลา';
             if (rm.onTimeRate >= 75) return '👍 ดีมากครับ อีกนิดเดียวจะถึงระดับยอดเยี่ยม (90%)';
             if (rm.onTimeRate >= 60) return '💪 เช็คก่อน ' + pol.cutoff + ' น. ให้สม่ำเสมอขึ้นอีกหน่อย ข้อมูลนักเรียนจะแม่นยำขึ้นมากครับ';
-            return '🤝 ลองตั้งเตือนในมือถือก่อน ' + pol.cutoff + ' น. ทุกเช้า จะช่วยได้มากครับ ข้อมูลที่ครบช่วยให้รู้ทันนักเรียนที่เริ่มขาดบ่อย';
+            return '🌱 เคล็ดลับ: ตั้งเตือนในมือถือก่อน ' + pol.cutoff + ' น. ทุกเช้า จะช่วยให้เช็คตอนเช้าได้ง่ายขึ้นครับ';
         };
 
         // ⏰ สถานะวันนี้ + นับถอยหลังถึงเวลาตัดรอบ
@@ -1983,7 +1983,7 @@ function renderTable(students, sdqMap) {
             if (rm.today && rm.today.savedAt) {
                 const t = rm.today.savedAt.split(' ')[1];
                 return rm.today.status === 'late'
-                    ? `<div class="rounded-xl p-3 bg-amber-50 border border-amber-200 text-sm text-amber-800">⏰ วันนี้เช็คแล้วเวลา <b>${t} น.</b> (หลัง ${pol.cutoff} น.) พรุ่งนี้ลองเช็คให้เร็วขึ้นนะครับ</div>`
+                    ? `<div class="rounded-xl p-3 bg-amber-50 border border-amber-200 text-sm text-amber-800">⏰ วันนี้เช็คแล้วเวลา <b>${t} น.</b> (เช็คหลังเวลา) ขอบคุณที่บันทึกครบถ้วนครับ 🙏</div>`
                     : `<div class="rounded-xl p-3 bg-emerald-50 border border-emerald-200 text-sm text-emerald-800">✅ วันนี้เช็คแล้วเวลา <b>${t} น.</b> (เช็คตอนเช้า) ขอบคุณครับ</div>`;
             }
             return `<div class="rounded-xl p-3 bg-blue-50 border border-blue-200 text-sm text-blue-800" data-countdown="1">⏳ วันนี้ยังไม่ได้เช็คชื่อ • <span class="countdown-text"></span></div>`;
@@ -2080,7 +2080,7 @@ function renderTable(students, sdqMap) {
         const diff = Math.floor((cut - now) / 60000);
         const txt = diff > 0
             ? `เหลือเวลาอีก <b>${diff >= 60 ? Math.floor(diff / 60) + ' ชม. ' : ''}${diff % 60} นาที</b> ก่อน ${attPolicy.cutoff} น. เพื่อนับเป็น "เช็คตอนเช้า"`
-            : `เลย ${attPolicy.cutoff} น. แล้ว ยังเช็คได้ตามปกติ (นับเป็นเช็คหลังเวลา) ดีกว่าไม่มีข้อมูลครับ`;
+            : `ยังบันทึกได้ตามปกติ (แสดงเป็นเช็คหลังเวลา) ข้อมูลของวันนี้ช่วยให้ดูแลนักเรียนได้ครบถ้วนครับ`;
         els.forEach(el => el.innerHTML = txt);
     }
     setInterval(updateCountdowns, 30000);
@@ -2183,29 +2183,40 @@ function renderTable(students, sdqMap) {
     function showAttendanceHelp() {
         const cutoff = attPolicy.cutoff, maxDays = attPolicy.maxDays;
         Swal.fire({
-            title: '❓ วิธีแก้ไขข้อมูลเช็คชื่อ',
+            title: '📘 คู่มือการเช็คชื่อหน้าเสาธง',
             width: 640,
             confirmButtonText: 'เข้าใจแล้ว', confirmButtonColor: '#059669',
             html: `<div style="text-align:left;font-size:14px;line-height:1.7">
-                <p style="font-weight:bold;color:#047857;margin-bottom:4px">1) เช็คผิดในวันนี้ (แก้ได้เองทันที)</p>
+                <p style="margin:0 0 12px;color:#475569">การเช็คชื่อทุกวันช่วยให้เราเห็นนักเรียนที่เริ่มขาดเรียนได้ทันเวลา และดูแลได้ตั้งแต่เนิ่นๆ ขอบคุณที่ช่วยกันนะครับ 💙</p>
+
+                <p style="font-weight:bold;color:#047857;margin-bottom:4px">🌅 เช็คชื่อประจำวัน</p>
                 <ul style="padding-left:18px;margin:0 0 12px;list-style:disc">
-                    <li>เลือกห้อง แล้วกดปุ่ม <b>"✏️ แก้ไขการเช็คชื่อ"</b> ในกรอบสีเขียว</li>
-                    <li>เปลี่ยนสถานะนักเรียนที่ผิด แล้วกด <b>"บันทึกการแก้ไขของวันนี้"</b></li>
-                    <li>แก้ได้หลายครั้งจนถึงเที่ยงคืน ระบบจะเก็บ<b>เวลาที่บันทึกครั้งแรก</b>ไว้ จึง<b>ไม่ถูกนับเป็นเช็คหลังเวลา</b> แม้แก้หลัง ${cutoff} น.</li>
+                    <li>เลือกห้อง ตั้งสถานะนักเรียน แล้วกด <b>"บันทึกการเช็คชื่อวันนี้"</b></li>
+                    <li>บันทึกก่อน ${cutoff} น. ระบบจะแสดงเป็น <b>"เช็คตอนเช้า"</b> • หลัง ${cutoff} น. ยังบันทึกได้ตามปกติ แสดงเป็น <b>"เช็คหลังเวลา"</b></li>
                 </ul>
-                <p style="font-weight:bold;color:#b45309;margin-bottom:4px">2) ลืมเช็ค หรือเช็คผิดของวันก่อนหน้า (ไม่เกิน ${maxDays} วัน)</p>
+
+                <p style="font-weight:bold;color:#047857;margin-bottom:4px">✏️ ต้องการแก้ไขข้อมูลของวันนี้</p>
                 <ul style="padding-left:18px;margin:0 0 12px;list-style:disc">
-                    <li>กด <b>"📅 ขอเช็คชื่อย้อนหลัง"</b> หรือกดปุ่มจากรายการแจ้งเตือนด้านบน เลือกวันที่และระบุเหตุผล</li>
-                    <li>ถ้าวันนั้นเคยเช็คไว้แล้ว ระบบจะดึงข้อมูลเดิมมาให้แก้ (นับเป็น "ขอแก้ไขย้อนหลัง")</li>
-                    <li>ข้อมูลจะเข้าระบบเมื่อ<b>หัวหน้างานครูที่ปรึกษาอนุมัติ</b> ดูสถานะได้ที่ "📋 คำขอของฉัน"</li>
+                    <li>กดปุ่ม <b>"✏️ แก้ไขการเช็คชื่อ"</b> ในกรอบสีเขียว ปรับสถานะ แล้วกด <b>"บันทึกการแก้ไขของวันนี้"</b></li>
+                    <li>แก้ได้ตลอดวัน และแก้ได้หลายครั้ง ระบบยังคง<b>เวลาที่บันทึกครั้งแรก</b>ไว้ จึงแก้ไขได้อย่างสบายใจ</li>
                 </ul>
-                <p style="font-weight:bold;color:#475569;margin-bottom:4px">3) เกิน ${maxDays} วันแล้ว</p>
+
+                <p style="font-weight:bold;color:#b45309;margin-bottom:4px">📅 วันที่ผ่านมาแล้ว (ภายใน ${maxDays} วัน)</p>
                 <ul style="padding-left:18px;margin:0 0 12px;list-style:disc">
-                    <li>แจ้งหัวหน้างานครูที่ปรึกษาหรือแอดมิน พร้อมหลักฐาน (เช่น ใบลา/บันทึกข้อความ) ให้แก้ไขแทน</li>
+                    <li><b>ขั้นที่ 1:</b> กด <b>"📅 ขอเช็คชื่อย้อนหลัง"</b> (หรือกดจากรายการวันที่ในกล่องสรุป) เลือกวันที่และระบุเหตุผล</li>
+                    <li><b>ขั้นที่ 2:</b> ตรวจสถานะนักเรียน แล้วกด <b>"📨 ส่งคำขอ"</b> (แถบสีส้มด้านบนหรือด้านล่างจอ) — เมื่อได้เลขที่คำขอ แปลว่าส่งเรียบร้อย</li>
+                    <li>ถ้าวันนั้นเคยบันทึกไว้แล้ว ระบบจะดึงข้อมูลเดิมมาให้ปรับได้เลย</li>
+                    <li>หัวหน้างานครูที่ปรึกษาจะพิจารณา ติดตามสถานะได้ที่ <b>"📋 คำขอของฉัน"</b></li>
                 </ul>
+
+                <p style="font-weight:bold;color:#475569;margin-bottom:4px">🤝 นานกว่า ${maxDays} วัน</p>
+                <ul style="padding-left:18px;margin:0 0 12px;list-style:disc">
+                    <li>ประสานหัวหน้างานครูที่ปรึกษาหรือแอดมิน พร้อมเอกสารประกอบ (ถ้ามี) เพื่อช่วยบันทึกให้</li>
+                </ul>
+
                 <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:10px;font-size:13px;color:#475569">
-                    📊 <b>สถิติที่ถูกบันทึก:</b> เช็คก่อน ${cutoff} น. = เช็คตอนเช้า • เช็คหลัง ${cutoff} น. ในวันเดียวกัน = เช็คหลังเวลา • ขอเช็คย้อนหลัง = ย้อนหลัง • ไม่ได้เช็คเลย = ขาดการเช็ค<br>
-                    ห้องที่อยู่ในช่วงฝึกงานไม่ต้องเช็คชื่อ และไม่ถูกนับในสถิติ
+                    📊 <b>การแสดงผลในสรุปของฉัน:</b> 🟢 เช็คตอนเช้า (ก่อน ${cutoff} น.) • 🟠 เช็คหลังเวลา (วันเดียวกัน) • 🟣 เช็คย้อนหลัง • 🔴 ยังไม่มีข้อมูล<br>
+                    ไม่นับวันงดกิจกรรมหน้าเสาธง และช่วงที่ห้องออกฝึกประสบการณ์วิชาชีพ
                 </div>
             </div>`
         });

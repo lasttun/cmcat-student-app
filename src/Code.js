@@ -19,13 +19,15 @@ const CONFIG = {
     SDQ: 'SDQ_Results',
     SAVINGS_MASTER: 'Savings_Master', // 💰 เพิ่ม Sheet จัดการบัญชีและเป้าหมาย
     SAVINGS_TX: 'Savings_Transactions', // 💰 เพิ่ม Sheet เก็บประวัติการฝาก-ถอน
-    BACKDATE: 'Backdate_Requests' // 📅 เพิ่ม Sheet คำขอเช็คชื่อย้อนหลัง
+    BACKDATE: 'Backdate_Requests', // 📅 เพิ่ม Sheet คำขอเช็คชื่อย้อนหลัง
+    NO_ASSEMBLY: 'No_Assembly_Days' // 🌧️ วันงดกิจกรรมหน้าเสาธง (แอดมินกรอกเอง: A=วันที่ dd/MM/yyyy, B=เหตุผล)
   },
   // 📅 นโยบายการเช็คชื่อ (ปรับได้ตามที่วิทยาลัยกำหนด)
   ATTENDANCE_POLICY: {
     ON_TIME_CUTOFF: '10:00',      // เช็คชื่อวันนี้หลังเวลานี้ = "บันทึกล่าช้า" (ยังบันทึกได้ แต่ถูกนับสถิติ)
     BACKDATE_MAX_DAYS: 7,         // ขอเช็คย้อนหลังได้ไม่เกินกี่วัน
-    MIN_ROOMS_FOR_SCHOOL_DAY: 3   // วันที่มีห้องเช็คชื่อ >= ค่านี้ ถือเป็น "วันที่มีกิจกรรมหน้าเสาธง"
+    MIN_ROOMS_FOR_SCHOOL_DAY: 3,  // วันที่มีห้องเช็คชื่อ >= ค่านี้ ถือเป็น "วันที่มีกิจกรรมหน้าเสาธง"
+    STATS_START_DATE: '09/11/2026' // ⚖️ เริ่มนับสถิติครูตั้งแต่วันที่ประกาศใช้ระบบ (dd/MM/ค.ศ.) ข้อมูลก่อนหน้านี้แสดงเป็น "ก่อนเริ่มใช้ระบบ" ไม่นำมาคิด
   },
   // บทบาท (คอลัมน์ G ชีต Teachers) ที่มีสิทธิ์อนุมัติคำขอเช็คย้อนหลัง
   APPROVER_ROLES: ['หัวหน้างานครูที่ปรึกษา', 'admin', 'ผู้บริหาร'],
@@ -94,6 +96,7 @@ function doPost(e) {
       case 'cancelBackdateRequest': return output(cancelBackdateRequest(payload));
       case 'getAdvisorPerformanceStats': return output(getAdvisorPerformanceStats());
       case 'adminEditAttendance': return output(adminEditAttendance(payload));
+      case 'getMyAttendanceGaps': return output(getMyAttendanceGaps(payload));
       case 'saveSDQData': return output(recordSDQ(payload));
       case 'getSDQDashboard': return output(fetchSDQOverview(payload.roomString));
       case 'getHistory': return output(fetchStudentAttendanceHistory(payload.studentId));
@@ -2146,6 +2149,7 @@ function submitBackdateRequest(payload) {
     sheet.getRange(sheet.getLastRow() + 1, 1, 1, BD_HEADER.length).setValues([row]);
     SpreadsheetApp.flush();
 
+    clearGapsCache(teacher.email);
     return { success: true, requestId: requestId, daysLate: daysLate, requestType: row[BD.Request_Type] };
   } catch (error) {
     console.error("submitBackdateRequest Error:", error);
@@ -2228,6 +2232,7 @@ function reviewBackdateRequest(payload) {
       String(note || '').trim().substring(0, 500)
     ]]);
     SpreadsheetApp.flush();
+    clearGapsCache(String(r[BD.Teacher_Email]).trim());
 
     return { success: true, status: decision === 'approve' ? REQ_STATUS.APPROVED : REQ_STATUS.REJECTED };
   } catch (error) {
@@ -2253,6 +2258,7 @@ function cancelBackdateRequest(payload) {
     if (String(rows[idx][BD.Status]) !== REQ_STATUS.PENDING) return { success: false, message: "คำขอนี้ถูกดำเนินการไปแล้ว" };
     sheet.getRange(idx + 2, BD.Status + 1, 1, 4).setValues([[REQ_STATUS.CANCELLED, '', new Date(), 'ครูยกเลิกคำขอเอง']]);
     SpreadsheetApp.flush();
+    clearGapsCache(teacherEmail);
     return { success: true };
   } catch (error) {
     return { success: false, message: error.message };
@@ -2322,8 +2328,10 @@ function getAdvisorPerformanceStats() {
     });
 
     // วันที่มีกิจกรรมหน้าเสาธงจริง = วันที่มีห้องเช็คในวันนั้น >= MIN_ROOMS
+    const noAssembly = getNoAssemblyDays();
+    const startKey = statsStartKey();
     const schoolDays = Object.keys(dayRoomCount)
-      .filter(dk => dayRoomCount[dk] >= CONFIG.ATTENDANCE_POLICY.MIN_ROOMS_FOR_SCHOOL_DAY && parseInt(dk, 10) >= termStartKey)
+      .filter(dk => dayRoomCount[dk] >= CONFIG.ATTENDANCE_POLICY.MIN_ROOMS_FOR_SCHOOL_DAY && parseInt(dk, 10) >= startKey && !noAssembly[dk])
       .map(dk => parseInt(dk, 10)).sort((a, b) => a - b);
 
     // 3. สถิติรายห้อง
@@ -2399,7 +2407,7 @@ function getAdvisorPerformanceStats() {
     Object.values(roomStats).forEach(s => ['ontime', 'late', 'backdate', 'missing', 'expected'].forEach(k => summary[k] += s[k]));
     Object.values(reqByTeacher).forEach(q => ['total', 'approved', 'rejected', 'pending', 'cancelled'].forEach(k => summary.requests[k] += q[k]));
 
-    return { success: true, data: { teachers: teachers, summary: summary, policy: { cutoff: cutoff, maxDays: CONFIG.ATTENDANCE_POLICY.BACKDATE_MAX_DAYS }, term: CONFIG.CURRENT_TERM } };
+    return { success: true, data: { teachers: teachers, summary: summary, policy: { cutoff: cutoff, maxDays: CONFIG.ATTENDANCE_POLICY.BACKDATE_MAX_DAYS, statsStart: normalizeDateStr(`${startKey % 100}/${Math.floor(startKey / 100) % 100}/${Math.floor(startKey / 10000)}`) }, term: CONFIG.CURRENT_TERM } };
   } catch (error) {
     console.error("getAdvisorPerformanceStats Error:", error);
     return { success: false, message: error.message };
@@ -2493,5 +2501,181 @@ function adminEditAttendance(payload) {
     return { success: false, message: "เกิดข้อผิดพลาด: " + error.message };
   } finally {
     lock.releaseLock();
+  }
+}
+
+
+// =====================================================================
+// 🔔 แจ้งเตือนครู: วันที่ "ไม่ได้เช็คชื่อ" ของห้องตัวเอง (ใช้ในหน้า teacher.html)
+//    ผลลัพธ์เก็บใน Cache 10 นาทีต่อครู เพื่อไม่ให้สแกนชีตซ้ำทุกครั้งที่เปิดหน้า (ช่วงเช้าคนใช้เยอะ)
+//    Cache ถูกล้างอัตโนมัติเมื่อครูส่ง/ยกเลิกคำขอ หรือหัวหน้างานพิจารณาคำขอ
+// =====================================================================
+const GAPS_CACHE_SECONDS = 600;
+
+/** 🌧️ วันงดกิจกรรมหน้าเสาธง → Map(dateKey → เหตุผล) (สร้างชีตพร้อมหัวตารางให้อัตโนมัติถ้ายังไม่มี) */
+function getNoAssemblyDays() {
+  const map = {};
+  const ss = getActiveSS();
+  let sheet = ss.getSheetByName(CONFIG.SHEETS.NO_ASSEMBLY);
+  if (!sheet) {
+    sheet = ss.insertSheet(CONFIG.SHEETS.NO_ASSEMBLY);
+    sheet.getRange(1, 1, 1, 2).setValues([['วันที่ (dd/MM/yyyy ค.ศ.)', 'เหตุผล เช่น ฝนตก / กิจกรรมวิทยาลัย / วันหยุด']]).setFontWeight('bold').setBackground('#f1f5f9');
+    sheet.getRange('A:A').setNumberFormat('@');
+    return map;
+  }
+  if (sheet.getLastRow() <= 1) return map;
+  sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getDisplayValues().forEach(r => {
+    const k = dateStrToKey(r[0]);
+    if (k) map[k] = String(r[1] || 'งดกิจกรรมหน้าเสาธง').trim();
+  });
+  return map;
+}
+
+/** วันแรกที่นับสถิติ = ค่าที่มากกว่าระหว่างวันเปิดเทอม กับ STATS_START_DATE */
+function statsStartKey() {
+  return Math.max(dateStrToKey(CONFIG.TERM_START_DATE), dateStrToKey(CONFIG.ATTENDANCE_POLICY.STATS_START_DATE || CONFIG.TERM_START_DATE));
+}
+
+function clearGapsCache(email) {
+  try { if (email) CacheService.getScriptCache().remove('gaps_' + String(email).trim()); } catch (e) {}
+}
+
+function getMyAttendanceGaps(payload) {
+  try {
+    const teacher = findTeacherByEmail((payload || {}).teacherEmail);
+    if (!teacher) return { success: false, message: "ไม่พบข้อมูลครู" };
+
+    const cache = CacheService.getScriptCache();
+    const cacheKey = 'gaps_' + teacher.email;
+    if (!payload.fresh) {
+      const hit = cache.get(cacheKey);
+      if (hit) return JSON.parse(hit);
+    }
+
+    const ss = getActiveSS();
+    const tKey = todayKey();
+    const termStartKey = dateStrToKey(CONFIG.TERM_START_DATE);
+    const maxDays = CONFIG.ATTENDANCE_POLICY.BACKDATE_MAX_DAYS;
+    const myRoomKeys = new Set(teacher.rooms.map(r => normalizeRoom(r)));
+
+    // 1. นักเรียน → ห้อง (ต้องใช้ทุกห้องเพื่อหา "วันที่มีกิจกรรมหน้าเสาธง")
+    const sData = ss.getSheetByName(CONFIG.SHEETS.STUDENTS).getDataRange().getDisplayValues();
+    sData.shift();
+    const stuRoom = {}, roomDisplay = {};
+    sData.forEach(r => {
+      if (!r[0] || !r[3]) return;
+      const name = `${r[3]} ${r[4]}/${r[5]}`.trim();
+      const key = normalizeRoom(name);
+      stuRoom[String(r[0]).trim()] = key;
+      roomDisplay[key] = name;
+    });
+
+    // 2. สแกนชีตเข้าแถวครั้งเดียว: นับห้องต่อวัน + เก็บวันที่ของห้องตัวเอง
+    const dayRooms = {};   // dateKey → Set(roomKey)
+    const mine = {};       // roomKey → { dateKey → { minTs, types:Set } }
+    myRoomKeys.forEach(k => mine[k] = {});
+    const attSheet = ss.getSheetByName(ATTENDANCE_SHEET_NAME);
+    if (attSheet && attSheet.getLastRow() > 1) {
+      const n = attSheet.getLastRow() - 1;
+      const cols = Math.min(7, attSheet.getLastColumn());
+      const vals = attSheet.getRange(2, 1, n, cols).getDisplayValues();
+      const raw = attSheet.getRange(2, 1, n, 1).getValues(); // Timestamp จริง (Date) สำหรับเวลาที่บันทึก
+      vals.forEach((v, i) => {
+        const rk = stuRoom[String(v[3]).trim()];
+        const dk = dateStrToKey(v[1]);
+        if (!rk || !dk || dk > tKey) return;
+        (dayRooms[dk] = dayRooms[dk] || new Set()).add(rk);
+        if (mine[rk]) {
+          const cell = mine[rk][dk] = mine[rk][dk] || { minTs: null, types: new Set() };
+          if (cols >= 7 && v[6]) cell.types.add(String(v[6]).trim());
+          const ts = raw[i][0] instanceof Date ? raw[i][0] : new Date(raw[i][0]);
+          if (!isNaN(ts.getTime()) && (!cell.minTs || ts < cell.minTs)) cell.minTs = ts;
+        }
+      });
+    }
+    const noAssembly = getNoAssemblyDays();
+    const startKey = statsStartKey();
+    // วันที่จะแสดงในปฏิทิน = วันที่มีห้องเช็ค >= MIN_ROOMS หรือวันงดกิจกรรม (ตั้งแต่เปิดเทอม)
+    const calKeys = new Set(Object.keys(dayRooms).map(Number)
+      .filter(dk => dk >= termStartKey && dayRooms[dk].size >= CONFIG.ATTENDANCE_POLICY.MIN_ROOMS_FOR_SCHOOL_DAY));
+    Object.keys(noAssembly).map(Number).forEach(dk => { if (dk >= termStartKey && dk <= tKey) calKeys.add(dk); });
+    const schoolDays = Array.from(calKeys).sort((a, b) => a - b);
+
+    // 3. คำขอของครูคนนี้ (สถานะล่าสุดต่อ ห้อง+วัน)
+    const reqMap = {};
+    const bdSheet = ss.getSheetByName(CONFIG.SHEETS.BACKDATE);
+    if (bdSheet && bdSheet.getLastRow() > 1) {
+      bdSheet.getRange(2, 1, bdSheet.getLastRow() - 1, BD_HEADER.length).getDisplayValues().forEach(r => {
+        if (String(r[BD.Teacher_Email]).trim() !== teacher.email) return;
+        reqMap[normalizeRoom(r[BD.Room]) + '|' + dateStrToKey(r[BD.Target_Date])] = r[BD.Status];
+      });
+    }
+
+    // 4. สรุปรายห้อง
+    const keyToStr = dk => `${String(dk % 100).padStart(2, '0')}/${String(Math.floor(dk / 100) % 100).padStart(2, '0')}/${Math.floor(dk / 10000)}`;
+    const keyToIso = dk => `${Math.floor(dk / 10000)}-${String(Math.floor(dk / 100) % 100).padStart(2, '0')}-${String(dk % 100).padStart(2, '0')}`;
+    const rooms = [];
+    let totalMissing = 0, totalRequestable = 0;
+    myRoomKeys.forEach(rk => {
+      const display = roomDisplay[rk] || rk;
+      const m = mine[rk];
+      const counts = { ontime: 0, late: 0, backdate: 0, missing: 0 };
+      const days = [];    // ทุกวันที่มีกิจกรรมหน้าเสาธง (รวมวันนี้ถ้าเช็คแล้ว)
+      const missing = [];
+      schoolDays.forEach(dk => {
+        const c = m[dk];
+        const dObj = new Date(Math.floor(dk / 10000), Math.floor(dk / 100) % 100 - 1, dk % 100, 12);
+        if (!c && checkIsInternshipRoom(display, dObj)) return;
+        const day = { date: keyToStr(dk), iso: keyToIso(dk), daysAgo: diffDaysByKey(dk, tKey) };
+        if (c && c.minTs) day.savedAt = Utilities.formatDate(c.minTs, CONFIG.TIMEZONE, "dd/MM/yyyy HH:mm");
+        // ไม่นับในสถิติ: วันงดกิจกรรม / ก่อนเริ่มใช้ระบบ
+        if (noAssembly[dk]) { day.status = 'noassembly'; day.note = noAssembly[dk]; days.push(day); return; }
+        if (dk < startKey) { day.status = 'prestart'; day.checked = !!c; days.push(day); return; }
+        if (!c && dk >= tKey) return; // วันนี้ยังเช็คได้ตามปกติ ไม่นับว่าขาด
+        if (c) {
+          // จัดประเภท: ป้ายจากคอลัมน์ Entry_Type ก่อน ไม่มีป้าย (ข้อมูลเก่า) ใช้เวลาที่บันทึกครั้งแรก
+          let type;
+          if (c.types.has(ENTRY_TYPE.BACKDATE)) type = ENTRY_TYPE.BACKDATE;
+          else if (c.types.has(ENTRY_TYPE.LATE)) type = ENTRY_TYPE.LATE;
+          else if (c.types.has(ENTRY_TYPE.ON_TIME)) type = ENTRY_TYPE.ON_TIME;
+          else type = classifyByTimestamp(c.minTs, day.date);
+          day.status = type === ENTRY_TYPE.BACKDATE ? 'backdate' : type === ENTRY_TYPE.LATE ? 'late' : 'ontime';
+        } else {
+          day.status = 'missing';
+          day.requestStatus = reqMap[rk + '|' + dk] || '';
+          day.requestable = day.daysAgo <= maxDays && day.requestStatus !== REQ_STATUS.PENDING;
+          if (day.requestable) totalRequestable++;
+          missing.push(day);
+        }
+        counts[day.status]++;
+        days.push(day);
+      });
+      const counted = days.filter(d => counts[d.status] !== undefined);
+      const expected = counted.length;
+      totalMissing += missing.length;
+      // 🔥 สถิติต่อเนื่อง: วันที่เช็คตรงเวลาติดต่อกัน (นับจากล่าสุดย้อนกลับ) และสถิติสูงสุด
+      let streak = 0, best = 0, run = 0;
+      counted.forEach(d => { run = d.status === 'ontime' ? run + 1 : 0; best = Math.max(best, run); });
+      for (let i = counted.length - 1; i >= 0 && counted[i].status === 'ontime'; i--) streak++;
+      rooms.push({
+        room: display, expected: expected, checked: expected - counts.missing,
+        onTime: counts.ontime, late: counts.late, backdate: counts.backdate,
+        onTimeRate: expected > 0 ? Math.round(counts.ontime / expected * 100) : null,
+        streak: streak, bestStreak: best,
+        today: (() => { const t = days.find(d => d.daysAgo === 0); return t ? { status: t.status, savedAt: t.savedAt || '', note: t.note || '' } : null; })(),
+        days: days,                 // เรียงเก่า → ใหม่ (ใช้วาดปฏิทิน)
+        missing: missing.reverse()  // ล่าสุดก่อน
+      });
+    });
+
+    const result = { success: true, data: { rooms: rooms, totalMissing: totalMissing, totalRequestable: totalRequestable,
+      policy: { cutoff: CONFIG.ATTENDANCE_POLICY.ON_TIME_CUTOFF, maxDays: maxDays, statsStart: keyToStr(startKey) },
+      todayNoAssembly: noAssembly[tKey] || '',
+      generatedAt: Utilities.formatDate(new Date(), CONFIG.TIMEZONE, "dd/MM/yyyy HH:mm") } };
+    try { cache.put(cacheKey, JSON.stringify(result), GAPS_CACHE_SECONDS); } catch (e) {}
+    return result;
+  } catch (error) {
+    console.error("getMyAttendanceGaps Error:", error);
+    return { success: false, message: error.message };
   }
 }

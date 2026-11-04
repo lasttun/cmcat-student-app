@@ -24,8 +24,8 @@ const CONFIG = {
   },
   // 📅 นโยบายการเช็คชื่อ (ปรับได้ตามที่วิทยาลัยกำหนด)
   ATTENDANCE_POLICY: {
-    ON_TIME_CUTOFF: '10:00',      // ก่อนเวลานี้ = "เช็คตอนเช้า" / หลังเวลานี้ = "เช็คหลังเวลา" (ยังบันทึกได้ แต่ถูกนับสถิติ)
-    BACKDATE_MAX_DAYS: 7,         // ขอเช็คย้อนหลังได้ไม่เกินกี่วัน
+    ON_TIME_CUTOFF: '',           // '' = ไม่แยกเวลา: เช็คภายในวันเดียวกันเวลาใดก็ได้ ถือว่า "เช็คในวัน"
+    BACKDATE_MAX_DAYS: 0,         // 0 = ไม่จำกัดจำนวนวัน (ขอย้อนหลังได้ทุกวันในภาคเรียน โดยหัวหน้างานเป็นผู้พิจารณา)
     MIN_ROOMS_FOR_SCHOOL_DAY: 3,  // วันที่มีห้องเช็คชื่อ >= ค่านี้ ถือเป็น "วันที่มีกิจกรรมหน้าเสาธง"
     STATS_START_DATE: '12/10/2026' // ⚖️ เริ่มนับสถิติครูตั้งแต่วันที่ประกาศใช้ระบบ (dd/MM/ค.ศ.) ข้อมูลก่อนหน้านี้แสดงเป็น "ก่อนเริ่มใช้ระบบ" ไม่นำมาคิด
   },
@@ -243,14 +243,20 @@ function recordAttendance(payload) {
 const ATT_HEADER = ['Timestamp', 'Date_TH', 'Teacher', 'Student_ID', 'Name', 'Status', 'Entry_Type', 'Ref_Request_ID', 'Last_Edited'];
 const ATT_COLS = ATT_HEADER.length; // 9 คอลัมน์ (G-I เพิ่มใหม่ ไม่กระทบโค้ดเดิมที่อ่านถึงคอลัมน์ F)
 const ENTRY_TYPE = {
-  ON_TIME: 'เช็คตอนเช้า',
+  ON_TIME: 'เช็คในวัน',
   LATE: 'เช็คหลังเวลา',
   BACKDATE: 'ย้อนหลัง (อนุมัติ)',
   BACKDATE_EDIT: 'แก้ไขย้อนหลัง (อนุมัติ)'
 };
 // รองรับป้ายชื่อเดิมที่บันทึกไว้ก่อนเปลี่ยนคำ ('ปกติ' / 'บันทึกล่าช้า')
-const LEGACY_ENTRY_TYPE = { 'ปกติ': 'เช็คตอนเช้า', 'บันทึกล่าช้า': 'เช็คหลังเวลา' };
-function normEntryType(t) { t = String(t || '').trim(); return LEGACY_ENTRY_TYPE[t] || t; }
+const LEGACY_ENTRY_TYPE = { 'ปกติ': 'เช็คในวัน', 'เช็คตอนเช้า': 'เช็คในวัน', 'บันทึกล่าช้า': 'เช็คหลังเวลา' };
+function normEntryType(t) {
+  t = String(t || '').trim();
+  t = LEGACY_ENTRY_TYPE[t] || t;
+  // เมื่อไม่แยกเวลา: ข้อมูลเก่าที่เคยติดป้าย "เช็คหลังเวลา" ถือเป็น "เช็คในวัน"
+  if (!CONFIG.ATTENDANCE_POLICY.ON_TIME_CUTOFF && t === ENTRY_TYPE.LATE) return ENTRY_TYPE.ON_TIME;
+  return t;
+}
 
 const REQ_STATUS = { PENDING: 'รออนุมัติ', APPROVED: 'อนุมัติ', REJECTED: 'ไม่อนุมัติ', CANCELLED: 'ยกเลิก' };
 const VALID_ATT_STATUS = ['มา', 'สาย', 'ลา', 'ขาด'];
@@ -296,6 +302,7 @@ function todayKey() {
 }
 
 function isAfterCutoff(dateObj) {
+  if (!CONFIG.ATTENDANCE_POLICY.ON_TIME_CUTOFF) return false; // ไม่แยกเวลา
   return Utilities.formatDate(dateObj, CONFIG.TIMEZONE, "HH:mm") > CONFIG.ATTENDANCE_POLICY.ON_TIME_CUTOFF;
 }
 
@@ -2095,7 +2102,7 @@ function submitBackdateRequest(payload) {
   const maxDays = CONFIG.ATTENDANCE_POLICY.BACKDATE_MAX_DAYS;
 
   if (daysLate <= 0) return { success: false, message: "วันนี้หรือวันในอนาคต ให้ใช้การเช็คชื่อปกติ ไม่ต้องขออนุมัติ" };
-  if (daysLate > maxDays) return { success: false, message: `ขอเช็คย้อนหลังได้ไม่เกิน ${maxDays} วัน กรุณาติดต่อหัวหน้างานครูที่ปรึกษาโดยตรง` };
+  if (maxDays > 0 && daysLate > maxDays) return { success: false, message: `ขอเช็คย้อนหลังได้ไม่เกิน ${maxDays} วัน กรุณาติดต่อหัวหน้างานครูที่ปรึกษาโดยตรง` };
   if (targetKey < dateStrToKey(CONFIG.TERM_START_DATE)) return { success: false, message: "วันที่เลือกอยู่ก่อนวันเปิดภาคเรียนปัจจุบัน" };
 
   const targetDateObj = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10), 12, 0, 0);
@@ -2660,7 +2667,7 @@ function getMyAttendanceGaps(payload) {
         } else {
           day.status = 'missing';
           day.requestStatus = reqMap[rk + '|' + dk] || '';
-          day.requestable = day.daysAgo <= maxDays && day.requestStatus !== REQ_STATUS.PENDING;
+          day.requestable = (maxDays <= 0 || day.daysAgo <= maxDays) && day.requestStatus !== REQ_STATUS.PENDING;
           if (day.requestable) totalRequestable++;
           missing.push(day);
         }

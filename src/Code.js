@@ -2083,7 +2083,7 @@ function submitBackdateRequest(payload) {
 
   // --- ตรวจข้อมูลพื้นฐาน ---
   if (!teacherEmail || !roomString || !targetDate) return { success: false, message: "ข้อมูลคำขอไม่ครบถ้วน" };
-  if (!reason || String(reason).trim().length < 5) return { success: false, message: "กรุณาระบุเหตุผลที่ต้องเช็คย้อนหลัง (อย่างน้อย 5 ตัวอักษร)" };
+  if (!reason || String(reason).trim().length < 5) return { success: false, message: "กรุณาเลือกรายละเอียดประกอบคำขออย่างน้อย 1 ข้อ" };
   if (!Array.isArray(records) || records.length === 0) return { success: false, message: "ไม่พบรายชื่อนักเรียนในคำขอ" };
 
   const teacher = findTeacherByEmail(teacherEmail);

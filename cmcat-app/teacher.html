@@ -212,7 +212,7 @@
         <div id="backdate-banner" class="hidden mb-6 bg-amber-50 border-2 border-amber-300 p-4 md:p-5 rounded-2xl shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
             <div>
                 <h3 class="font-bold text-amber-900 text-sm md:text-base">📅 โหมดขอเช็คชื่อย้อนหลัง: <span id="backdate-banner-date"></span></h3>
-                <p class="text-xs md:text-sm text-amber-800 mt-1">เหตุผล: <span id="backdate-banner-reason"></span></p>
+                <p class="text-xs md:text-sm text-amber-800 mt-1">รายละเอียด: <span id="backdate-banner-reason"></span></p>
                 <p class="text-xs text-amber-900 mt-2 font-bold bg-amber-100 rounded-lg px-2 py-1 inline-block">ขั้นที่ 2/2: ตรวจสถานะนักเรียนด้านล่าง แล้วกด "📨 ส่งคำขอ" — ยังไม่ได้ส่งจนกว่าจะกดปุ่มนี้</p>
             </div>
             <div class="flex flex-col sm:flex-row gap-2 shrink-0">
@@ -1729,6 +1729,17 @@ function renderTable(students, sdqMap) {
     let lastHistoryData = [];
     let attPolicy = { termStart: '' };
 
+    // 📝 ตัวเลือกรายละเอียดประกอบคำขอเช็คย้อนหลัง (เขียนในเชิงบวก ไม่ต้องพิมพ์อธิบายเอง)
+    //    แก้ไข/เพิ่มข้อความได้ที่นี่ที่เดียว
+    const BACKDATE_REASONS = [
+        { icon: '🏫', text: 'ปฏิบัติภารกิจ/ราชการ หรืออบรมนอกวิทยาลัย' },
+        { icon: '📚', text: 'ดูแลกิจกรรมหรือการเรียนการสอนในช่วงเวลานั้น' },
+        { icon: '🗒️', text: 'บันทึกข้อมูลไว้แล้ว ขอนำเข้าสู่ระบบ' },
+        { icon: '📶', text: 'ระบบหรืออินเทอร์เน็ตขัดข้องในวันนั้น' },
+        { icon: '🩺', text: 'ลาตามระเบียบ' },
+        { icon: '🔄', text: 'ทบทวนและปรับข้อมูลให้ถูกต้องครบถ้วน' }
+    ];
+
     async function loadAttendancePolicy() {
         try {
             const res = await fetch(API_URL, { method: 'POST', headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: 'getAttendancePolicy' }) });
@@ -1784,16 +1795,25 @@ function renderTable(students, sdqMap) {
                     <p style="margin-bottom:12px;color:#64748b">ห้อง <b>${roomString}</b> • เลือกได้ทุกวันในภาคเรียนนี้<br>หัวหน้างานครูที่ปรึกษาจะพิจารณาก่อนบันทึกจริง</p>
                     <label style="font-weight:bold">วันที่ต้องการเช็คชื่อ</label>
                     <input type="date" id="bd-date" class="swal2-input" style="width:100%;margin:6px 0 14px" min="${toIso(minD)}" max="${toIso(maxD)}" value="${presetIso || toIso(maxD)}">
-                    <label style="font-weight:bold">เหตุผลที่ไม่ได้เช็คในวันนั้น <span style="color:#dc2626">*</span></label>
-                    <textarea id="bd-reason" class="swal2-textarea" style="width:100%;margin:6px 0 0" placeholder="เช่น ไปราชการ/อบรม, ระบบขัดข้อง, ลาป่วย..."></textarea>
+                    <label style="font-weight:bold">รายละเอียดประกอบ <span style="font-weight:normal;color:#64748b">(เลือกได้มากกว่า 1 ข้อ)</span></label>
+                    <div style="margin:8px 0 10px;display:flex;flex-direction:column;gap:6px">
+                        ${BACKDATE_REASONS.map((r, i) => `
+                        <label style="display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border:1px solid #e2e8f0;border-radius:12px;cursor:pointer;background:#fff">
+                            <input type="checkbox" class="bd-reason-cb" value="${r.text}" style="margin-top:3px;width:18px;height:18px;accent-color:#d97706;flex-shrink:0">
+                            <span>${r.icon} ${r.text}</span>
+                        </label>`).join('')}
+                    </div>
+                    <input id="bd-note" class="swal2-input" style="width:100%;margin:0;font-size:14px" maxlength="150" placeholder="หมายเหตุเพิ่มเติม (ไม่บังคับ)">
                 </div>`,
             showCancelButton: true, confirmButtonText: 'ถัดไป (ขั้นที่ 1/2) →', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#d97706',
             preConfirm: () => {
                 const iso = document.getElementById('bd-date').value;
-                const reason = document.getElementById('bd-reason').value.trim();
+                const picked = [...document.querySelectorAll('.bd-reason-cb:checked')].map(cb => cb.value);
+                const note = document.getElementById('bd-note').value.trim();
                 if (!iso) return Swal.showValidationMessage('กรุณาเลือกวันที่');
                 if (iso < toIso(minD) || iso > toIso(maxD)) return Swal.showValidationMessage(`เลือกได้ตั้งแต่ ${isoToDdMmYyyy(toIso(minD))} ถึง ${isoToDdMmYyyy(toIso(maxD))}`);
-                if (reason.length < 5) return Swal.showValidationMessage('กรุณาระบุเหตุผลอย่างน้อย 5 ตัวอักษร');
+                if (picked.length === 0) return Swal.showValidationMessage('กรุณาเลือกรายละเอียดประกอบอย่างน้อย 1 ข้อ');
+                const reason = picked.join(' • ') + (note ? ` • หมายเหตุ: ${note}` : '');
                 return { iso, reason };
             }
         });
@@ -1841,7 +1861,7 @@ function renderTable(students, sdqMap) {
         currentStudentsData.forEach(s => { if (cnt[s.status] !== undefined) cnt[s.status]++; });
         const ok = await Swal.fire({
             title: 'ส่งคำขอเช็คย้อนหลัง?', icon: 'question',
-            html: `วันที่ <b>${backdateInfo.display}</b><br>มา ${cnt['มา']} • สาย ${cnt['สาย']} • ลา ${cnt['ลา']} • ขาด <b style="color:#dc2626">${cnt['ขาด']}</b> คน<br><small style="color:#64748b">คำขอนี้จะถูกบันทึกเป็นสถิติการเช็คย้อนหลังของท่าน</small>`,
+            html: `วันที่ <b>${backdateInfo.display}</b><br>มา ${cnt['มา']} • สาย ${cnt['สาย']} • ลา ${cnt['ลา']} • ขาด <b style="color:#dc2626">${cnt['ขาด']}</b> คน<br><small style="color:#64748b">ขอบคุณที่ช่วยให้ข้อมูลนักเรียนครบถ้วนครับ</small>`,
             showCancelButton: true, confirmButtonText: 'ส่งคำขอ', cancelButtonText: 'ตรวจอีกครั้ง', confirmButtonColor: '#d97706'
         });
         if (!ok.isConfirmed) return;
@@ -1888,7 +1908,7 @@ function renderTable(students, sdqMap) {
                         <div>
                             <p class="font-bold text-slate-800">${q.room} • วันที่ ${q.targetDate} <span class="text-xs font-normal text-slate-400">(ย้อนหลัง ${q.daysLate} วัน, ${q.requestType})</span></p>
                             <p class="text-xs text-slate-500 mt-1">ส่งเมื่อ ${q.createdAt} • เลขที่ ${q.requestId}</p>
-                            <p class="text-sm text-slate-600 mt-1">เหตุผล: ${escapeHtml(q.reason)}</p>
+                            <p class="text-sm text-slate-600 mt-1">รายละเอียด: ${escapeHtml(q.reason)}</p>
                             ${q.reviewer ? `<p class="text-xs text-slate-500 mt-1">ผู้พิจารณา: ${q.reviewer} (${q.reviewedAt})${q.reviewNote ? ' • ' + escapeHtml(q.reviewNote) : ''}</p>` : ''}
                         </div>
                         <span class="px-3 py-1 rounded-full text-xs font-bold border shrink-0 ${badge(q.status)}">${q.status}</span>
@@ -2165,7 +2185,7 @@ function renderTable(students, sdqMap) {
 
                 <p style="font-weight:bold;color:#b45309;margin-bottom:4px">📅 วันที่ผ่านมาแล้ว</p>
                 <ul style="padding-left:18px;margin:0 0 12px;list-style:disc">
-                    <li><b>ขั้นที่ 1:</b> กด <b>"📅 ขอเช็คชื่อย้อนหลัง"</b> (หรือกดจากรายการวันที่ในกล่องสรุป) เลือกวันที่และระบุเหตุผล</li>
+                    <li><b>ขั้นที่ 1:</b> กด <b>"📅 ขอเช็คชื่อย้อนหลัง"</b> (หรือกดจากรายการวันที่ในกล่องสรุป) เลือกวันที่และติ๊กรายละเอียดประกอบ</li>
                     <li><b>ขั้นที่ 2:</b> ตรวจสถานะนักเรียน แล้วกด <b>"📨 ส่งคำขอ"</b> (แถบสีส้มด้านบนหรือด้านล่างจอ) — เมื่อได้เลขที่คำขอ แปลว่าส่งเรียบร้อย</li>
                     <li>เลือกได้ทุกวันในภาคเรียนนี้ ถ้าวันนั้นเคยบันทึกไว้แล้ว ระบบจะดึงข้อมูลเดิมมาให้ปรับได้เลย</li>
                     <li>หัวหน้างานครูที่ปรึกษาจะพิจารณา ติดตามสถานะได้ที่ <b>"📋 คำขอของฉัน"</b></li>

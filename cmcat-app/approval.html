@@ -70,7 +70,7 @@
                 <div class="overflow-x-auto custom-scrollbar">
                     <table class="w-full text-sm text-left whitespace-nowrap">
                         <thead class="bg-slate-50 text-slate-500 text-xs">
-                            <tr><th class="p-3">ส่งเมื่อ</th><th class="p-3">ครู</th><th class="p-3">ห้อง</th><th class="p-3">วันที่ขอเช็ค</th><th class="p-3 text-center">ย้อนหลัง</th><th class="p-3">ประเภท</th><th class="p-3">เหตุผล</th><th class="p-3 text-center">สถานะ</th><th class="p-3">ผู้พิจารณา</th></tr>
+                            <tr><th class="p-3">ส่งเมื่อ</th><th class="p-3">ครู</th><th class="p-3">ห้อง</th><th class="p-3">วันที่ขอเช็ค</th><th class="p-3 text-center">ย้อนหลัง</th><th class="p-3">ประเภท</th><th class="p-3">รายละเอียด</th><th class="p-3 text-center">สถานะ</th><th class="p-3">ผู้พิจารณา</th></tr>
                         </thead>
                         <tbody id="hist-body" class="divide-y divide-slate-100"></tbody>
                     </table>
@@ -244,7 +244,7 @@
                         </div>
                         <p class="text-sm text-slate-600">วันที่ขอเช็ค <b>${esc(q.targetDate)}</b> • โดย <b>${esc(q.teacherName)}</b> <span class="text-xs text-slate-400">(ส่ง ${esc(q.createdAt)})</span></p>
                         <p class="text-xs text-slate-500 mt-0.5">คำขอย้อนหลังของครูท่านนี้ในภาคเรียน: <b>${reqCount[idKey(q.teacherEmail)] || 1}</b> ครั้ง</p>
-                        <div class="mt-3 bg-slate-50 border border-slate-100 rounded-2xl p-3 text-sm text-slate-700"><i class="fas fa-quote-left text-slate-300 mr-1"></i> ${esc(q.reason)}</div>
+                        <div class="mt-3 flex flex-wrap gap-1.5">${String(q.reason || '').split(' • ').filter(Boolean).map(t => `<span class="bg-slate-50 border border-slate-200 text-slate-700 text-xs px-2.5 py-1 rounded-full">${esc(t)}</span>`).join('')}</div>
                         <p class="text-sm mt-3">มา <b>${c.present}</b> • สาย <b>${c.late}</b> • ลา <b>${c.leave}</b> • ขาด <b class="text-red-600">${c.absent}</b> <span class="text-slate-400">จาก ${c.total} คน</span></p>
                         ${absentNames.length ? `<p class="text-xs text-red-600 mt-1 whitespace-normal">ขาด: ${absentNames.join(', ')}</p>` : ''}
                         <details class="mt-2"><summary class="text-xs text-blue-600 cursor-pointer font-bold">ดูรายชื่อทั้งหมด</summary>
@@ -425,7 +425,7 @@
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'สถิติครูที่ปรึกษา');
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(allRequests.map(q => ({
             'เลขที่': q.requestId, 'ส่งเมื่อ': q.createdAt, 'ครู': q.teacherName, 'ห้อง': q.room, 'วันที่ขอเช็ค': q.targetDate,
-            'ย้อนหลัง (วัน)': q.daysLate, 'ประเภท': q.requestType, 'เหตุผล': q.reason, 'สถานะ': q.status,
+            'ย้อนหลัง (วัน)': q.daysLate, 'ประเภท': q.requestType, 'รายละเอียด': q.reason, 'สถานะ': q.status,
             'ผู้พิจารณา': q.reviewer, 'พิจารณาเมื่อ': q.reviewedAt, 'หมายเหตุ': q.reviewNote
         }))), 'ประวัติคำขอ');
         XLSX.writeFile(wb, `สถิติครูที่ปรึกษา_${statsData.term}_${new Date().toLocaleDateString('th-TH').replace(/\//g, '-')}.xlsx`);
